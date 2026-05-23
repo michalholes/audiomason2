@@ -8,7 +8,7 @@ ASCII-only.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import TypeGuard
 
 from .errors import FinalizeError
 from .field_schema_validation import FieldSchemaValidationError
@@ -18,14 +18,18 @@ _ALLOWED_KEYS = {"version", "steps", "defaults"}
 _ALLOWED_STEP_KEYS = {"enabled"}
 
 
-def normalize_flow_config(raw: Any) -> dict[str, Any]:
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def normalize_flow_config(raw: object) -> dict[str, object]:
     """Validate and normalize FlowConfig v1.
 
     FlowConfig is a user-overrides document. It must remain minimal and only
     contain recognized keys.
     """
 
-    if not isinstance(raw, dict):
+    if not _is_str_object_dict(raw):
         raise ValueError("flow_config must be an object")
 
     if "ui" in raw:
@@ -41,20 +45,22 @@ def normalize_flow_config(raw: Any) -> dict[str, Any]:
 
     steps_any = raw.get("steps", {})
     if steps_any is None:
-        steps_any = {}
-    if not isinstance(steps_any, dict):
+        steps_doc: dict[str, object] = {}
+    elif _is_str_object_dict(steps_any):
+        steps_doc = steps_any
+    else:
         raise ValueError("flow_config.steps must be an object")
 
-    steps: dict[str, Any] = {}
-    for step_id, cfg in steps_any.items():
+    steps: dict[str, object] = {}
+    for step_id, cfg_any in steps_doc.items():
         if not isinstance(step_id, str) or not step_id:
             raise ValueError("flow_config.steps keys must be non-empty strings")
-        if not isinstance(cfg, dict):
+        if not _is_str_object_dict(cfg_any):
             raise ValueError("flow_config.steps.<step_id> must be an object")
-        unknown_cfg = sorted(set(cfg.keys()) - _ALLOWED_STEP_KEYS)
+        unknown_cfg = sorted(set(cfg_any.keys()) - _ALLOWED_STEP_KEYS)
         if unknown_cfg:
             raise ValueError("flow_config step contains unknown key(s): " + ", ".join(unknown_cfg))
-        enabled = cfg.get("enabled")
+        enabled = cfg_any.get("enabled")
         if enabled is not None and not isinstance(enabled, bool):
             raise ValueError("flow_config.steps.<step_id>.enabled must be bool")
         if enabled is False and step_id in BASE_REQUIRED_STEP_IDS:
@@ -65,18 +71,20 @@ def normalize_flow_config(raw: Any) -> dict[str, Any]:
 
     defaults_any = raw.get("defaults", {})
     if defaults_any is None:
-        defaults_any = {}
-    if not isinstance(defaults_any, dict):
+        defaults_doc: dict[str, object] = {}
+    elif _is_str_object_dict(defaults_any):
+        defaults_doc = defaults_any
+    else:
         raise ValueError("flow_config.defaults must be an object")
 
     return {
         "version": 1,
         "steps": steps,
-        "defaults": deepcopy(defaults_any),
+        "defaults": deepcopy(defaults_doc),
     }
 
 
-def validate_flow_config_editor_boundary(raw: Any) -> dict[str, Any]:
+def validate_flow_config_editor_boundary(raw: object) -> dict[str, object]:
     """Apply editor-only FlowConfig validation without redefining authority.
 
     Defaults remain opaque editor payloads at this boundary. Projection metadata
@@ -86,17 +94,17 @@ def validate_flow_config_editor_boundary(raw: Any) -> dict[str, Any]:
     """
 
     cfg = normalize_flow_config(raw)
-    defaults_any = cfg.get("defaults") or {}
-    if not isinstance(defaults_any, dict):
+    defaults_any = cfg.get("defaults")
+    if not _is_str_object_dict(defaults_any):
         return cfg
 
-    validated_defaults: dict[str, Any] = {}
+    validated_defaults: dict[str, object] = {}
     for step_id, defaults_obj in sorted(defaults_any.items()):
-        if not isinstance(defaults_obj, dict):
+        if not _is_str_object_dict(defaults_obj):
             validated_defaults[step_id] = deepcopy(defaults_obj)
             continue
 
-        normalized_defaults: dict[str, Any] = {}
+        normalized_defaults: dict[str, object] = {}
         for key, value in sorted(defaults_obj.items()):
             if not isinstance(key, str) or not key:
                 raise FieldSchemaValidationError(

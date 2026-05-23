@@ -5,35 +5,40 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
 from .dsl.flowmodel_v3 import FLOWMODEL_KIND, build_flow_model_v3
 from .dsl.interpreter_v3 import run_automatic_steps
 from .engine_util import _iso_utc_now, sync_session_cursor
 from .errors import StepSubmissionError, invariant_violation
 
+if TYPE_CHECKING:
+    from .engine import ImportWizardEngine
 
-def build_runtime_flow_model(*, wizard_definition: dict[str, Any]) -> dict[str, Any]:
+
+def build_runtime_flow_model(*, wizard_definition: dict[str, object]) -> dict[str, object]:
     return build_flow_model_v3(wizard_definition=wizard_definition)
 
 
-def is_v3_effective_model(effective_model: dict[str, Any]) -> bool:
+def is_v3_effective_model(effective_model: dict[str, object]) -> bool:
     return str(effective_model.get("flowmodel_kind") or "") == FLOWMODEL_KIND
 
 
 def initialize_state(
     *,
-    state: dict[str, Any],
-    effective_model: dict[str, Any],
+    state: dict[str, object],
+    effective_model: dict[str, object],
     session_id: str,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     entry_step_id = str(effective_model.get("entry_step_id") or "")
     state["current_step_id"] = entry_step_id
     sync_session_cursor(state, step_id=entry_step_id)
     return run_automatic_steps(effective_model=effective_model, state=state, session_id=session_id)
 
 
-def apply_action_v3(*, engine: Any, session_id: str, action: str) -> dict[str, Any]:
+def apply_action_v3(
+    *, engine: ImportWizardEngine, session_id: str, action: str
+) -> dict[str, object]:
     state = engine._load_state(session_id)
     effective_model = engine._load_effective_model(session_id)
     if not is_v3_effective_model(effective_model):

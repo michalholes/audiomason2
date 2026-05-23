@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Hashable
 from dataclasses import dataclass
-from typing import Any
+from typing import TypeGuard
 
 from .expr_parser import (
     BinaryOpNode,
@@ -24,15 +24,19 @@ class ExprEvalError:
     code: str
     path: str
     reason: str
-    meta: dict[str, Any]
+    meta: dict[str, object]
 
 
 ErrorLike = ExprParseError | ExprEvalError
-EvalResult = tuple[bool, Any | None, ExprEvalError | None]
+EvalResult = tuple[bool, object | None, ExprEvalError | None]
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
 
 
 def _error(
-    *, code: str, path: str, reason: str, meta: dict[str, Any] | None = None
+    *, code: str, path: str, reason: str, meta: dict[str, object] | None = None
 ) -> ExprEvalError:
     return ExprEvalError(
         code=code,
@@ -46,13 +50,13 @@ def _fail(
     path: str,
     code: str,
     reason: str,
-    meta: dict[str, Any] | None = None,
+    meta: dict[str, object] | None = None,
 ) -> EvalResult:
     return False, None, _error(code=code, path=path, reason=reason, meta=meta)
 
 
-def _to_error_obj(error: ErrorLike) -> dict[str, Any]:
-    obj: dict[str, Any] = {
+def _to_error_obj(error: ErrorLike) -> dict[str, object]:
+    obj: dict[str, object] = {
         "code": error.code,
         "path": error.path,
         "reason": error.reason,
@@ -62,23 +66,23 @@ def _to_error_obj(error: ErrorLike) -> dict[str, Any]:
     return obj
 
 
-def _is_expr_ref(value: Any) -> bool:
-    return (
-        isinstance(value, dict) and set(value.keys()) == {"expr"} and isinstance(value["expr"], str)
-    )
+def _is_expr_ref(value: object) -> TypeGuard[dict[str, str]]:
+    if not _is_str_object_dict(value):
+        return False
+    return set(value.keys()) == {"expr"} and isinstance(value.get("expr"), str)
 
 
 class _Evaluator:
     def __init__(
         self,
         *,
-        state: Any,
-        inputs: Any,
-        op_outputs: Any,
+        state: object,
+        inputs: object,
+        op_outputs: object,
         allow_op_outputs: bool,
         path: str,
     ) -> None:
-        self._roots: dict[tuple[str, ...], Any] = {
+        self._roots: dict[tuple[str, ...], object] = {
             ("state",): state,
             ("inputs",): inputs,
             ("op", "outputs"): op_outputs,
@@ -284,7 +288,7 @@ class _Evaluator:
         )
 
     def _eval_call(self, node: CallNode) -> EvalResult:
-        values: list[Any] = []
+        values: list[object] = []
         for arg in node.args:
             ok, value, error = self.eval(arg)
             if not ok:
@@ -329,10 +333,10 @@ def _compare_str(op: str, left: str, right: str) -> bool:
     return left >= right
 
 
-def _eval_arith(*, op: str, left: Any, right: Any, path: str) -> EvalResult:
+def _eval_arith(*, op: str, left: object, right: object, path: str) -> EvalResult:
     """Evaluate arithmetic binary operators +, -, *, /, //, %."""
 
-    def _is_num(v: Any) -> bool:
+    def _is_num(v: object) -> TypeGuard[int | float]:
         return isinstance(v, (int, float)) and not isinstance(v, bool)
 
     if not _is_num(left) or not _is_num(right):
@@ -366,7 +370,7 @@ def _eval_arith(*, op: str, left: Any, right: Any, path: str) -> EvalResult:
     return _fail(path, "internal_error", "unknown_arith_op", {"op": op})
 
 
-def _eval_in(*, left: Any, right: Any, path: str) -> EvalResult:
+def _eval_in(*, left: object, right: object, path: str) -> EvalResult:
     if isinstance(right, str):
         if isinstance(left, str):
             return True, left in right, None
@@ -384,7 +388,7 @@ def _eval_in(*, left: Any, right: Any, path: str) -> EvalResult:
     return _fail(path, "type_mismatch", "in_requires_string_list_or_object")
 
 
-def _expect_arity(args: list[Any], count: int, *, name: str, path: str) -> ExprEvalError | None:
+def _expect_arity(args: list[object], count: int, *, name: str, path: str) -> ExprEvalError | None:
     if len(args) == count:
         return None
     return _error(
@@ -395,7 +399,7 @@ def _expect_arity(args: list[Any], count: int, *, name: str, path: str) -> ExprE
     )
 
 
-def _fn_len(args: list[Any], path: str) -> EvalResult:
+def _fn_len(args: list[object], path: str) -> EvalResult:
     err = _expect_arity(args, 1, name="len", path=path)
     if err is not None:
         return False, None, err
@@ -410,7 +414,7 @@ def _fn_len(args: list[Any], path: str) -> EvalResult:
     )
 
 
-def _fn_bool_list(name: str, args: list[Any], path: str) -> EvalResult:
+def _fn_bool_list(name: str, args: list[object], path: str) -> EvalResult:
     err = _expect_arity(args, 1, name=name, path=path)
     if err is not None:
         return False, None, err
@@ -427,7 +431,7 @@ def _fn_bool_list(name: str, args: list[Any], path: str) -> EvalResult:
     return True, any(value) if name == "any" else all(value), None
 
 
-def _fn_case(name: str, args: list[Any], path: str) -> EvalResult:
+def _fn_case(name: str, args: list[object], path: str) -> EvalResult:
     err = _expect_arity(args, 1, name=name, path=path)
     if err is not None:
         return False, None, err
@@ -442,7 +446,7 @@ def _fn_case(name: str, args: list[Any], path: str) -> EvalResult:
     return True, value.lower() if name == "lower" else value.upper(), None
 
 
-def _fn_replace(args: list[Any], path: str) -> EvalResult:
+def _fn_replace(args: list[object], path: str) -> EvalResult:
     err = _expect_arity(args, 3, name="replace", path=path)
     if err is not None:
         return False, None, err
@@ -452,7 +456,7 @@ def _fn_replace(args: list[Any], path: str) -> EvalResult:
     return _fail(path, "type_mismatch", "replace_requires_strings")
 
 
-def _fn_split(args: list[Any], path: str) -> EvalResult:
+def _fn_split(args: list[object], path: str) -> EvalResult:
     err = _expect_arity(args, 2, name="split", path=path)
     if err is not None:
         return False, None, err
@@ -463,14 +467,14 @@ def _fn_split(args: list[Any], path: str) -> EvalResult:
 
 
 def eval_expr_ref(
-    expr_ref: Any,
+    expr_ref: object,
     *,
-    state: Any,
-    inputs: Any,
-    op_outputs: Any = None,
+    state: object,
+    inputs: object,
+    op_outputs: object = None,
     allow_op_outputs: bool = False,
     path: str = "$",
-) -> tuple[bool, Any | None, dict[str, Any] | None]:
+) -> tuple[bool, object | None, dict[str, object] | None]:
     """Evaluate an ExprRef with total semantics and structured failures."""
 
     expr_path = f"{path}.expr"

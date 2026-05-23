@@ -31,6 +31,14 @@ class IsADirectoryError(FileError):
     """Raised when a file was expected."""
 
 
+def _path_name(path: Path) -> str:
+    return path.name
+
+
+def _entry_rel_path(entry: FileEntry) -> str:
+    return entry.rel_path
+
+
 def list_dir(root: RootConfig, rel_path: str, *, recursive: bool = False) -> list[FileEntry]:
     """List directory entries under rel_path.
 
@@ -58,7 +66,7 @@ def list_dir(root: RootConfig, rel_path: str, *, recursive: bool = False) -> lis
                 )
             )
     else:
-        for item in sorted(base.iterdir(), key=lambda p: p.name):
+        for item in sorted(base.iterdir(), key=_path_name):
             rel = item.relative_to(root.dir_path).as_posix()
             st = item.stat()
             entries.append(
@@ -71,7 +79,7 @@ def list_dir(root: RootConfig, rel_path: str, *, recursive: bool = False) -> lis
             )
 
     # Ensure stable sort by rel_path across platforms.
-    entries.sort(key=lambda e: e.rel_path)
+    entries.sort(key=_entry_rel_path)
     return entries
 
 

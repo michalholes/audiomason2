@@ -7,13 +7,31 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Any
+from typing import TypeGuard
 
 from ..detached_runtime import rehydrate_detached_runtime_from_bootstrap
 from ..discovery import run_discovery
 from ..fingerprints import sha256_hex
 
 _TRAILING_TAG_RE = re.compile(r"(?:\s*(?:\([^)]*\)|\[[^]]*\]))+\s*$")
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _author_item_sort_key(item: tuple[str, dict[str, str]]) -> tuple[str, str]:
+    item_id, payload = item
+    return (payload.get("label", ""), item_id)
+
+
+def _book_item_sort_key(item: tuple[str, dict[str, str]]) -> tuple[str, str]:
+    item_id, payload = item
+    return (payload.get("label", ""), item_id)
 
 
 def _ascii_fold(text: str) -> str:
@@ -34,7 +52,7 @@ def _strip_trailing_tags(text: str) -> str:
         previous = updated
 
 
-def _normalize_label(value: Any) -> str:
+def _normalize_label(value: object) -> str:
     text = _cleanup_whitespace(str(value or ""))
     text = _strip_trailing_tags(text)
     if "," in text:
@@ -95,13 +113,13 @@ def _scope_kind(*, source_prefix: str, dirs: list[str], files: list[str]) -> str
 
 def _collect_scoped_entries(
     *,
-    discovery: list[dict[str, Any]],
+    discovery: list[dict[str, object]],
     source_prefix: str,
 ) -> tuple[list[str], list[str]]:
     dirs: list[str] = []
     files: list[str] = []
     for item in discovery:
-        if not isinstance(item, dict):
+        if not _is_str_object_dict(item):
             continue
         rel_any = item.get("relative_path")
         if not isinstance(rel_any, str):
@@ -182,7 +200,7 @@ def _pairs_for_book_scope(source_prefix: str) -> set[tuple[str, str, str]]:
 
 def _discovery_pairs(
     *,
-    discovery: list[dict[str, Any]],
+    discovery: list[dict[str, object]],
     source_prefix: str,
 ) -> list[tuple[str, str, str]]:
     dirs, files = _collect_scoped_entries(discovery=discovery, source_prefix=source_prefix)
@@ -202,9 +220,9 @@ def _discovery_pairs(
 
 def _build_catalog(
     *,
-    discovery: list[dict[str, Any]],
+    discovery: list[dict[str, object]],
     source_prefix: str,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     pairs = _discovery_pairs(discovery=discovery, source_prefix=source_prefix)
 
     authors: dict[str, dict[str, str]] = {}
@@ -225,8 +243,8 @@ def _build_catalog(
         )
         author_to_books.setdefault(author_id, []).append(book_id)
 
-    author_items = sorted(authors.items(), key=lambda kv: (kv[1]["label"], kv[0]))
-    book_items = sorted(books.items(), key=lambda kv: (kv[1]["label"], kv[0]))
+    author_items = sorted(authors.items(), key=_author_item_sort_key)
+    book_items = sorted(books.items(), key=_book_item_sort_key)
     ordered_author_ids = [k for k, _ in author_items]
     ordered_book_ids = [k for k, _ in book_items]
 
@@ -251,18 +269,18 @@ def _build_catalog(
 def execute(
     primitive_id: str,
     primitive_version: int,
-    inputs: dict[str, Any],
-    state: dict[str, Any],
-) -> dict[str, Any]:
+    inputs: dict[str, object],
+    state: dict[str, object],
+) -> dict[str, object]:
     if primitive_id == "source.build_catalog":
         root = str(inputs.get("root") or "")
         relative_path = str(inputs.get("relative_path") or "")
         vars_any = state.get("vars")
-        vars_map = dict(vars_any) if isinstance(vars_any, dict) else {}
+        vars_map = _as_str_object_dict(vars_any)
         runtime_any = vars_map.get("runtime")
-        runtime = dict(runtime_any) if isinstance(runtime_any, dict) else {}
+        runtime = _as_str_object_dict(runtime_any)
         bootstrap_any = runtime.get("detached_runtime")
-        bootstrap = dict(bootstrap_any) if isinstance(bootstrap_any, dict) else {}
+        bootstrap = _as_str_object_dict(bootstrap_any)
         if not bootstrap:
             raise ValueError("source.build_catalog requires vars.runtime.detached_runtime in state")
         detached = rehydrate_detached_runtime_from_bootstrap(bootstrap=bootstrap)
@@ -280,13 +298,13 @@ def execute(
 
     if primitive_id == "source.keys":
         items_any = inputs.get("items")
-        items = dict(items_any) if isinstance(items_any, dict) else {}
-        return {"keys": list(items.keys())}
+        items = _as_str_object_dict(items_any)
+        return {"keys": [key for key in items]}
 
     raise ValueError(f"unknown primitive: {primitive_id}")
 
 
-def _object_schema() -> dict[str, Any]:
+def _object_schema() -> dict[str, object]:
     return {
         "type": "object",
         "properties": {},
@@ -295,7 +313,7 @@ def _object_schema() -> dict[str, Any]:
     }
 
 
-REGISTRY_ENTRIES: list[dict[str, Any]] = [
+REGISTRY_ENTRIES: list[dict[str, object]] = [
     {
         "primitive_id": "source.build_catalog",
         "version": 1,

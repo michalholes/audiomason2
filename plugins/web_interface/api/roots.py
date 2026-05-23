@@ -1,14 +1,22 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Protocol, cast
 
 from fastapi import FastAPI, Request
 
 from audiomason.core.config import ConfigResolver
 
 
+class _StateView(Protocol):
+    config_resolver: object
+
+
 def _get_resolver(request: Request) -> ConfigResolver:
-    resolver = getattr(request.app.state, "config_resolver", None)
+    state = cast(_StateView, request.state)
+    try:
+        resolver = state.config_resolver
+    except Exception:
+        resolver = None
     if isinstance(resolver, ConfigResolver):
         return resolver
     return ConfigResolver()
@@ -29,8 +37,7 @@ def _resolve_show_jobs_root(resolver: ConfigResolver) -> bool:
 
 
 def mount_roots(app: FastAPI) -> None:
-    @app.get("/api/roots")
-    def list_roots(request: Request) -> dict[str, Any]:
+    def list_roots(request: Request) -> dict[str, object]:
         resolver = _get_resolver(request)
         show_jobs = _resolve_show_jobs_root(resolver)
 
@@ -43,3 +50,5 @@ def mount_roots(app: FastAPI) -> None:
         items.append({"id": "outbox", "label": "Outbox"})
 
         return {"items": items}
+
+    app.add_api_route("/api/roots", list_roots, methods=["GET"])

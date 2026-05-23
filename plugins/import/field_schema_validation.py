@@ -8,7 +8,7 @@ ASCII-only.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TypeGuard
 
 
 @dataclass
@@ -16,7 +16,7 @@ class FieldSchemaValidationError(Exception):
     message: str
     path: str
     reason: str
-    meta: dict[str, Any]
+    meta: dict[str, object]
 
     def __str__(self) -> str:  # pragma: no cover
         return self.message
@@ -35,7 +35,15 @@ _BASELINE_TYPES = {
 _SETTINGS_FIELD_TYPES = {"string", "bool", "int", "number", "json"}
 
 
-def _ascii_only(*, value: str, path: str, meta: dict[str, Any]) -> None:
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _ascii_only(*, value: str, path: str, meta: dict[str, object]) -> None:
     try:
         value.encode("ascii")
     except UnicodeEncodeError as e:
@@ -50,15 +58,17 @@ def _ascii_only(*, value: str, path: str, meta: dict[str, Any]) -> None:
 _JSON_PRIMITIVE_TYPES = (str, int, float, bool, type(None))
 
 
-def _validate_choice_values(*, values_any: Any, path: str, meta: dict[str, Any]) -> list[Any]:
-    if not isinstance(values_any, list):
+def _validate_choice_values(
+    *, values_any: object, path: str, meta: dict[str, object]
+) -> list[object]:
+    if not _is_object_list(values_any):
         raise FieldSchemaValidationError(
             message="field choices must be a list",
             path=path,
             reason="invalid_type",
             meta=dict(meta),
         )
-    out: list[Any] = []
+    out: list[object] = []
     for index, value in enumerate(values_any):
         if not isinstance(value, _JSON_PRIMITIVE_TYPES):
             raise FieldSchemaValidationError(
@@ -71,8 +81,8 @@ def _validate_choice_values(*, values_any: Any, path: str, meta: dict[str, Any])
     return out
 
 
-def validate_settings_schema_fields(*, step_id: str, fields_any: Any) -> list[dict[str, Any]]:
-    if not isinstance(fields_any, list):
+def validate_settings_schema_fields(*, step_id: str, fields_any: object) -> list[dict[str, object]]:
+    if not _is_object_list(fields_any):
         raise FieldSchemaValidationError(
             message="settings_schema.fields must be a list",
             path="$.settings_schema.fields",
@@ -80,11 +90,11 @@ def validate_settings_schema_fields(*, step_id: str, fields_any: Any) -> list[di
             meta={"step_id": step_id},
         )
 
-    out: list[dict[str, Any]] = []
+    out: list[dict[str, object]] = []
     seen: set[str] = set()
     for idx, field_any in enumerate(fields_any):
         pfx = f"$.settings_schema.fields[{idx}]"
-        if not isinstance(field_any, dict):
+        if not _is_str_object_dict(field_any):
             raise FieldSchemaValidationError(
                 message="settings field definition must be an object",
                 path=pfx,
@@ -195,7 +205,7 @@ def validate_settings_schema_fields(*, step_id: str, fields_any: Any) -> list[di
     return out
 
 
-def validate_step_fields(*, step_id: str, fields_any: Any) -> list[dict[str, Any]]:
+def validate_step_fields(*, step_id: str, fields_any: object) -> list[dict[str, object]]:
     """Validate and return step field definitions.
 
     Baseline field types are defined in spec 10.4.3.
@@ -207,7 +217,7 @@ def validate_step_fields(*, step_id: str, fields_any: Any) -> list[dict[str, Any
       - type-specific required properties are enforced where applicable
     """
 
-    if not isinstance(fields_any, list):
+    if not _is_object_list(fields_any):
         raise FieldSchemaValidationError(
             message="step schema fields must be a list",
             path="$.schema.fields",
@@ -215,10 +225,10 @@ def validate_step_fields(*, step_id: str, fields_any: Any) -> list[dict[str, Any
             meta={"step_id": step_id},
         )
 
-    out: list[dict[str, Any]] = []
+    out: list[dict[str, object]] = []
     for idx, fld in enumerate(fields_any):
         pfx = f"$.schema.fields[{idx}]"
-        if not isinstance(fld, dict):
+        if not _is_str_object_dict(fld):
             raise FieldSchemaValidationError(
                 message="field definition must be an object",
                 path=pfx,
@@ -312,7 +322,7 @@ def validate_step_fields(*, step_id: str, fields_any: Any) -> list[dict[str, Any
                 )
 
             items = fld.get("items")
-            if not isinstance(items, list):
+            if not _is_object_list(items):
                 raise FieldSchemaValidationError(
                     message="multi_select_indexed.items must be a list",
                     path=f"{pfx}.items",
@@ -322,7 +332,7 @@ def validate_step_fields(*, step_id: str, fields_any: Any) -> list[dict[str, Any
 
             for j, it in enumerate(items):
                 ipfx = f"{pfx}.items[{j}]"
-                if not isinstance(it, dict):
+                if not _is_str_object_dict(it):
                     raise FieldSchemaValidationError(
                         message="items[] entries must be objects",
                         path=ipfx,

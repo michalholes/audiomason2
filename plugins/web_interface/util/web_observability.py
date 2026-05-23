@@ -4,7 +4,7 @@ import time
 import traceback
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
-from typing import Any
+from typing import Protocol, cast, runtime_checkable
 
 from fastapi import Request
 
@@ -13,14 +13,28 @@ from audiomason.core.events import get_event_bus
 from audiomason.core.logging import get_logger
 
 
+@runtime_checkable
+class _LoggerLike(Protocol):
+    def info(self, message: str) -> None: ...
+
+    def error(self, message: str) -> None: ...
+
+
+class _StateView(Protocol):
+    web_logger: object
+
+
 def _ascii(text: str) -> str:
     return (text or "").encode("ascii", "backslashreplace").decode("ascii")
 
 
-def _get_logger(request: Request) -> Any:
-    injected = getattr(getattr(request, "app", None), "state", None)
-    injected = getattr(injected, "web_logger", None)
-    if injected is not None:
+def _get_logger(request: Request) -> _LoggerLike:
+    state = cast(_StateView, request.state)
+    try:
+        injected = state.web_logger
+    except Exception:
+        injected = None
+    if isinstance(injected, _LoggerLike):
         return injected
     return get_logger("web_interface")
 
@@ -30,7 +44,7 @@ def web_operation(
     request: Request,
     *,
     name: str,
-    ctx: dict[str, Any] | None = None,
+    ctx: dict[str, object] | None = None,
     component: str = "web_interface",
 ) -> Iterator[None]:
     """Emit diagnostics + core log records for a web internal operation.

@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
-from typing import Any
 
 from audiomason.core.log_bus import LogRecord
+from audiomason.core.serde import json_loads_object
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
 
@@ -71,7 +72,7 @@ class SyslogService:
         lines = text.splitlines()
         return lines[-n:]
 
-    def follow_lines_raw(self, *, poll_interval_s: float = 0.2) -> Any:
+    def follow_lines_raw(self, *, poll_interval_s: float = 0.2) -> Iterator[str]:
         """Yield new raw lines as they are appended.
 
         Implementation reads the full file on each poll and yields only new lines
@@ -112,14 +113,19 @@ class SyslogService:
             if not s:
                 continue
             try:
-                obj = json.loads(s)
+                parsed = json_loads_object(s)
             except Exception:
                 out.append(s)
                 continue
 
-            if not isinstance(obj, dict):
+            if not isinstance(parsed, Mapping):
                 out.append(s)
                 continue
+
+            obj: dict[str, object] = {}
+            for key, value in parsed.items():
+                if isinstance(key, str):
+                    obj[key] = value
 
             level = obj.get("level")
             logger = obj.get("logger")
@@ -144,7 +150,7 @@ class SyslogService:
 
         # jsonl
         msg = record.plain if record.plain is not None else ""
-        obj: dict[str, Any] = {
+        obj: dict[str, object] = {
             "level": record.level_name,
             "logger": record.logger_name,
             "message": msg,

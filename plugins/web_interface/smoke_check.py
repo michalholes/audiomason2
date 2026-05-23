@@ -6,8 +6,49 @@ import json
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
+from typing import Protocol, cast, runtime_checkable
+
+
+class _Args(Protocol):
+    base_url: str
+    timeout: float
+    out: str
+
+
+@runtime_checkable
+class _SupportsItems(Protocol):
+    def items(self) -> Iterable[tuple[object, object]]: ...
+
+
+class _UrlOpenResponse(Protocol):
+    headers: object
+
+    def getcode(self) -> int | None: ...
+
+    def read(self) -> bytes: ...
+
+    def __enter__(self) -> _UrlOpenResponse: ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: object,
+    ) -> object: ...
+
+
+def _headers_to_dict(headers_obj: object) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    if isinstance(headers_obj, Mapping):
+        for key, value in headers_obj.items():
+            headers[str(key).lower()] = str(value)
+        return headers
+    if isinstance(headers_obj, _SupportsItems):
+        for key, value in headers_obj.items():
+            headers[str(key).lower()] = str(value)
+    return headers
 
 
 def _repo_root() -> Path:
@@ -23,15 +64,17 @@ def _patches_dir(repo_root: Path) -> Path:
 
 def _fetch(url: str, timeout_s: float) -> tuple[int, dict[str, str], bytes]:
     req = urllib.request.Request(url, headers={"User-Agent": "am-web-interface-smoke/1.0"})
-    with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-        status = int(getattr(resp, "status", 200))
-        headers = {k.lower(): v for k, v in dict(resp.headers).items()}
+    opened = cast(_UrlOpenResponse, urllib.request.urlopen(req, timeout=timeout_s))
+    with opened as resp:
+        status_raw = resp.getcode()
+        status = status_raw if isinstance(status_raw, int) else 200
+        headers = _headers_to_dict(resp.headers)
         body = resp.read()
     return status, headers, body
 
 
-def run_smoke(base_url: str, timeout_s: float, paths: Iterable[str]) -> dict:
-    results = []
+def run_smoke(base_url: str, timeout_s: float, paths: Iterable[str]) -> dict[str, object]:
+    results: list[dict[str, object]] = []
     started = time.time()
 
     for p in paths:
@@ -49,7 +92,7 @@ def run_smoke(base_url: str, timeout_s: float, paths: Iterable[str]) -> dict:
             except Exception:
                 item["preview"] = repr(preview)
         except urllib.error.HTTPError as e:
-            item["status"] = int(getattr(e, "code", 0) or 0)
+            item["status"] = int(e.code) if isinstance(e.code, int) else 0
             item["ms"] = int((time.time() - t0) * 1000)
             item["error"] = f"HTTPError: {e}"
         except Exception as e:
@@ -77,7 +120,7 @@ def main() -> int:
         default="",
         help="Output file path (default: patches/web_interface_smoke_report.json)",
     )
-    args = ap.parse_args()
+    args = cast(_Args, ap.parse_args())
 
     # UI pages (SPA paths) + API endpoints used by the UI
     paths = [

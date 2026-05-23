@@ -12,33 +12,34 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypeGuard
+from typing import TypeGuard
 
 import yaml
 
 from audiomason.core.config import ALLOWED_LOGGING_LEVELS, ConfigResolver
 from audiomason.core.errors import ConfigError
+from audiomason.core.serde import yaml_safe_load_text
 
 
 def _default_user_config_path() -> Path:
     return Path.home() / ".config/audiomason/config.yaml"
 
 
-def _is_str_any_dict(value: Any) -> TypeGuard[dict[str, Any]]:
+def _is_str_any_dict(value: object) -> TypeGuard[dict[str, object]]:
     return isinstance(value, dict)
 
 
-def _load_yaml_dict(path: Path) -> dict[str, Any]:
+def _load_yaml_dict(path: Path) -> dict[str, object]:
     if not path.exists():
         return {}
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = yaml_safe_load_text(path.read_text(encoding="utf-8"))
     except Exception as e:
         raise ConfigError(f"Failed to load config from {path}: {e}") from e
     return data if _is_str_any_dict(data) else {}
 
 
-def _dump_yaml_dict(data: dict[str, Any]) -> str:
+def _dump_yaml_dict(data: dict[str, object]) -> str:
     # Deterministic formatting.
     return yaml.safe_dump(
         data,
@@ -48,12 +49,12 @@ def _dump_yaml_dict(data: dict[str, Any]) -> str:
     )
 
 
-def _set_nested(data: dict[str, Any], key_path: str, value: Any) -> None:
+def _set_nested(data: dict[str, object], key_path: str, value: object) -> None:
     parts = [p for p in key_path.split(".") if p]
     if not parts:
         raise ConfigError("Empty key path")
 
-    cur: dict[str, Any] = data
+    cur: dict[str, object] = data
     for part in parts[:-1]:
         nxt = cur.get(part)
         if not _is_str_any_dict(nxt):
@@ -81,13 +82,13 @@ def _validate_minimal(key_path: str, value: object) -> None:
         raise ConfigError(f"Invalid '{key_path}': {value!r}. Allowed values: {allowed}")
 
 
-def _unset_nested(data: dict[str, Any], key_path: str) -> bool:
+def _unset_nested(data: dict[str, object], key_path: str) -> bool:
     parts = [p for p in key_path.split(".") if p]
     if not parts:
         raise ConfigError("Empty key path")
 
-    cur: dict[str, Any] = data
-    stack: list[tuple[dict[str, Any], str]] = []
+    cur: dict[str, object] = data
+    stack: list[tuple[dict[str, object], str]] = []
 
     for part in parts[:-1]:
         nxt = cur.get(part)
@@ -114,7 +115,7 @@ def _unset_nested(data: dict[str, Any], key_path: str) -> bool:
 @dataclass(frozen=True)
 class EffectiveConfigItem:
     key: str
-    value: Any
+    value: object
     source: str
 
 
@@ -124,10 +125,10 @@ class ConfigService:
     def __init__(
         self,
         *,
-        cli_args: dict[str, Any] | None = None,
+        cli_args: dict[str, object] | None = None,
         user_config_path: Path | None = None,
         system_config_path: Path | None = None,
-        defaults: dict[str, Any] | None = None,
+        defaults: dict[str, object] | None = None,
     ) -> None:
         self._resolver = ConfigResolver(
             cli_args=cli_args,
@@ -140,11 +141,11 @@ class ConfigService:
     def user_config_path(self) -> Path:
         return self._resolver.user_config_path
 
-    def get_config(self) -> dict[str, Any]:
+    def get_config(self) -> dict[str, object]:
         """Return the effective config values as a nested dict."""
         resolved = self._resolver.resolve_all()
         # Resolve_all returns flattened keys. Convert to nested dict for UI.
-        out: dict[str, Any] = {}
+        out: dict[str, object] = {}
         for k, src in resolved.items():
             _set_nested(out, k, src.value)
         return out
@@ -159,7 +160,7 @@ class ConfigService:
 
     def get_effective_config_snapshot(self) -> str:
         """Return an ASCII-safe YAML snapshot of effective config values."""
-        flat: dict[str, Any] = {}
+        flat: dict[str, object] = {}
         for item in self.get_effective_items():
             flat[item.key] = {"value": item.value, "source": item.source}
         return _dump_yaml_dict(flat)
@@ -173,7 +174,7 @@ class ConfigService:
             defaults=self._resolver.defaults,
         )
 
-    def set_value(self, key_path: str, value: Any) -> None:
+    def set_value(self, key_path: str, value: object) -> None:
         """Set a value in the user config file (lowest of non-default sources)."""
         _validate_minimal(key_path, value)
         path = self.user_config_path

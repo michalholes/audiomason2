@@ -9,7 +9,7 @@ ASCII-only.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Protocol, TypeGuard, cast
 
 from plugins.file_io.service.types import RootName
 
@@ -44,17 +44,31 @@ if TYPE_CHECKING:
     from .engine import ImportWizardEngine
 
 
+class _SupportsResolve(Protocol):
+    def resolve(self, key: str) -> tuple[object, object]: ...
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in value)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
 @dataclass(frozen=True)
 class SessionStartContext:
     root: str
     relative_path: str
     mode: str
-    wizard_definition: dict[str, Any]
-    effective_model: dict[str, Any]
-    discovery: list[dict[str, Any]]
+    wizard_definition: dict[str, object]
+    effective_model: dict[str, object]
+    discovery: list[dict[str, object]]
     model_fingerprint: str
     discovery_fingerprint: str
-    effective_config: dict[str, Any]
+    effective_config: dict[str, object]
     effective_config_fingerprint: str
     session_id: str
 
@@ -78,7 +92,7 @@ def _build_session_start_context(
     root: str,
     relative_path: str,
     mode: str,
-    flow_overrides: dict[str, Any] | None,
+    flow_overrides: dict[str, object] | None,
 ) -> SessionStartContext:
     v = validate_root_and_path(root, relative_path)
     if isinstance(v, dict):
@@ -97,7 +111,9 @@ def _build_session_start_context(
         engine._fs,
         bootstrap_default_version=_preferred_bootstrap_default_version(engine=engine),
     )
-    if int(wizard_definition.get("version") or 0) == 3:
+    version_any = wizard_definition.get("version")
+    version = version_any if isinstance(version_any, int) else 0
+    if version == 3:
         effective_model = build_runtime_flow_model(wizard_definition=wizard_definition)
     else:
         effective_model = build_legacy_runtime_flow_model_from_definition(
@@ -118,12 +134,15 @@ def _build_session_start_context(
 
     model_fingerprint = fingerprint_json(effective_model)
 
-    effective_config: dict[str, Any] = {
+    diagnostics_enabled = False
+    if engine._has_key("diagnostics.enabled"):
+        resolver = cast(_SupportsResolve, engine._resolver)
+        diagnostics_enabled = bool(resolver.resolve("diagnostics.enabled")[0])
+
+    effective_config: dict[str, object] = {
         "version": 1,
         "flow_config": flow_cfg_norm,
-        "diagnostics_enabled": bool(engine._resolver.resolve("diagnostics.enabled")[0])
-        if engine._has_key("diagnostics.enabled")
-        else False,
+        "diagnostics_enabled": diagnostics_enabled,
     }
     effective_config_fingerprint = fingerprint_json(effective_config)
 
@@ -159,8 +178,8 @@ def resolve_session_start_context(
     root: str,
     relative_path: str,
     mode: str,
-    flow_overrides: dict[str, Any] | None,
-) -> SessionStartContext | dict[str, Any]:
+    flow_overrides: dict[str, object] | None,
+) -> SessionStartContext | dict[str, object]:
     v = validate_root_and_path(root, relative_path)
     if isinstance(v, dict):
         return v
@@ -182,7 +201,7 @@ def resolve_session_start_conflict(
     root: str,
     relative_path: str,
     mode: str,
-    flow_overrides: dict[str, Any] | None,
+    flow_overrides: dict[str, object] | None,
 ) -> SessionStartConflict | None:
     ctx = _build_session_start_context(
         engine=engine,
@@ -202,7 +221,7 @@ def resolve_session_start_conflict(
     )
 
 
-def _session_diag(ctx: SessionStartContext) -> dict[str, Any]:
+def _session_diag(ctx: SessionStartContext) -> dict[str, object]:
     return {
         "session_id": ctx.session_id,
         "model_fingerprint": ctx.model_fingerprint,
@@ -211,7 +230,7 @@ def _session_diag(ctx: SessionStartContext) -> dict[str, Any]:
     }
 
 
-def _runtime_vars(*, engine: ImportWizardEngine) -> dict[str, Any]:
+def _runtime_vars(*, engine: ImportWizardEngine) -> dict[str, object]:
     return {
         "runtime": {
             "detached_runtime": build_detached_runtime_bootstrap(fs=engine._fs),
@@ -247,20 +266,23 @@ def resume_session_from_context(
     *,
     engine: ImportWizardEngine,
     ctx: SessionStartContext,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     session_dir = f"import/sessions/{ctx.session_id}"
     state_path = f"{session_dir}/state.json"
-    loaded_state = read_json(engine._fs, RootName.WIZARDS, state_path)
+    loaded_state_any = read_json(engine._fs, RootName.WIZARDS, state_path)
+    loaded_state = _as_str_object_dict(loaded_state_any)
+    if not loaded_state:
+        raise FinalizeError("session state must be an object")
+
+    derived = _as_str_object_dict(loaded_state.get("derived"))
     _emit_required(
         "session.resume",
         "session.resume",
         {
             "session_id": ctx.session_id,
             "model_fingerprint": loaded_state.get("model_fingerprint"),
-            "discovery_fingerprint": loaded_state.get("derived", {}).get("discovery_fingerprint"),
-            "effective_config_fingerprint": loaded_state.get("derived", {}).get(
-                "effective_config_fingerprint"
-            ),
+            "discovery_fingerprint": derived.get("discovery_fingerprint"),
+            "effective_config_fingerprint": derived.get("effective_config_fingerprint"),
         },
     )
     loaded_state = _ensure_session_state_fields(loaded_state)
@@ -268,11 +290,13 @@ def resume_session_from_context(
     if runtime_fp and loaded_state.get("model_fingerprint") != runtime_fp:
         loaded_state["model_fingerprint"] = runtime_fp
     if phase1_session_authority_applies(effective_model=ctx.effective_model):
-        loaded_state.setdefault("vars", {})["phase1"] = build_phase1_projection(
+        vars_state = _as_str_object_dict(loaded_state.get("vars"))
+        vars_state["phase1"] = build_phase1_projection(
             discovery=ctx.discovery,
             state=loaded_state,
             fs=engine._fs,
         )
+        loaded_state["vars"] = vars_state
     if ctx.effective_model.get("flowmodel_kind") == "dsl_step_graph_v3":
         from .engine_step_submit import _sync_v3_legacy_state
 
@@ -289,7 +313,7 @@ def create_new_session_from_context(
     *,
     engine: ImportWizardEngine,
     ctx: SessionStartContext,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     session_dir = f"import/sessions/{ctx.session_id}"
     state_path = f"{session_dir}/state.json"
 
@@ -350,12 +374,12 @@ def create_new_session_from_context(
     steps_any = ctx.effective_model.get("steps")
     if not isinstance(steps_any, list) or not steps_any:
         raise FinalizeError("effective_model must contain at least one step")
-    first = steps_any[0] if isinstance(steps_any[0], dict) else {}
+    first = _as_str_object_dict(steps_any[0])
     start_step_id = str(first.get("step_id") or "")
     if not start_step_id:
         raise FinalizeError("effective_model first step must have step_id")
 
-    state: dict[str, Any] = {
+    state: dict[str, object] = {
         "session_id": ctx.session_id,
         "session_state_version": 1,
         "created_at": created_at,
@@ -403,10 +427,7 @@ def create_new_session_from_context(
                 fs=engine._fs,
             ),
         }
-    if (
-        isinstance(ctx.effective_model, dict)
-        and ctx.effective_model.get("flowmodel_kind") == "dsl_step_graph_v3"
-    ):
+    if ctx.effective_model.get("flowmodel_kind") == "dsl_step_graph_v3":
         from .engine_step_submit import _sync_v3_legacy_state
 
         state = initialize_state(
@@ -415,12 +436,14 @@ def create_new_session_from_context(
             session_id=ctx.session_id,
         )
         if phase1_session_authority_applies(effective_model=ctx.effective_model):
-            state.setdefault("vars", {}).update(_runtime_vars(engine=engine))
-            state.setdefault("vars", {})["phase1"] = build_phase1_projection(
+            vars_state = _as_str_object_dict(state.get("vars"))
+            vars_state.update(_runtime_vars(engine=engine))
+            vars_state["phase1"] = build_phase1_projection(
                 discovery=ctx.discovery,
                 state=state,
                 fs=engine._fs,
             )
+            state["vars"] = vars_state
         state = _sync_v3_legacy_state(
             engine=engine,
             session_id=ctx.session_id,
@@ -447,8 +470,8 @@ def create_session_impl(
     root: str,
     relative_path: str,
     mode: str,
-    flow_overrides: dict[str, Any] | None,
-) -> dict[str, Any]:
+    flow_overrides: dict[str, object] | None,
+) -> dict[str, object]:
     ctx = resolve_session_start_context(
         engine=engine,
         root=root,

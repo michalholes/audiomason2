@@ -6,7 +6,7 @@ ASCII-only.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import TypeGuard
 
 from ..engine_util import _emit_required, append_trace_event, sync_session_cursor
 from ..errors import FinalizeError, StepSubmissionError
@@ -35,26 +35,55 @@ from .subflow_runtime import (
 )
 
 
-def _state_view(state: dict[str, Any]) -> dict[str, Any]:
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _as_str_list(value: object) -> list[str]:
+    if not _is_object_list(value):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _to_int_or_default(value: object, default: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _state_view(state: dict[str, object]) -> dict[str, object]:
     return {
-        "answers": dict(state.get("answers") or {}),
-        "vars": dict(state.get("vars") or {}),
-        "jobs": dict(state.get("jobs") or {}),
-        "source": dict(state.get("source") or {}),
+        "answers": _as_str_object_dict(state.get("answers")),
+        "vars": _as_str_object_dict(state.get("vars")),
+        "jobs": _as_str_object_dict(state.get("jobs")),
+        "source": _as_str_object_dict(state.get("source")),
         "status": state.get("status"),
-        "cursor": dict(state.get("cursor") or {}),
+        "cursor": _as_str_object_dict(state.get("cursor")),
     }
 
 
 def _resolve_expr(
-    expr_ref: dict[str, Any],
+    expr_ref: dict[str, object],
     *,
-    state: dict[str, Any],
-    inputs: dict[str, Any],
-    op_outputs: dict[str, Any] | None,
+    state: dict[str, object],
+    inputs: dict[str, object],
+    op_outputs: dict[str, object] | None,
     allow_op_outputs: bool,
     path: str,
-) -> Any:
+) -> object:
     ok, value, error = eval_expr_ref(
         expr_ref,
         state=_state_view(state),
@@ -65,20 +94,20 @@ def _resolve_expr(
     )
     if not ok:
         reason = "expr_error"
-        if isinstance(error, dict) and isinstance(error.get("reason"), str):
+        if _is_str_object_dict(error) and isinstance(error.get("reason"), str):
             reason = str(error.get("reason"))
         raise FinalizeError(reason)
     return value
 
 
-def resolve_inputs(step: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+def resolve_inputs(step: dict[str, object], state: dict[str, object]) -> dict[str, object]:
     raw_inputs = step.get("inputs")
-    if not isinstance(raw_inputs, dict):
+    if not _is_str_object_dict(raw_inputs):
         return {}
 
     primitive_id = str(step.get("primitive_id") or "")
-    primitive_version = int(step.get("primitive_version") or 0)
-    prompt_ui: dict[str, Any] | None = None
+    primitive_version = _to_int_or_default(step.get("primitive_version"), 0)
+    prompt_ui: dict[str, object] | None = None
     prompt_keys: set[str] = set()
     if is_prompt_primitive(primitive_id, primitive_version):
         try:
@@ -95,11 +124,11 @@ def resolve_inputs(step: dict[str, Any], state: dict[str, Any]) -> dict[str, Any
         ("flow.loop", 1),
     }
     current_inputs = runtime_input_context(state)
-    out: dict[str, Any] = {}
+    out: dict[str, object] = {}
     for key, value in raw_inputs.items():
         if key in prompt_keys:
             continue
-        if primitive_id == "call.invoke" and key == "args" and isinstance(value, dict):
+        if primitive_id == "call.invoke" and key == "args" and _is_str_object_dict(value):
             out[str(key)] = resolve_phase2_input_value(
                 value,
                 state=state,
@@ -107,7 +136,7 @@ def resolve_inputs(step: dict[str, Any], state: dict[str, Any]) -> dict[str, Any
                 path=f"$.inputs.{key}",
             )
             continue
-        if primitive_id == "flow.loop" and key == "param_bindings" and isinstance(value, list):
+        if primitive_id == "flow.loop" and key == "param_bindings" and _is_object_list(value):
             out[str(key)] = deepcopy(value)
             continue
         if primitive_id in {"data.filter", "data.map"} and key in {"condition_expr", "value_expr"}:
@@ -121,7 +150,7 @@ def resolve_inputs(step: dict[str, Any], state: dict[str, Any]) -> dict[str, Any
                 path=f"$.inputs.{key}",
             )
             continue
-        if isinstance(value, dict) and set(value.keys()) == {"expr"}:
+        if _is_str_object_dict(value) and set(value.keys()) == {"expr"}:
             out[str(key)] = _resolve_expr(
                 value,
                 state=state,
@@ -155,20 +184,24 @@ def resolve_inputs(step: dict[str, Any], state: dict[str, Any]) -> dict[str, Any
     return out
 
 
-def _set_path(target: dict[str, Any], path: str, value: Any) -> None:
+def _set_path(target: dict[str, object], path: str, value: object) -> None:
     if path.startswith("$.state.answers."):
         parts = path[len("$.state.answers.") :].split(".")
-        base: dict[str, Any] = target.setdefault("answers", {})
+        answers = _as_str_object_dict(target.get("answers"))
+        target["answers"] = answers
+        base: dict[str, object] = answers
     elif path.startswith("$.state.vars."):
         parts = path[len("$.state.vars.") :].split(".")
-        base = target.setdefault("vars", {})
+        vars_doc = _as_str_object_dict(target.get("vars"))
+        target["vars"] = vars_doc
+        base = vars_doc
     else:
         raise FinalizeError("invalid_write_target")
 
-    cur: dict[str, Any] = base
+    cur: dict[str, object] = base
     for part in parts[:-1]:
         nxt = cur.get(part)
-        if not isinstance(nxt, dict):
+        if not _is_str_object_dict(nxt):
             nxt = {}
             cur[part] = nxt
         cur = nxt
@@ -177,26 +210,26 @@ def _set_path(target: dict[str, Any], path: str, value: Any) -> None:
 
 def apply_writes(
     *,
-    state: dict[str, Any],
-    step: dict[str, Any],
-    inputs: dict[str, Any],
-    op_outputs: dict[str, Any],
-) -> dict[str, Any]:
+    state: dict[str, object],
+    step: dict[str, object],
+    inputs: dict[str, object],
+    op_outputs: dict[str, object],
+) -> dict[str, object]:
     writes_any = step.get("writes")
-    if not isinstance(writes_any, list) or not writes_any:
+    if not _is_object_list(writes_any) or not writes_any:
         return state
 
     updated = dict(state)
-    updated["answers"] = dict(state.get("answers") or {})
-    updated["vars"] = dict(state.get("vars") or {})
+    updated["answers"] = _as_str_object_dict(state.get("answers"))
+    updated["vars"] = _as_str_object_dict(state.get("vars"))
     for i, write_any in enumerate(writes_any):
-        if not isinstance(write_any, dict):
+        if not _is_str_object_dict(write_any):
             raise FinalizeError("invalid_write")
         to_path = write_any.get("to_path")
         if not isinstance(to_path, str) or not to_path:
             raise FinalizeError("invalid_write_target")
         value = write_any.get("value")
-        if isinstance(value, dict) and set(value.keys()) == {"expr"}:
+        if _is_str_object_dict(value) and set(value.keys()) == {"expr"}:
             value = _resolve_expr(
                 value,
                 state=updated,
@@ -210,16 +243,16 @@ def apply_writes(
 
 
 def _next_step_id(
-    effective_model: dict[str, Any],
+    effective_model: dict[str, object],
     step_id: str,
-    state: dict[str, Any],
+    state: dict[str, object],
 ) -> str | None:
     edges_any = effective_model.get("edges")
-    if not isinstance(edges_any, list):
+    if not _is_object_list(edges_any):
         return None
     unconditional: str | None = None
     for edge_any in edges_any:
-        if not isinstance(edge_any, dict) or edge_any.get("from") != step_id:
+        if not _is_str_object_dict(edge_any) or edge_any.get("from") != step_id:
             continue
         to = edge_any.get("to")
         if not isinstance(to, str) or not to:
@@ -229,7 +262,7 @@ def _next_step_id(
             if unconditional is None:
                 unconditional = to
             continue
-        if isinstance(cond, dict) and set(cond.keys()) == {"expr"}:
+        if _is_str_object_dict(cond) and set(cond.keys()) == {"expr"}:
             value = _resolve_expr(
                 cond,
                 state=state,
@@ -244,16 +277,16 @@ def _next_step_id(
 
 
 def _prompt_autofill_outputs(
-    step: dict[str, Any],
-    state: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    step: dict[str, object],
+    state: dict[str, object],
+) -> tuple[dict[str, object], dict[str, object]] | None:
     inputs = resolve_inputs(step, state)
     if inputs.get("autofill_if") is not True:
         return None
 
     key = prompt_output_key(
         str(step.get("primitive_id") or ""),
-        int(step.get("primitive_version") or 0),
+        _to_int_or_default(step.get("primitive_version"), 0),
     )
     if not isinstance(key, str) or not key:
         return None
@@ -268,7 +301,7 @@ def _prompt_autofill_outputs(
     try:
         outputs = validate_submit_payload(
             str(step.get("primitive_id") or ""),
-            int(step.get("primitive_version") or 0),
+            _to_int_or_default(step.get("primitive_version"), 0),
             {key: candidate},
         )
     except ValueError as exc:
@@ -278,27 +311,28 @@ def _prompt_autofill_outputs(
 
 def _advance_prompt_step(
     *,
-    effective_model: dict[str, Any],
-    state: dict[str, Any],
+    effective_model: dict[str, object],
+    state: dict[str, object],
     step_id: str,
-    step: dict[str, Any],
-    inputs: dict[str, Any],
-    outputs: dict[str, Any],
-) -> tuple[dict[str, Any], str | None]:
+    step: dict[str, object],
+    inputs: dict[str, object],
+    outputs: dict[str, object],
+) -> tuple[dict[str, object], str | None]:
     primitive_id = str(step.get("primitive_id") or "")
-    primitive_version = int(step.get("primitive_version") or 0)
+    primitive_version = _to_int_or_default(step.get("primitive_version"), 0)
     state = apply_writes(state=state, step=step, inputs=inputs, op_outputs=outputs)
-    completed = list(state.get("completed_step_ids") or [])
+    completed = _as_str_list(state.get("completed_step_ids"))
     if step_id not in completed:
         completed.append(step_id)
     state["completed_step_ids"] = completed
     next_step = _next_step_id(effective_model, step_id, state)
-    state["current_step_id"] = step_id if next_step is None else next_step
-    sync_session_cursor(state, step_id=state["current_step_id"])
+    current_step_id = step_id if next_step is None else next_step
+    state["current_step_id"] = current_step_id
+    sync_session_cursor(state, step_id=current_step_id)
     writes_any = step.get("writes")
     writes = (
-        [str(item.get("to_path")) for item in writes_any if isinstance(item, dict)]
-        if isinstance(writes_any, list)
+        [str(item.get("to_path")) for item in writes_any if _is_str_object_dict(item)]
+        if _is_object_list(writes_any)
         else []
     )
     state = record_trace(
@@ -313,9 +347,8 @@ def _advance_prompt_step(
     return state, next_step
 
 
-def _runtime_diag_context(state: dict[str, Any], session_id: str) -> dict[str, Any]:
-    derived_any = state.get("derived")
-    derived = dict(derived_any) if isinstance(derived_any, dict) else {}
+def _runtime_diag_context(state: dict[str, object], session_id: str) -> dict[str, object]:
+    derived = _as_str_object_dict(state.get("derived"))
     return {
         "session_id": session_id,
         "model_fingerprint": str(state.get("model_fingerprint") or ""),
@@ -327,14 +360,14 @@ def _runtime_diag_context(state: dict[str, Any], session_id: str) -> dict[str, A
 def _emit_runtime_boundary(
     *,
     event: str,
-    state: dict[str, Any],
+    state: dict[str, object],
     session_id: str,
     step_id: str,
     primitive_id: str,
     primitive_version: int,
     error: Exception | None = None,
 ) -> None:
-    data: dict[str, Any] = {
+    data: dict[str, object] = {
         "session_id": session_id,
         "step_id": step_id,
         "primitive_id": primitive_id,
@@ -350,38 +383,39 @@ def _emit_runtime_boundary(
     )
 
 
-def _enter_phase2_boundary(*, state: dict[str, Any], step_id: str) -> dict[str, Any]:
+def _enter_phase2_boundary(*, state: dict[str, object], step_id: str) -> dict[str, object]:
     state["phase"] = 2
     state["current_step_id"] = step_id
     sync_session_cursor(state, step_id=step_id)
     return state
 
 
-def prompt_ui_from_resolved_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
+def prompt_ui_from_resolved_inputs(inputs: dict[str, object]) -> dict[str, object]:
     return {key: inputs[key] for key in PROMPT_METADATA_KEYS if key in inputs}
 
 
 def _registry_declares_primitive(primitive_id: str, primitive_version: int) -> bool:
     return any(
         str(entry.get("primitive_id") or "") == primitive_id
-        and int(entry.get("version") or 0) == primitive_version
+        and _to_int_or_default(entry.get("version"), 0) == primitive_version
         for entry in baseline_registry_entries()
     )
 
 
 def run_automatic_steps(
     *,
-    effective_model: dict[str, Any],
-    state: dict[str, Any],
+    effective_model: dict[str, object],
+    state: dict[str, object],
     session_id: str,
-) -> dict[str, Any]:
-    current = str((state.get("cursor") or {}).get("step_id") or state.get("current_step_id") or "")
+) -> dict[str, object]:
+    cursor = _as_str_object_dict(state.get("cursor"))
+    current = str(cursor.get("step_id") or state.get("current_step_id") or "")
     while current and state.get("status") == "in_progress":
         step = get_step(effective_model, current)
-        if int(step.get("phase") or 1) == 2:
+        if _to_int_or_default(step.get("phase"), 1) == 2:
             return _enter_phase2_boundary(state=state, step_id=current)
         primitive_id = str(step.get("primitive_id") or "")
-        primitive_version = int(step.get("primitive_version") or 0)
+        primitive_version = _to_int_or_default(step.get("primitive_version"), 0)
         if is_prompt_primitive(primitive_id, primitive_version):
             prompt_outputs = _prompt_autofill_outputs(step, state)
             if prompt_outputs is None:
@@ -414,6 +448,18 @@ def run_automatic_steps(
             primitive_id=primitive_id,
             primitive_version=primitive_version,
         )
+
+        def _run_graph(
+            graph: dict[str, object],
+            state: dict[str, object],
+            session_id: str,
+        ) -> dict[str, object]:
+            return run_automatic_steps(
+                effective_model=graph,
+                state=state,
+                session_id=session_id,
+            )
+
         try:
             phase2 = execute_phase2_step(
                 effective_model=effective_model,
@@ -422,13 +468,7 @@ def run_automatic_steps(
                 step_id=current,
                 step=step,
                 inputs=inputs,
-                run_graph=(
-                    lambda model, graph_state, graph_session_id: run_automatic_steps(
-                        effective_model=model,
-                        state=graph_state,
-                        session_id=graph_session_id,
-                    )
-                ),
+                run_graph=_run_graph,
                 apply_writes=apply_writes,
                 append_trace=append_trace_event,
             )
@@ -467,8 +507,8 @@ def run_automatic_steps(
             state = apply_writes(state=state, step=step, inputs=inputs, op_outputs=outputs)
         writes_any = step.get("writes")
         writes = (
-            [str(item.get("to_path")) for item in writes_any if isinstance(item, dict)]
-            if isinstance(writes_any, list)
+            [str(item.get("to_path")) for item in writes_any if _is_str_object_dict(item)]
+            if _is_object_list(writes_any)
             else []
         )
         if primitive_id == CTRL_STOP_ID:
@@ -485,8 +525,9 @@ def run_automatic_steps(
                 append_trace=append_trace_event,
             )
         next_step = _next_step_id(effective_model, current, state)
-        state["current_step_id"] = current if next_step is None else next_step
-        sync_session_cursor(state, step_id=state["current_step_id"])
+        current_step_id = current if next_step is None else next_step
+        state["current_step_id"] = current_step_id
+        sync_session_cursor(state, step_id=current_step_id)
         state = record_trace(
             state,
             step_id=current,
@@ -504,20 +545,21 @@ def run_automatic_steps(
 
 def submit_current_step(
     *,
-    effective_model: dict[str, Any],
-    state: dict[str, Any],
+    effective_model: dict[str, object],
+    state: dict[str, object],
     session_id: str,
     step_id: str,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
+    payload: dict[str, object],
+) -> dict[str, object]:
     if state.get("status") != "in_progress":
         raise FinalizeError("status_not_in_progress")
-    current = str((state.get("cursor") or {}).get("step_id") or state.get("current_step_id") or "")
+    cursor = _as_str_object_dict(state.get("cursor"))
+    current = str(cursor.get("step_id") or state.get("current_step_id") or "")
     if step_id != current:
         raise StepSubmissionError("step_id must match current_step_id")
     step = get_step(effective_model, step_id)
     primitive_id = str(step.get("primitive_id") or "")
-    primitive_version = int(step.get("primitive_version") or 0)
+    primitive_version = _to_int_or_default(step.get("primitive_version"), 0)
     if not is_prompt_primitive(primitive_id, primitive_version):
         raise StepSubmissionError("non-prompt primitive cannot be submitted")
     outputs = validate_submit_payload(primitive_id, primitive_version, payload)

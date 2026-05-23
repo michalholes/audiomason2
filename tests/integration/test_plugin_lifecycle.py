@@ -287,14 +287,13 @@ test_level: none
             """
 import json
 import pathlib
-from typing import Any
 
 class ImportPlugin:
     def __init__(self):
         self.json_module = json
         self.pathlib_module = pathlib
 
-    def test_method(self) -> dict[str, Any]:
+    def test_method(self) -> dict[str, object]:
         return {"status": "ok"}
 """
         )

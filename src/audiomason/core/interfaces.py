@@ -6,7 +6,7 @@ These are intentionally generic to allow maximum flexibility.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from audiomason.core.context import ProcessingContext
@@ -50,7 +50,7 @@ class IProvider(Protocol):
     - Transcription services
     """
 
-    async def fetch(self, query: dict[str, Any]) -> dict[str, Any]:
+    async def fetch(self, query: dict[str, object]) -> dict[str, object]:
         """Fetch data based on query.
 
         Args:

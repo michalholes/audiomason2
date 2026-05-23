@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import tarfile
 import zipfile
-from typing import Any
+from typing import Protocol, cast
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
@@ -15,20 +15,33 @@ from plugins.file_io.service.types import RootName
 from ..util.web_observability import web_operation
 
 
+class _StateView(Protocol):
+    config_resolver: object
+    file_service: object
+
+
 def _get_resolver(request: Request) -> ConfigResolver:
-    resolver = getattr(request.app.state, "config_resolver", None)
+    state = cast(_StateView, request.state)
+    try:
+        resolver = state.config_resolver
+    except Exception:
+        resolver = None
     if isinstance(resolver, ConfigResolver):
         return resolver
     return ConfigResolver()
 
 
 def _get_file_service(request: Request) -> FileService:
-    fs = getattr(request.app.state, "file_service", None)
+    state = cast(_StateView, request.state)
+    try:
+        fs = state.file_service
+    except Exception:
+        fs = None
     if isinstance(fs, FileService):
         return fs
     resolver = _get_resolver(request)
     fs = FileService.from_resolver(resolver)
-    request.app.state.file_service = fs
+    state.file_service = fs
     return fs
 
 
@@ -57,8 +70,9 @@ def _norm_rel_path(p: str) -> str:
 
 
 def mount_fs(app: FastAPI) -> None:
-    @app.get("/api/fs/list")
-    def fs_list(request: Request, root: str, path: str = ".", recursive: int = 0) -> dict[str, Any]:
+    def fs_list(
+        request: Request, root: str, path: str = ".", recursive: int = 0
+    ) -> dict[str, object]:
         fs = _get_file_service(request)
         r = _parse_root(root)
         rel = _norm_rel_path(path)
@@ -68,7 +82,7 @@ def mount_fs(app: FastAPI) -> None:
             ctx={"root": r.value, "path": rel, "recursive": int(bool(recursive))},
         ):
             entries = fs.list_dir(r, rel, recursive=bool(recursive))
-            items: list[dict[str, Any]] = []
+            items: list[dict[str, object]] = []
             for e in entries:
                 items.append(
                     {
@@ -80,8 +94,7 @@ def mount_fs(app: FastAPI) -> None:
                 )
             return {"items": items}
 
-    @app.get("/api/fs/stat")
-    def fs_stat(request: Request, root: str, path: str) -> dict[str, Any]:
+    def fs_stat(request: Request, root: str, path: str) -> dict[str, object]:
         fs = _get_file_service(request)
         r = _parse_root(root)
         rel = _norm_rel_path(path)
@@ -96,16 +109,14 @@ def mount_fs(app: FastAPI) -> None:
                 }
             }
 
-    @app.get("/api/fs/exists")
-    def fs_exists(request: Request, root: str, path: str) -> dict[str, Any]:
+    def fs_exists(request: Request, root: str, path: str) -> dict[str, object]:
         fs = _get_file_service(request)
         r = _parse_root(root)
         rel = _norm_rel_path(path)
         with web_operation(request, name="fs.exists", ctx={"root": r.value, "path": rel}):
             return {"exists": fs.exists(r, rel)}
 
-    @app.post("/api/fs/mkdir")
-    def fs_mkdir(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    def fs_mkdir(request: Request, payload: dict[str, object]) -> dict[str, object]:
         root = payload.get("root")
         path = payload.get("path")
         parents = bool(payload.get("parents", True))
@@ -122,8 +133,7 @@ def mount_fs(app: FastAPI) -> None:
             fs.mkdir(r, rel, parents=parents, exist_ok=True)
         return {"ok": True}
 
-    @app.post("/api/fs/rename")
-    def fs_rename(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    def fs_rename(request: Request, payload: dict[str, object]) -> dict[str, object]:
         root = payload.get("root")
         src = payload.get("src")
         dst = payload.get("dst")
@@ -142,8 +152,7 @@ def mount_fs(app: FastAPI) -> None:
             fs.rename(r, src_rel, dst_rel, overwrite=overwrite)
         return {"ok": True}
 
-    @app.post("/api/fs/copy")
-    def fs_copy(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    def fs_copy(request: Request, payload: dict[str, object]) -> dict[str, object]:
         root = payload.get("root")
         src = payload.get("src")
         dst = payload.get("dst")
@@ -162,8 +171,7 @@ def mount_fs(app: FastAPI) -> None:
             fs.copy(r, src_rel, dst_rel, overwrite=overwrite)
         return {"ok": True}
 
-    @app.post("/api/fs/delete_file")
-    def fs_delete_file(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    def fs_delete_file(request: Request, payload: dict[str, object]) -> dict[str, object]:
         root = payload.get("root")
         path = payload.get("path")
         if not isinstance(root, str) or not isinstance(path, str):
@@ -175,8 +183,7 @@ def mount_fs(app: FastAPI) -> None:
             fs.delete_file(r, rel)
         return {"ok": True}
 
-    @app.post("/api/fs/rmdir")
-    def fs_rmdir(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    def fs_rmdir(request: Request, payload: dict[str, object]) -> dict[str, object]:
         root = payload.get("root")
         path = payload.get("path")
         if not isinstance(root, str) or not isinstance(path, str):
@@ -188,7 +195,6 @@ def mount_fs(app: FastAPI) -> None:
             fs.rmdir(r, rel)
         return {"ok": True}
 
-    @app.get("/api/fs/read_bytes")
     def fs_read_bytes(request: Request, root: str, path: str) -> StreamingResponse:
         fs = _get_file_service(request)
         r = _parse_root(root)
@@ -200,14 +206,13 @@ def mount_fs(app: FastAPI) -> None:
             data = f.read()
         return StreamingResponse(io.BytesIO(data), media_type="application/octet-stream")
 
-    @app.post("/api/fs/write_bytes")
     async def fs_write_bytes(
         request: Request,
         root: str = Form(...),
         path: str = Form(...),
         overwrite: int = Form(1),
         file: UploadFile = File(...),  # noqa: B008
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         if file is None:
             raise HTTPException(status_code=400, detail="file is required")
         fs = _get_file_service(request)
@@ -225,7 +230,6 @@ def mount_fs(app: FastAPI) -> None:
             f.write(data)
         return {"ok": True}
 
-    @app.get("/api/fs/archive")
     def fs_archive(
         request: Request, root: str, path: str = ".", fmt: str = "zip"
     ) -> StreamingResponse:
@@ -262,3 +266,15 @@ def mount_fs(app: FastAPI) -> None:
                     tf.addfile(ti, io.BytesIO(data))
             buf.seek(0)
             return StreamingResponse(buf, media_type="application/x-tar")
+
+    app.add_api_route("/api/fs/list", fs_list, methods=["GET"])
+    app.add_api_route("/api/fs/stat", fs_stat, methods=["GET"])
+    app.add_api_route("/api/fs/exists", fs_exists, methods=["GET"])
+    app.add_api_route("/api/fs/mkdir", fs_mkdir, methods=["POST"])
+    app.add_api_route("/api/fs/rename", fs_rename, methods=["POST"])
+    app.add_api_route("/api/fs/copy", fs_copy, methods=["POST"])
+    app.add_api_route("/api/fs/delete_file", fs_delete_file, methods=["POST"])
+    app.add_api_route("/api/fs/rmdir", fs_rmdir, methods=["POST"])
+    app.add_api_route("/api/fs/read_bytes", fs_read_bytes, methods=["GET"])
+    app.add_api_route("/api/fs/write_bytes", fs_write_bytes, methods=["POST"])
+    app.add_api_route("/api/fs/archive", fs_archive, methods=["GET"])

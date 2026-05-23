@@ -6,7 +6,6 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -293,7 +292,7 @@ process.stdout.write(
 """
 
 
-def _run_node(script: str, payload: dict[str, Any]) -> Any:
+def _run_node(script: str, payload: dict[str, object]) -> object:
     try:
         proc = subprocess.run(
             ["node", "-e", script],
@@ -369,7 +368,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ASSET_BASE = REPO_ROOT / "plugins" / "import" / "ui" / "web" / "assets"
 
 
-def _run_step_modal_picker_scenario(body: str) -> dict[str, Any]:
+def _run_step_modal_picker_scenario(body: str) -> dict[str, object]:
     node = shutil.which("node")
     if not node:
         pytest.skip("node not installed")

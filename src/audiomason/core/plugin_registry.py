@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeGuard, cast
+from typing import TYPE_CHECKING, TypeGuard, cast
 
 from audiomason.core.config_service import ConfigService
 from audiomason.core.errors import PluginNotFoundError, PluginValidationError
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from audiomason.core.loader import PluginLoader, PluginManifest
 
 
-def _is_str_any_dict(value: Any) -> TypeGuard[dict[str, Any]]:
+def _is_str_any_dict(value: object) -> TypeGuard[dict[str, object]]:
     return isinstance(value, dict)
 
 
@@ -94,7 +94,7 @@ class PluginRegistry:
                 disabled.append(plugin_id)
         self._config.set_value("plugin_registry.disabled", disabled)
 
-    def get_plugin_config(self, plugin_id: str) -> dict[str, Any]:
+    def get_plugin_config(self, plugin_id: str) -> dict[str, object]:
         """Return the effective plugin config mapping.
 
         Reads from host user config under: plugins.<plugin_id>.config
@@ -118,11 +118,15 @@ class PluginRegistry:
 
         return dict(cfg_node)
 
-    def set_plugin_config(self, plugin_id: str, config: dict[str, Any]) -> None:
+    def set_plugin_config(self, plugin_id: str, config: dict[str, object]) -> None:
         """Write plugin config mapping into host user config."""
         self._config.set_value(f"plugins.{plugin_id}.config", dict(config))
 
-    def ensure_plugin_config_defaults(self, plugin_id: str, config_schema: dict[str, Any]) -> bool:
+    def ensure_plugin_config_defaults(
+        self,
+        plugin_id: str,
+        config_schema: dict[str, object],
+    ) -> bool:
         """Materialize missing defaulted config keys into host user config.
 
         For each schema key with a 'default' field, write the default value to:

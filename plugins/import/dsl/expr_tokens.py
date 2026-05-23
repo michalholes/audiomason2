@@ -6,7 +6,6 @@ ASCII-only.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 
 @dataclass(frozen=True)
@@ -14,7 +13,7 @@ class ExprToken:
     """Single lexical token."""
 
     kind: str
-    value: Any
+    value: object
     start: int
     end: int
 
@@ -26,7 +25,7 @@ class ExprTokenError:
     code: str
     path: str
     reason: str
-    meta: dict[str, Any]
+    meta: dict[str, object]
 
 
 _KEYWORDS = {
@@ -48,7 +47,7 @@ def _error(
     code: str,
     path: str,
     reason: str,
-    meta: dict[str, Any] | None = None,
+    meta: dict[str, object] | None = None,
 ) -> ExprTokenError:
     return ExprTokenError(
         code=code,
@@ -255,7 +254,7 @@ def tokenize_expr(
         if ch.isalpha() or ch == "_":
             ident, nxt = _read_ident(expr, pos=idx)
             kind = _KEYWORDS.get(ident, "IDENT")
-            token_value: Any = ident
+            token_value: object = ident
             if ident == "true":
                 token_value = True
             elif ident == "false":

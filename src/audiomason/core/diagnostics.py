@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TypeGuard
+from typing import TypeGuard
 
 from audiomason.core.config import ConfigError, ConfigResolver
 from audiomason.core.events import get_event_bus
@@ -25,7 +25,7 @@ _TRUE_VALUES = {"1", "true", "yes", "on"}
 _FALSE_VALUES = {"0", "false", "no", "off"}
 
 
-def _is_str_any_dict(value: Any) -> TypeGuard[dict[str, Any]]:
+def _is_str_any_dict(value: object) -> TypeGuard[dict[str, object]]:
     return isinstance(value, dict)
 
 
@@ -34,8 +34,8 @@ def build_envelope(
     event: str,
     component: str,
     operation: str,
-    data: dict[str, Any],
-) -> dict[str, Any]:
+    data: dict[str, object],
+) -> dict[str, object]:
     """Build the canonical diagnostics envelope.
 
     Schema:
@@ -99,7 +99,7 @@ def is_diagnostics_enabled(resolver: ConfigResolver) -> bool:
     return False
 
 
-def _is_envelope(obj: Any) -> bool:
+def _is_envelope(obj: object) -> bool:
     if not _is_str_any_dict(obj):
         return False
 
@@ -133,7 +133,7 @@ def install_jsonl_sink(*, resolver: ConfigResolver) -> None:
     if _sink_installed:
         return
 
-    def _on_any_event(event: str, data: dict[str, Any]) -> None:
+    def _on_any_event(event: str, data: dict[str, object]) -> None:
         if not is_diagnostics_enabled(resolver):
             return
 
@@ -144,7 +144,7 @@ def install_jsonl_sink(*, resolver: ConfigResolver) -> None:
             return
         out_path = Path(str(stage_dir)) / "diagnostics" / "diagnostics.jsonl"
 
-        payload: dict[str, Any]
+        payload: dict[str, object]
         if _is_envelope(data):
             payload = data
         else:

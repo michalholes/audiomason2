@@ -6,7 +6,6 @@ import json
 import subprocess
 from importlib import import_module
 from pathlib import Path
-from typing import Any
 
 from audiomason.core.config import ConfigResolver
 
@@ -121,7 +120,7 @@ AUTOFILL_FLOW = {
 }
 
 
-def _make_engine(tmp_path: Path) -> tuple[Any, ConfigResolver]:
+def _make_engine(tmp_path: Path) -> tuple[object, ConfigResolver]:
     roots = {
         name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
     }
@@ -161,7 +160,7 @@ def _make_engine(tmp_path: Path) -> tuple[Any, ConfigResolver]:
     return ImportWizardEngine(resolver=resolver), resolver
 
 
-def _run_v3_renderer(function_name: str, payload: dict[str, Any]) -> Any:
+def _run_v3_renderer(function_name: str, payload: dict[str, object]) -> object:
     script = """
 const fs = require("fs");
 const vm = require("vm");
@@ -187,7 +186,7 @@ process.stdout.write(JSON.stringify(out));
     return json.loads(proc.stdout)
 
 
-def _run_import_wizard_runtime_harness() -> dict[str, Any]:
+def _run_import_wizard_runtime_harness() -> dict[str, object]:
     script = """
 const fs = require("fs");
 const vm = require("vm");

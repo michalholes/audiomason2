@@ -13,8 +13,13 @@ from __future__ import annotations
 import asyncio
 import sys
 from pathlib import Path
+from typing import Protocol, cast
 
 from audiomason.core import PluginLoader
+
+
+class _CLIRunnable(Protocol):
+    async def run(self) -> object: ...
 
 
 def _find_plugins_dir() -> Path:
@@ -72,7 +77,10 @@ async def main() -> None:
         sys.exit(1)
 
     try:
-        cli_plugin = loader.load_plugin(cli_plugin_dir, validate=False)
+        cli_plugin_obj = loader.load_plugin(cli_plugin_dir, validate=False)
+        if not hasattr(cli_plugin_obj, "run"):
+            raise RuntimeError("CLI plugin does not provide run()")
+        cli_plugin = cast(_CLIRunnable, cli_plugin_obj)
         await cli_plugin.run()
     except Exception as e:  # pragma: no cover
         print(f"Error: {e}")

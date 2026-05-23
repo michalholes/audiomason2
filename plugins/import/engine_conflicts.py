@@ -8,7 +8,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, TypeGuard
 
 from plugins.file_io.service.types import RootName
 
@@ -16,8 +16,21 @@ from .engine_util import _iso_utc_now
 from .errors import StepSubmissionError
 from .storage import atomic_write_json
 
+if TYPE_CHECKING:
+    from .engine import ImportWizardEngine
 
-def apply_conflict_policy(*, state: dict[str, Any], payload: dict[str, Any]) -> None:
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in value)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def apply_conflict_policy(*, state: dict[str, object], payload: dict[str, object]) -> None:
     raw_mode = payload.get("mode")
     if not isinstance(raw_mode, str) or not raw_mode.strip():
         raise StepSubmissionError("conflict_policy.mode must be a non-empty string")
@@ -29,8 +42,7 @@ def apply_conflict_policy(*, state: dict[str, Any], payload: dict[str, Any]) -> 
 
     policy = "ask" if mode == "ask" else mode
 
-    conflicts = state.get("conflicts")
-    conflicts = conflicts if isinstance(conflicts, dict) else {}
+    conflicts = _as_str_object_dict(state.get("conflicts"))
 
     conflicts["policy"] = policy
 
@@ -47,9 +59,9 @@ def apply_conflict_policy(*, state: dict[str, Any], payload: dict[str, Any]) -> 
     state["conflicts"] = conflicts
 
 
-def apply_conflict_resolve(*, state: dict[str, Any], payload: dict[str, Any]) -> None:
+def apply_conflict_resolve(*, state: dict[str, object], payload: dict[str, object]) -> None:
     conflicts = state.get("conflicts")
-    if not isinstance(conflicts, dict):
+    if not _is_str_object_dict(conflicts):
         raise StepSubmissionError("conflicts missing from state")
 
     policy = str(conflicts.get("policy") or "ask")
@@ -68,18 +80,19 @@ def apply_conflict_resolve(*, state: dict[str, Any], payload: dict[str, Any]) ->
 
 def persist_conflict_resolution(
     *,
-    engine: Any,
+    engine: ImportWizardEngine,
     session_id: str,
-    state: dict[str, Any],
-    payload: dict[str, Any],
+    state: dict[str, object],
+    payload: dict[str, object],
 ) -> None:
     conflicts = state.get("conflicts")
     if not isinstance(conflicts, dict):
         return
+    derived = _as_str_object_dict(state.get("derived"))
     record = {
         "at": _iso_utc_now(),
         "policy": str(conflicts.get("policy") or ""),
-        "conflict_fingerprint": str(state.get("derived", {}).get("conflict_fingerprint") or ""),
+        "conflict_fingerprint": str(derived.get("conflict_fingerprint") or ""),
         "payload": dict(payload),
     }
     session_dir = f"import/sessions/{session_id}"

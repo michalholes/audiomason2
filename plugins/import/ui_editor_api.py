@@ -9,7 +9,9 @@ ASCII-only.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Protocol, TypeGuard, cast
+
+from plugins.file_io.service import FileService
 
 from .errors import FinalizeError, error_envelope
 from .field_schema_validation import FieldSchemaValidationError
@@ -19,7 +21,7 @@ try:
     from .flow_config_validation import validate_flow_config_editor_boundary
 except ImportError:  # compatibility with issue-131 baseline
 
-    def validate_flow_config_editor_boundary(raw: Any) -> dict[str, Any]:
+    def validate_flow_config_editor_boundary(raw: object) -> dict[str, object]:
         return normalize_flow_config(raw)
 
 
@@ -29,11 +31,31 @@ from .wizard_definition_model import (
 )
 
 
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+class _RouteRegistrar(Protocol):
+    def add_api_route(self, path: str, endpoint: object, *, methods: list[str]) -> object: ...
+
+
+class _EditorEngine(Protocol):
+    _fs: FileService
+
+
 def bind_editor_routes(
     *,
-    router: Any,
-    engine: Any,
-    call: Callable[[Callable[[], Any]], Any],
+    router: object,
+    engine: _EditorEngine,
+    call: Callable[[Callable[[], object]], object],
 ) -> None:
     """Bind editor routes to router.
 
@@ -41,77 +63,100 @@ def bind_editor_routes(
     error envelopes (see ui_api._call).
     """
 
-    @router.get("/config")
-    def get_config():
+    route = cast(_RouteRegistrar, router)
+
+    def get_config() -> object:
         return call(lambda: _get_flow_config(engine))
 
-    @router.post("/config")
-    def set_config(body: dict[str, Any]):
+    def set_config(body: dict[str, object]) -> object:
         return call(lambda: _set_flow_config(engine, body))
 
-    @router.post("/config/validate")
-    def validate_config(body: dict[str, Any]):
+    def validate_config(body: dict[str, object]) -> object:
         return call(lambda: _validate_flow_config(engine, body))
 
-    @router.post("/config/reset")
-    def reset_config():
+    def reset_config() -> object:
         return call(lambda: _reset_flow_config(engine))
 
-    @router.post("/config/activate")
-    def activate_config():
+    def activate_config() -> object:
         return call(lambda: _activate_flow_config(engine))
 
-    @router.get("/config/history")
-    def config_history():
+    def config_history() -> object:
         return call(lambda: _flow_config_history(engine))
 
-    @router.post("/config/rollback")
-    def config_rollback(body: dict[str, Any]):
+    def config_rollback(body: dict[str, object]) -> object:
         return call(lambda: _rollback_flow_config(engine, body))
 
-    @router.get("/wizard-definition")
-    def get_wizard_definition():
+    def get_wizard_definition() -> object:
         return call(lambda: _get_wizard_definition(engine))
 
-    @router.post("/wizard-definition")
-    def set_wizard_definition(body: dict[str, Any]):
+    def set_wizard_definition(body: dict[str, object]) -> object:
         return call(lambda: _set_wizard_definition(engine, body))
 
-    @router.post("/wizard-definition/validate")
-    def validate_wizard_definition(body: dict[str, Any]):
+    def validate_wizard_definition(body: dict[str, object]) -> object:
         return call(lambda: _validate_wizard_definition(engine, body))
 
-    @router.post("/wizard-definition/reset")
-    def reset_wizard_definition():
+    def reset_wizard_definition() -> object:
         return call(lambda: _reset_wizard_definition(engine))
 
-    @router.post("/wizard-definition/activate")
-    def activate_wizard_definition():
+    def activate_wizard_definition() -> object:
         return call(lambda: _activate_wizard_definition(engine))
 
-    @router.get("/wizard-definition/history")
-    def wizard_definition_history():
+    def wizard_definition_history() -> object:
         return call(lambda: _wizard_definition_history(engine))
 
-    @router.post("/wizard-definition/rollback")
-    def wizard_definition_rollback(body: dict[str, Any]):
+    def wizard_definition_rollback(body: dict[str, object]) -> object:
         return call(lambda: _rollback_wizard_definition(engine, body))
 
-    @router.get("/primitive-registry")
-    def get_primitive_registry():
+    def get_primitive_registry() -> object:
         return call(lambda: _get_primitive_registry(engine))
 
-    @router.get("/steps-index")
-    def get_steps_index():
+    def get_steps_index() -> object:
         return call(lambda: _get_steps_index(engine))
 
-    @router.get("/steps/{step_id}")
-    def get_step_details(step_id: str):
+    def get_step_details(step_id: str) -> object:
         return call(lambda: _get_step_details(engine, step_id))
 
-    @router.get("/transition-condition-prefixes")
-    def get_transition_condition_prefixes():
+    def get_transition_condition_prefixes() -> object:
         return call(lambda: _get_transition_condition_prefixes())
+
+    route.add_api_route("/config", get_config, methods=["GET"])
+    route.add_api_route("/config", set_config, methods=["POST"])
+    route.add_api_route("/config/validate", validate_config, methods=["POST"])
+    route.add_api_route("/config/reset", reset_config, methods=["POST"])
+    route.add_api_route("/config/activate", activate_config, methods=["POST"])
+    route.add_api_route("/config/history", config_history, methods=["GET"])
+    route.add_api_route("/config/rollback", config_rollback, methods=["POST"])
+    route.add_api_route("/wizard-definition", get_wizard_definition, methods=["GET"])
+    route.add_api_route("/wizard-definition", set_wizard_definition, methods=["POST"])
+    route.add_api_route(
+        "/wizard-definition/validate",
+        validate_wizard_definition,
+        methods=["POST"],
+    )
+    route.add_api_route("/wizard-definition/reset", reset_wizard_definition, methods=["POST"])
+    route.add_api_route(
+        "/wizard-definition/activate",
+        activate_wizard_definition,
+        methods=["POST"],
+    )
+    route.add_api_route(
+        "/wizard-definition/history",
+        wizard_definition_history,
+        methods=["GET"],
+    )
+    route.add_api_route(
+        "/wizard-definition/rollback",
+        wizard_definition_rollback,
+        methods=["POST"],
+    )
+    route.add_api_route("/primitive-registry", get_primitive_registry, methods=["GET"])
+    route.add_api_route("/steps-index", get_steps_index, methods=["GET"])
+    route.add_api_route("/steps/{step_id}", get_step_details, methods=["GET"])
+    route.add_api_route(
+        "/transition-condition-prefixes",
+        get_transition_condition_prefixes,
+        methods=["GET"],
+    )
 
 
 _TRANSITION_CONDITION_PREFIXES: tuple[str, ...] = (
@@ -121,7 +166,7 @@ _TRANSITION_CONDITION_PREFIXES: tuple[str, ...] = (
 )
 
 
-def _ensure_ascii_step_id(step_id: Any) -> str:
+def _ensure_ascii_step_id(step_id: object) -> str:
     if not isinstance(step_id, str) or not step_id:
         raise FieldSchemaValidationError(
             message="step_id must be a non-empty string",
@@ -165,11 +210,11 @@ def _classify_step(step_id: str) -> tuple[str, str]:
 
 def _validate_wrapper(
     *,
-    body: Any,
+    body: object,
     required_key: str,
     allowed_keys: set[str],
-) -> dict[str, Any]:
-    if not isinstance(body, dict):
+) -> dict[str, object]:
+    if not _is_str_object_dict(body):
         raise FieldSchemaValidationError(
             message="request body must be an object",
             path="$",
@@ -177,7 +222,8 @@ def _validate_wrapper(
             meta={},
         )
 
-    keys = {k for k in body if isinstance(k, str)}
+    payload = dict(body)
+    keys = set(payload)
     unknown = sorted(keys - allowed_keys)
     if unknown:
         key = unknown[0]
@@ -199,12 +245,12 @@ def _validate_wrapper(
             meta={"required": sorted([required_key])},
         )
 
-    return dict(body)
+    return payload
 
 
-def _history_items(ids: list[str]) -> dict[str, Any]:
+def _history_items(ids: list[str]) -> dict[str, object]:
     # Timestamp is UI-only. Keep deterministic and ISO-8601.
-    items: list[dict[str, Any]] = []
+    items: list[dict[str, object]] = []
     for i, fid in enumerate(ids):
         sec = i % 60
         items.append(
@@ -216,17 +262,14 @@ def _history_items(ids: list[str]) -> dict[str, Any]:
     return {"items": items}
 
 
-def _engine_fs(engine: Any):
-    fs = getattr(engine, "_fs", None)
-    if fs is None:
-        raise RuntimeError("engine missing _fs")
-    return fs
+def _engine_fs(engine: _EditorEngine) -> FileService:
+    return engine._fs
 
 
-def _validate_editor_condition_shape(cond: Any, *, path: str) -> None:
+def _validate_editor_condition_shape(cond: object, *, path: str) -> None:
     if cond is None or isinstance(cond, bool):
         return
-    if not isinstance(cond, dict):
+    if not _is_str_object_dict(cond):
         raise FieldSchemaValidationError(
             message="transition condition must be an object, bool, or null",
             path=path,
@@ -234,9 +277,11 @@ def _validate_editor_condition_shape(cond: Any, *, path: str) -> None:
             meta={},
         )
 
-    op_any = cond.get("op")
+    cond_obj = dict(cond)
+
+    op_any = cond_obj.get("op")
     if op_any is None:
-        if "path" in cond and ("equals" in cond or "not_equals" in cond):
+        if "path" in cond_obj and ("equals" in cond_obj or "not_equals" in cond_obj):
             return
         raise FieldSchemaValidationError(
             message="unsupported transition operator",
@@ -256,8 +301,8 @@ def _validate_editor_condition_shape(cond: Any, *, path: str) -> None:
     if op_any in {"eq", "ne", "exists", "truthy"}:
         return
     if op_any in {"and", "or"}:
-        conds = cond.get("conds")
-        if not isinstance(conds, list):
+        conds = cond_obj.get("conds")
+        if not _is_object_list(conds):
             raise FieldSchemaValidationError(
                 message="boolean transition operator requires conds[]",
                 path=f"{path}.conds",
@@ -268,7 +313,7 @@ def _validate_editor_condition_shape(cond: Any, *, path: str) -> None:
             _validate_editor_condition_shape(item, path=f"{path}.conds[{index}]")
         return
     if op_any == "not":
-        _validate_editor_condition_shape(cond.get("cond"), path=f"{path}.cond")
+        _validate_editor_condition_shape(cond_obj.get("cond"), path=f"{path}.cond")
         return
 
     raise FieldSchemaValidationError(
@@ -279,15 +324,16 @@ def _validate_editor_condition_shape(cond: Any, *, path: str) -> None:
     )
 
 
-def _validate_v2_editor_only_rules(definition: Any) -> None:
-    if not isinstance(definition, dict) or definition.get("version") != 2:
+def _validate_v2_editor_only_rules(definition: object) -> None:
+    if not _is_str_object_dict(definition) or definition.get("version") != 2:
         return
     graph = definition.get("graph")
-    edges = graph.get("edges") if isinstance(graph, dict) else None
-    if not isinstance(edges, list):
+    graph_obj = _as_str_object_dict(graph)
+    edges = graph_obj.get("edges")
+    if not _is_object_list(edges):
         return
     for index, edge in enumerate(edges):
-        if not isinstance(edge, dict):
+        if not _is_str_object_dict(edge):
             continue
         _validate_editor_condition_shape(
             edge.get("when"),
@@ -348,7 +394,7 @@ def _translate_v2_definition_error(err: FinalizeError) -> FieldSchemaValidationE
     )
 
 
-def _raise_v3_editor_authority_error(version: Any) -> None:
+def _raise_v3_editor_authority_error(version: object) -> None:
     raise FieldSchemaValidationError(
         message="definition must be WizardDefinition v3 for editor authority",
         path="$.definition.version",
@@ -357,7 +403,7 @@ def _raise_v3_editor_authority_error(version: Any) -> None:
     )
 
 
-def _get_flow_config(engine: Any) -> dict[str, Any]:
+def _get_flow_config(engine: _EditorEngine) -> dict[str, object]:
     from .editor_storage import get_flow_config_draft
 
     fs = _engine_fs(engine)
@@ -365,7 +411,7 @@ def _get_flow_config(engine: Any) -> dict[str, Any]:
     return {"config": normalize_flow_config(cfg)}
 
 
-def _set_flow_config(engine: Any, body: Any) -> dict[str, Any]:
+def _set_flow_config(engine: _EditorEngine, body: object) -> dict[str, object]:
     from .editor_storage import put_flow_config_draft
 
     obj = _validate_wrapper(body=body, required_key="config", allowed_keys={"config"})
@@ -375,13 +421,13 @@ def _set_flow_config(engine: Any, body: Any) -> dict[str, Any]:
     return {"config": cfg}
 
 
-def _validate_flow_config(engine: Any, body: Any) -> dict[str, Any]:
+def _validate_flow_config(engine: _EditorEngine, body: object) -> dict[str, object]:
     obj = _validate_wrapper(body=body, required_key="config", allowed_keys={"config"})
     cfg = validate_flow_config_editor_boundary(obj.get("config"))
     return {"config": cfg}
 
 
-def _reset_flow_config(engine: Any) -> dict[str, Any]:
+def _reset_flow_config(engine: _EditorEngine) -> dict[str, object]:
     from .editor_storage import reset_flow_config_draft
 
     fs = _engine_fs(engine)
@@ -389,7 +435,7 @@ def _reset_flow_config(engine: Any) -> dict[str, Any]:
     return {"config": cfg}
 
 
-def _activate_flow_config(engine: Any) -> dict[str, Any]:
+def _activate_flow_config(engine: _EditorEngine) -> dict[str, object]:
     from .editor_storage import activate_flow_config_draft
 
     fs = _engine_fs(engine)
@@ -397,7 +443,7 @@ def _activate_flow_config(engine: Any) -> dict[str, Any]:
     return {"config": normalize_flow_config(cfg)}
 
 
-def _flow_config_history(engine: Any) -> dict[str, Any]:
+def _flow_config_history(engine: _EditorEngine) -> dict[str, object]:
     from .editor_storage import list_history
 
     fs = _engine_fs(engine)
@@ -405,7 +451,7 @@ def _flow_config_history(engine: Any) -> dict[str, Any]:
     return _history_items(ids[:5])
 
 
-def _rollback_flow_config(engine: Any, body: Any) -> dict[str, Any]:
+def _rollback_flow_config(engine: _EditorEngine, body: object) -> dict[str, object]:
     from .editor_storage import delete_flow_config_draft, list_history, load_flow_config, rollback
 
     obj = _validate_wrapper(body=body, required_key="id", allowed_keys={"id"})
@@ -432,7 +478,7 @@ def _rollback_flow_config(engine: Any, body: Any) -> dict[str, Any]:
     return {"config": normalize_flow_config(cfg)}
 
 
-def _active_step_projection(engine: Any) -> dict[str, dict[str, Any]]:
+def _active_step_projection(engine: _EditorEngine) -> dict[str, dict[str, object]]:
     from .editor_storage import ensure_flow_config_active_exists
     from .step_catalog import build_step_catalog_projection
     from .wizard_definition_model import load_or_bootstrap_wizard_definition
@@ -446,8 +492,8 @@ def _active_step_projection(engine: Any) -> dict[str, dict[str, Any]]:
     )
 
 
-def _get_steps_index(engine: Any) -> dict[str, Any]:
-    items: list[dict[str, Any]] = []
+def _get_steps_index(engine: _EditorEngine) -> dict[str, object]:
+    items: list[dict[str, object]] = []
     for step_id, det in _active_step_projection(engine).items():
         kind, pinned = _classify_step(step_id)
         desc = str(det.get("description") or det.get("behavioralSummary") or "")
@@ -466,11 +512,11 @@ def _get_steps_index(engine: Any) -> dict[str, Any]:
     return {"items": items}
 
 
-def _get_transition_condition_prefixes() -> dict[str, Any]:
+def _get_transition_condition_prefixes() -> dict[str, object]:
     return {"items": list(_TRANSITION_CONDITION_PREFIXES)}
 
 
-def _get_step_details(engine: Any, step_id: Any) -> dict[str, Any]:
+def _get_step_details(engine: _EditorEngine, step_id: object) -> dict[str, object]:
     sid = _ensure_ascii_step_id(step_id)
     details = _active_step_projection(engine).get(sid)
     if details is None:
@@ -493,12 +539,12 @@ def _get_step_details(engine: Any, step_id: Any) -> dict[str, Any]:
         "sideEffectsDescription": str(details.get("sideEffectsDescription") or ""),
         "kind": kind,
         "pinned": pinned != "none",
-        "settings_schema": dict(details.get("settings_schema") or {}),
-        "defaults_template": dict(details.get("defaults_template") or {}),
+        "settings_schema": _as_str_object_dict(details.get("settings_schema")),
+        "defaults_template": _as_str_object_dict(details.get("defaults_template")),
     }
 
 
-def _get_wizard_definition(engine: Any) -> dict[str, Any]:
+def _get_wizard_definition(engine: _EditorEngine) -> dict[str, object]:
     from .wizard_editor_storage import get_wizard_definition_draft
 
     fs = _engine_fs(engine)
@@ -506,7 +552,7 @@ def _get_wizard_definition(engine: Any) -> dict[str, Any]:
     return {"definition": wd}
 
 
-def _get_primitive_registry(engine: Any) -> dict[str, Any]:
+def _get_primitive_registry(engine: _EditorEngine) -> dict[str, object]:
     from .dsl.primitive_registry_storage import load_or_bootstrap_primitive_registry
 
     fs = _engine_fs(engine)
@@ -514,7 +560,7 @@ def _get_primitive_registry(engine: Any) -> dict[str, Any]:
     return {"registry": reg}
 
 
-def _set_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
+def _set_wizard_definition(engine: _EditorEngine, body: object) -> dict[str, object]:
     from .wizard_editor_storage import put_wizard_definition_draft
 
     obj = _validate_wrapper(
@@ -531,7 +577,7 @@ def _set_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
     return {"definition": wd}
 
 
-def _validate_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
+def _validate_wizard_definition(engine: _EditorEngine, body: object) -> dict[str, object]:
     obj = _validate_wrapper(
         body=body,
         required_key="definition",
@@ -544,7 +590,7 @@ def _validate_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
         validate_wizard_definition_structure(wd_any)
         wd_canon = canonicalize_wizard_definition(wd_any)
 
-        if not isinstance(wd_canon, dict):
+        if not _is_str_object_dict(wd_canon):
             raise FieldSchemaValidationError(
                 message="definition must be an object",
                 path="$.definition",
@@ -577,7 +623,7 @@ def _validate_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
         ) from err
 
 
-def _reset_wizard_definition(engine: Any) -> dict[str, Any]:
+def _reset_wizard_definition(engine: _EditorEngine) -> dict[str, object]:
     from .wizard_editor_storage import reset_wizard_definition_draft
 
     fs = _engine_fs(engine)
@@ -585,7 +631,7 @@ def _reset_wizard_definition(engine: Any) -> dict[str, Any]:
     return {"definition": wd}
 
 
-def _activate_wizard_definition(engine: Any) -> dict[str, Any]:
+def _activate_wizard_definition(engine: _EditorEngine) -> dict[str, object]:
     from .wizard_editor_storage import activate_wizard_definition_draft
 
     fs = _engine_fs(engine)
@@ -593,7 +639,7 @@ def _activate_wizard_definition(engine: Any) -> dict[str, Any]:
     return {"definition": wd}
 
 
-def _wizard_definition_history(engine: Any) -> dict[str, Any]:
+def _wizard_definition_history(engine: _EditorEngine) -> dict[str, object]:
     from .wizard_editor_storage import list_wizard_definition_history
 
     fs = _engine_fs(engine)
@@ -601,7 +647,7 @@ def _wizard_definition_history(engine: Any) -> dict[str, Any]:
     return _history_items(ids[:5])
 
 
-def _rollback_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
+def _rollback_wizard_definition(engine: _EditorEngine, body: object) -> dict[str, object]:
     from .wizard_editor_storage import (
         delete_wizard_definition_draft,
         list_wizard_definition_history,

@@ -7,10 +7,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any
 
 
-def canonical_json_bytes(obj: Any) -> bytes:
+def canonical_json_bytes(obj: object) -> bytes:
     """Return canonical JSON bytes for deterministic fingerprinting.
 
     Rules:
@@ -31,5 +30,5 @@ def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def fingerprint_json(obj: Any) -> str:
+def fingerprint_json(obj: object) -> str:
     return sha256_hex(canonical_json_bytes(obj))

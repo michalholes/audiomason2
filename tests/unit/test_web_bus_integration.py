@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -18,14 +17,14 @@ def _get_web_interface_plugin_cls() -> type:
     return WebInterfacePlugin
 
 
-def _make_client(app: Any) -> Any:
+def _make_client(app: object) -> object:
     pytest.importorskip("httpx")
     from fastapi.testclient import TestClient
 
     return TestClient(app)
 
 
-def test_web_emits_route_boundary_diagnostics(tmp_path: Path, monkeypatch: Any) -> None:
+def test_web_emits_route_boundary_diagnostics(tmp_path: Path, monkeypatch: object) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
 
     from audiomason.core.events import get_event_bus
@@ -33,12 +32,12 @@ def test_web_emits_route_boundary_diagnostics(tmp_path: Path, monkeypatch: Any) 
     bus = get_event_bus()
     bus.clear()
 
-    events: list[tuple[str, dict[str, Any]]] = []
+    events: list[tuple[str, dict[str, object]]] = []
 
-    def on_start(data: dict[str, Any]) -> None:
+    def on_start(data: dict[str, object]) -> None:
         events.append(("start", data))
 
-    def on_end(data: dict[str, Any]) -> None:
+    def on_end(data: dict[str, object]) -> None:
         events.append(("end", data))
 
     bus.subscribe("boundary.start", on_start)
@@ -76,7 +75,7 @@ def test_web_emits_route_boundary_diagnostics(tmp_path: Path, monkeypatch: Any) 
     bus.unsubscribe("boundary.end", on_end)
 
 
-def test_web_has_no_import_pause_resume_endpoints(tmp_path: Path, monkeypatch: Any) -> None:
+def test_web_has_no_import_pause_resume_endpoints(tmp_path: Path, monkeypatch: object) -> None:
     # Minimal File IO roots so ImportEngineService can initialize.
     inbox = tmp_path / "inbox"
     inbox.mkdir(parents=True)
@@ -90,10 +89,10 @@ def test_web_has_no_import_pause_resume_endpoints(tmp_path: Path, monkeypatch: A
 
     seen: list[str] = []
 
-    def on_pause(data: dict[str, Any]) -> None:
+    def on_pause(data: dict[str, object]) -> None:
         seen.append("pause:" + str(data.get("data", {}).get("status")))
 
-    def on_resume(data: dict[str, Any]) -> None:
+    def on_resume(data: dict[str, object]) -> None:
         seen.append("resume:" + str(data.get("data", {}).get("status")))
 
     bus.subscribe("import.pause", on_pause)

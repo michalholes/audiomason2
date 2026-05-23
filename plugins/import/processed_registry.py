@@ -27,7 +27,7 @@ ASCII-only.
 from __future__ import annotations
 
 from contextlib import suppress
-from typing import Any
+from typing import TypeGuard
 
 from plugins.file_io.service import FileService, RootName
 
@@ -37,7 +37,30 @@ _REGISTRY_PATH = "import/processed/processed_registry.json"
 _SCHEMA_VERSION = 1
 
 
-def load_registry(fs: FileService) -> dict[str, Any]:
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _to_int_or_default(value: object, default: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def load_registry(fs: FileService) -> dict[str, object]:
     if fs.exists(RootName.WIZARDS, _REGISTRY_PATH):
         data = read_json(fs, RootName.WIZARDS, _REGISTRY_PATH)
         if isinstance(data, dict):
@@ -45,11 +68,11 @@ def load_registry(fs: FileService) -> dict[str, Any]:
     return {"schema_version": _SCHEMA_VERSION, "books": {}}
 
 
-def _ensure_registry_shape(reg: Any) -> dict[str, Any]:
-    if not isinstance(reg, dict):
+def _ensure_registry_shape(reg: object) -> dict[str, object]:
+    if not _is_str_object_dict(reg):
         return {"schema_version": _SCHEMA_VERSION, "books": {}}
     books = reg.get("books")
-    if not isinstance(books, dict):
+    if not _is_str_object_dict(books):
         books = {}
     sv = reg.get("schema_version")
     if sv != _SCHEMA_VERSION:
@@ -57,12 +80,12 @@ def _ensure_registry_shape(reg: Any) -> dict[str, Any]:
     return {"schema_version": sv, "books": dict(books)}
 
 
-def _normalize_authority(action_any: dict[str, Any]) -> dict[str, Any]:
+def _normalize_authority(action_any: dict[str, object]) -> dict[str, object]:
     authority_any = action_any.get("authority")
-    authority = dict(authority_any) if isinstance(authority_any, dict) else {}
+    authority = _as_str_object_dict(authority_any)
 
     book_any = authority.get("book")
-    book = dict(book_any) if isinstance(book_any, dict) else {}
+    book = _as_str_object_dict(book_any)
     normalized_book = {
         key: str(value)
         for key, value in book.items()
@@ -70,12 +93,12 @@ def _normalize_authority(action_any: dict[str, Any]) -> dict[str, Any]:
     }
 
     meta_any = authority.get("metadata_tags")
-    meta = dict(meta_any) if isinstance(meta_any, dict) else {}
+    meta = _as_str_object_dict(meta_any)
     field_map_any = meta.get("field_map")
-    field_map = dict(field_map_any) if isinstance(field_map_any, dict) else {}
+    field_map = _as_str_object_dict(field_map_any)
     values_any = meta.get("values")
-    values = dict(values_any) if isinstance(values_any, dict) else {}
-    normalized_meta: dict[str, Any] = {
+    values = _as_str_object_dict(values_any)
+    normalized_meta: dict[str, object] = {
         "field_map": {
             str(key): str(value)
             for key, value in field_map.items()
@@ -93,14 +116,14 @@ def _normalize_authority(action_any: dict[str, Any]) -> dict[str, Any]:
             normalized_meta["track_start"] = int(str(track_start).strip())
 
     publish_any = authority.get("publish")
-    publish = dict(publish_any) if isinstance(publish_any, dict) else {}
+    publish = _as_str_object_dict(publish_any)
     normalized_publish = {
         key: str(value)
         for key, value in publish.items()
         if isinstance(key, str) and isinstance(value, str) and value
     }
 
-    out: dict[str, Any] = {}
+    out: dict[str, object] = {}
     if normalized_book:
         out["book"] = normalized_book
     if normalized_meta["field_map"] or normalized_meta["values"]:
@@ -110,17 +133,17 @@ def _normalize_authority(action_any: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def iter_import_book_records(job_requests: dict[str, Any]) -> list[dict[str, Any]]:
+def iter_import_book_records(job_requests: dict[str, object]) -> list[dict[str, object]]:
     """Return deterministic per-book records derived from job_requests."""
 
-    if not isinstance(job_requests, dict):
+    if not _is_str_object_dict(job_requests):
         return []
 
     actions_any = job_requests.get("actions")
-    actions = actions_any if isinstance(actions_any, list) else []
-    records: list[dict[str, Any]] = []
+    actions = actions_any if _is_object_list(actions_any) else []
+    records: list[dict[str, object]] = []
     for action_any in actions:
-        if not isinstance(action_any, dict):
+        if not _is_str_object_dict(action_any):
             continue
         if action_any.get("type") != "import.book":
             continue
@@ -129,7 +152,7 @@ def iter_import_book_records(job_requests: dict[str, Any]) -> list[dict[str, Any
         target_any = action_any.get("target")
         if not isinstance(book_id, str) or not book_id:
             continue
-        if not isinstance(source_any, dict) or not isinstance(target_any, dict):
+        if not _is_str_object_dict(source_any) or not _is_str_object_dict(target_any):
             continue
 
         source_root = source_any.get("root")
@@ -146,10 +169,10 @@ def iter_import_book_records(job_requests: dict[str, Any]) -> list[dict[str, Any
             continue
 
         caps_any = action_any.get("capabilities")
-        caps = caps_any if isinstance(caps_any, list) else []
-        cap_summary: list[dict[str, Any]] = []
+        caps = caps_any if _is_object_list(caps_any) else []
+        cap_summary: list[dict[str, object]] = []
         for cap_any in caps:
-            if not isinstance(cap_any, dict):
+            if not _is_str_object_dict(cap_any):
                 continue
             kind = cap_any.get("kind")
             if not isinstance(kind, str) or not kind:
@@ -157,7 +180,7 @@ def iter_import_book_records(job_requests: dict[str, Any]) -> list[dict[str, Any
             cap_summary.append(
                 {
                     "kind": kind,
-                    "order": int(cap_any.get("order") or 0),
+                    "order": _to_int_or_default(cap_any.get("order"), 0),
                 }
             )
 
@@ -175,7 +198,7 @@ def iter_import_book_records(job_requests: dict[str, Any]) -> list[dict[str, Any
     return records
 
 
-def apply_successful_job_requests(fs: FileService, job_requests: dict[str, Any]) -> bool:
+def apply_successful_job_requests(fs: FileService, job_requests: dict[str, object]) -> bool:
     """Update the processed registry from job_requests.
 
     Returns True if registry was updated and persisted, else False.
@@ -201,12 +224,13 @@ def apply_successful_job_requests(fs: FileService, job_requests: dict[str, Any])
     plan_fp = plan_fp_any if isinstance(plan_fp_any, str) and plan_fp_any else None
 
     reg = _ensure_registry_shape(load_registry(fs))
-    books: dict[str, Any] = reg["books"]
+    books = _as_str_object_dict(reg.get("books"))
+    reg["books"] = books
 
     changed = False
     for record in records:
         book_id = str(record["book_id"])
-        entry: dict[str, Any] = {
+        entry: dict[str, object] = {
             "source_relative_path": str(record["source_relative_path"]),
             "target_root": str(record["target_root"]),
             "target_relative_path": str(record["target_relative_path"]),
@@ -216,7 +240,7 @@ def apply_successful_job_requests(fs: FileService, job_requests: dict[str, Any])
         if plan_fp is not None:
             entry["plan_fingerprint"] = plan_fp
         authority_any = record.get("authority")
-        authority = dict(authority_any) if isinstance(authority_any, dict) else {}
+        authority = _as_str_object_dict(authority_any)
         if authority:
             entry["authority"] = authority
 

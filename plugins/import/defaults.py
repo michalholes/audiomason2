@@ -10,14 +10,13 @@ ASCII-only.
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
-from typing import Any
 
 from plugins.file_io.service import FileService
 
 from .flow_config_defaults import DEFAULT_FLOW_CONFIG, ensure_flow_config_exists
 
 
-def _build_default_catalog() -> dict[str, Any]:
+def _build_default_catalog() -> dict[str, object]:
     from .step_catalog import build_default_step_catalog_projection
 
     projection = build_default_step_catalog_projection()
@@ -35,11 +34,11 @@ def _build_default_catalog() -> dict[str, Any]:
     return {"version": 1, "steps": steps}
 
 
-class _DerivedCatalogView(Mapping[str, Any]):
-    def _current(self) -> dict[str, Any]:
+class _DerivedCatalogView(Mapping[str, object]):
+    def _current(self) -> dict[str, object]:
         return _build_default_catalog()
 
-    def __getitem__(self, key: str) -> Any:
+    def __getitem__(self, key: str) -> object:
         return self._current()[key]
 
     def __iter__(self) -> Iterator[str]:
@@ -48,11 +47,11 @@ class _DerivedCatalogView(Mapping[str, Any]):
     def __len__(self) -> int:
         return len(self._current())
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str, default: object = None) -> object:
         return self._current().get(key, default)
 
 
-DEFAULT_CATALOG: Mapping[str, Any] = _DerivedCatalogView()
+DEFAULT_CATALOG: Mapping[str, object] = _DerivedCatalogView()
 
 __all__ = ["DEFAULT_CATALOG", "DEFAULT_FLOW_CONFIG", "ensure_default_models"]
 

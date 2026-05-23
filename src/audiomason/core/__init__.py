@@ -6,6 +6,8 @@ Everything else is a plugin.
 
 __version__ = "2.0.0-alpha"
 
+from typing import Protocol, cast
+
 from audiomason.core.config import ConfigResolver
 from audiomason.core.context import CoverChoice, PreflightResult, ProcessingContext, State
 from audiomason.core.detection import (
@@ -112,9 +114,13 @@ def main() -> None:
     """Main entry point for audiomason CLI."""
     import asyncio
     import importlib.util
+    import inspect
     import sys
     from collections.abc import Coroutine
     from pathlib import Path
+
+    class _CLIRunnable(Protocol):
+        def run(self) -> Coroutine[object, object, object]: ...
 
     def _run_cli(coro: Coroutine[object, object, object]) -> None:
         """Run a coroutine in a dedicated event loop."""
@@ -181,7 +187,10 @@ def main() -> None:
         spec.loader.exec_module(cli_module)
 
         # Get the CLIPlugin class
-        cli_plugin_cls = cli_module.CLIPlugin
+        cli_plugin_cls_obj: object = getattr(cli_module, "CLIPlugin", None)
+        if not inspect.isclass(cli_plugin_cls_obj):
+            raise ImportError("CLIPlugin class not found")
+        cli_plugin_cls = cast(type[_CLIRunnable], cli_plugin_cls_obj)
 
         cli = cli_plugin_cls()
         _run_cli(cli.run())

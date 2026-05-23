@@ -11,11 +11,10 @@ existing sink.
 
 from __future__ import annotations
 
-import json
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
 
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
@@ -23,6 +22,7 @@ from plugins.file_io.service.types import RootName
 from audiomason.core.config import ConfigResolver
 from audiomason.core.config_service import ConfigService
 from audiomason.core.errors import PluginError
+from audiomason.core.serde import json_loads_object
 
 
 @dataclass(frozen=True)
@@ -89,7 +89,7 @@ def _parse_diag_args(argv: list[str]) -> _DiagArgs:
     )
 
 
-def _format_event_line(evt: dict[str, Any]) -> str:
+def _format_event_line(evt: dict[str, object]) -> str:
     """Format a single diagnostics envelope into one compact line."""
     parts: list[str] = []
 
@@ -132,7 +132,7 @@ def _format_event_line(evt: dict[str, Any]) -> str:
     return " ".join(parts) if parts else "<empty event>"
 
 
-def _cli_args_for_resolver_from_sysargv() -> dict[str, Any]:
+def _cli_args_for_resolver_from_sysargv() -> dict[str, object]:
     """Extract minimal CLI args needed for diagnostics resolver status.
 
     The core CLI host parses these flags too, but plugin commands are dispatched
@@ -140,19 +140,22 @@ def _cli_args_for_resolver_from_sysargv() -> dict[str, Any]:
 
     This plugin only needs diagnostics.enabled for status output.
     """
-    cli_args: dict[str, Any] = {}
+    cli_args: dict[str, object] = {}
     args = sys.argv[1:]
+    diagnostics: dict[str, object] = {}
     if "--diagnostics" in args:
-        cli_args.setdefault("diagnostics", {})["enabled"] = True
+        diagnostics["enabled"] = True
     if "--no-diagnostics" in args:
-        cli_args.setdefault("diagnostics", {})["enabled"] = False
+        diagnostics["enabled"] = False
+    if diagnostics:
+        cli_args["diagnostics"] = diagnostics
     return cli_args
 
 
 class DiagnosticsConsolePlugin:
     """Plugin implementing ICLICommands for `audiomason diag`."""
 
-    def get_cli_commands(self) -> dict[str, Any]:
+    def get_cli_commands(self) -> dict[str, object]:
         return {"diag": self._handle_diag}
 
     def _handle_diag(self, argv: list[str]) -> int:
@@ -517,12 +520,17 @@ class DiagnosticsConsolePlugin:
             return ""
 
         try:
-            obj = json.loads(s)
+            parsed = json_loads_object(s)
         except Exception:
             return s
 
-        if not isinstance(obj, dict):
+        if not isinstance(parsed, Mapping):
             return s
+
+        obj: dict[str, object] = {}
+        for key, value in parsed.items():
+            if isinstance(key, str):
+                obj[key] = value
 
         level = obj.get("level")
         logger = obj.get("logger")
@@ -577,14 +585,19 @@ class DiagnosticsConsolePlugin:
                 continue
 
             try:
-                evt = json.loads(line)
+                parsed_evt = json_loads_object(line)
             except Exception:
                 print("WARN: invalid jsonl line")
                 continue
 
-            if not isinstance(evt, dict):
+            if not isinstance(parsed_evt, Mapping):
                 print("WARN: invalid jsonl event")
                 continue
+
+            evt: dict[str, object] = {}
+            for key, value in parsed_evt.items():
+                if isinstance(key, str):
+                    evt[key] = value
 
             print(_format_event_line(evt))
             printed += 1

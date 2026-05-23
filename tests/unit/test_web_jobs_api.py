@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -21,14 +20,14 @@ def _get_web_interface_plugin_cls() -> type:
     return WebInterfacePlugin
 
 
-def _make_client(app: Any) -> Any:
+def _make_client(app: object) -> object:
     pytest.importorskip("httpx")  # required by fastapi/starlette TestClient
     from fastapi.testclient import TestClient
 
     return TestClient(app)
 
 
-def test_web_jobs_api_create_list_cancel(tmp_path: Path, monkeypatch: Any) -> None:
+def test_web_jobs_api_create_list_cancel(tmp_path: Path, monkeypatch: object) -> None:
     # Isolate HOME so jobs persist under tmp_path, not the real user home.
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -57,7 +56,7 @@ def test_web_jobs_api_create_list_cancel(tmp_path: Path, monkeypatch: Any) -> No
     assert item.get("state") == "cancelled"
 
 
-def test_web_roots_api_and_wizard_job_path_resolution(tmp_path: Path, monkeypatch: Any) -> None:
+def test_web_roots_api_and_wizard_job_path_resolution(tmp_path: Path, monkeypatch: object) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_INBOX_DIR", str(tmp_path / "inbox"))
     monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_STAGE_DIR", str(tmp_path / "stage"))
@@ -76,7 +75,7 @@ def test_web_roots_api_and_wizard_job_path_resolution(tmp_path: Path, monkeypatc
     assert "outbox" in ids
 
 
-def test_web_jobs_api_has_no_direct_run_route(tmp_path: Path, monkeypatch: Any) -> None:
+def test_web_jobs_api_has_no_direct_run_route(tmp_path: Path, monkeypatch: object) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
 
     web_interface_plugin_cls = _get_web_interface_plugin_cls()

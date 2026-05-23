@@ -11,8 +11,9 @@ ASCII-only.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Protocol, TypeGuard
 
+from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
 from .defaults import ensure_default_models
@@ -20,14 +21,30 @@ from .errors import validation_error
 from .storage import atomic_write_json, read_json
 
 
+class _PatchEngine(Protocol):
+    _fs: FileService
+
+    def _normalize_flow_config(self, raw: object) -> dict[str, object]: ...
+
+    def validate_flow_config(self, flow_config_json: object) -> dict[str, object]: ...
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
 @dataclass(frozen=True)
 class PatchOp:
     op: str
     path: str
-    value: Any
+    value: object
 
 
-def apply_patch_request(engine: Any, body: Any) -> dict[str, Any] | None:
+def apply_patch_request(engine: _PatchEngine, body: object) -> dict[str, object] | None:
     """Handle patch wrapper if present.
 
     Returns:
@@ -35,13 +52,13 @@ def apply_patch_request(engine: Any, body: Any) -> dict[str, Any] | None:
       - FlowConfig dict or error envelope dict.
     """
 
-    if not isinstance(body, dict):
+    if not _is_str_object_dict(body):
         return None
     if body.get("mode") != "patch":
         return None
 
     ops_any = body.get("ops")
-    if not isinstance(ops_any, list) or not ops_any:
+    if not _is_object_list(ops_any) or not ops_any:
         return _patch_validation_error(
             index=None,
             path="$.ops",
@@ -52,7 +69,7 @@ def apply_patch_request(engine: Any, body: Any) -> dict[str, Any] | None:
 
     ops: list[PatchOp] = []
     for idx, raw in enumerate(ops_any):
-        if not isinstance(raw, dict):
+        if not _is_str_object_dict(raw):
             return _patch_validation_error(
                 index=idx,
                 path=f"$.ops[{idx}]",
@@ -114,8 +131,8 @@ def apply_patch_request(engine: Any, body: Any) -> dict[str, Any] | None:
     return normalized
 
 
-def apply_ops(base_config: dict[str, Any], ops: list[PatchOp]) -> dict[str, Any]:
-    out: dict[str, Any] = _deep_copy_dict(base_config)
+def apply_ops(base_config: dict[str, object], ops: list[PatchOp]) -> dict[str, object]:
+    out: dict[str, object] = _deep_copy_dict(base_config)
     for op in ops:
         if op.op != "set":
             raise ValueError("unsupported op")
@@ -123,14 +140,14 @@ def apply_ops(base_config: dict[str, Any], ops: list[PatchOp]) -> dict[str, Any]
     return out
 
 
-def _apply_set(root: dict[str, Any], path: str, value: Any) -> None:
+def _apply_set(root: dict[str, object], path: str, value: object) -> None:
     segs = [s for s in path.split(".") if s]
     if not segs:
         raise ValueError("empty path")
-    cur: dict[str, Any] = root
+    cur: dict[str, object] = root
     for seg in segs[:-1]:
         nxt = cur.get(seg)
-        if not isinstance(nxt, dict):
+        if not _is_str_object_dict(nxt):
             nxt = {}
             cur[seg] = nxt
         cur = nxt
@@ -141,8 +158,8 @@ def _validate_set_path_and_value(
     *,
     index: int,
     path: str,
-    value: Any,
-) -> dict[str, Any] | None:
+    value: object,
+) -> dict[str, object] | None:
     if path == "conflicts.policy":
         if not isinstance(value, str) or not value.strip():
             return _patch_validation_error(
@@ -208,8 +225,8 @@ def _patch_validation_error(
     path: str,
     reason: str,
     message: str,
-    meta: dict[str, Any],
-) -> dict[str, Any]:
+    meta: dict[str, object],
+) -> dict[str, object]:
     meta_out = dict(meta)
     if index is not None:
         meta_out["op_index"] = int(index)
@@ -221,13 +238,13 @@ def _patch_validation_error(
     )
 
 
-def _deep_copy_dict(d: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {}
+def _deep_copy_dict(d: dict[str, object]) -> dict[str, object]:
+    out: dict[str, object] = {}
     for k, v in d.items():
-        if isinstance(v, dict):
+        if _is_str_object_dict(v):
             out[k] = _deep_copy_dict(v)
-        elif isinstance(v, list):
-            out[k] = [(_deep_copy_dict(x) if isinstance(x, dict) else x) for x in v]
+        elif _is_object_list(v):
+            out[k] = [(_deep_copy_dict(x) if _is_str_object_dict(x) else x) for x in v]
         else:
             out[k] = v
     return out

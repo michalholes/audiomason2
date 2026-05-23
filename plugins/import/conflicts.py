@@ -7,9 +7,14 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
-
 from plugins.file_io.service import FileService, RootName
+
+
+def _conflict_sort_key(conflict: dict[str, object]) -> tuple[str, str]:
+    return (
+        str(conflict.get("target_relative_path") or ""),
+        str(conflict.get("source_book_id") or ""),
+    )
 
 
 def _normalize_rel_path(rel_path: str) -> str:
@@ -37,9 +42,9 @@ def _target_root(mode: str) -> RootName:
 def scan_conflicts(
     fs: FileService,
     *,
-    plan: dict[str, Any],
+    plan: dict[str, object],
     mode: str,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     """Return a canonical list of conflicts derived from plan.json.
 
     Conflict scan MUST operate on planned outputs, not raw discovery.
@@ -63,7 +68,7 @@ def scan_conflicts(
                     }
                 ]
 
-    conflicts: list[dict[str, Any]] = []
+    conflicts: list[dict[str, object]] = []
     for it in selected_any:
         if not isinstance(it, dict):
             continue
@@ -90,5 +95,5 @@ def scan_conflicts(
 
     return sorted(
         conflicts,
-        key=lambda x: (str(x.get("target_relative_path")), str(x.get("source_book_id"))),
+        key=_conflict_sort_key,
     )

@@ -5,14 +5,18 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypeGuard
 
 
-def _mapping(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
 
 
-def _string_list(value: Any) -> list[str]:
+def _mapping(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, str)]
@@ -29,8 +33,8 @@ def _display_item(*, item_id: str, label: str) -> dict[str, str]:
 def _author_label(
     *,
     author_id: str,
-    author_to_books: dict[str, Any],
-    book_meta: dict[str, Any],
+    author_to_books: dict[str, object],
+    book_meta: dict[str, object],
 ) -> str:
     for book_id in _string_list(author_to_books.get(author_id)):
         meta = _mapping(book_meta.get(book_id))
@@ -40,7 +44,7 @@ def _author_label(
     return author_id
 
 
-def _book_label(*, book_id: str, book_meta: dict[str, Any]) -> str:
+def _book_label(*, book_id: str, book_meta: dict[str, object]) -> str:
     meta = _mapping(book_meta.get(book_id))
     for key in ("display_label", "book_label", "label"):
         label = str(meta.get(key) or "").strip()
@@ -49,9 +53,9 @@ def _book_label(*, book_id: str, book_meta: dict[str, Any]) -> str:
     return book_id
 
 
-def build_prompt_select_ui_items(*, step_id: str, state: dict[str, Any]) -> list[dict[str, str]]:
+def build_prompt_select_ui_items(*, step_id: str, state: dict[str, object]) -> list[dict[str, str]]:
     vars_any = state.get("vars")
-    vars_map = dict(vars_any) if isinstance(vars_any, dict) else {}
+    vars_map = _mapping(vars_any)
     phase1 = _mapping(vars_map.get("phase1"))
     if not phase1:
         return []

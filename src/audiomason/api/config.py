@@ -6,14 +6,16 @@ Provides REST API endpoints for managing configuration.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
+
+from audiomason.core.serde import yaml_safe_load_stream
 
 
-def _as_str_any_dict(value: Any) -> dict[str, Any]:
+def _as_str_any_dict(value: object) -> dict[str, object]:
     if not isinstance(value, dict):
         return {}
-    raw = cast(dict[object, Any], value)
-    normalized: dict[str, Any] = {}
+    raw = cast(dict[object, object], value)
+    normalized: dict[str, object] = {}
     for key, item in raw.items():
         normalized[str(key)] = item
     return normalized
@@ -29,17 +31,15 @@ class ConfigAPI:
             config_file: Path to config file
         """
         self.config_file = config_file
-        self.config: dict[str, Any] = {}
+        self.config: dict[str, object] = {}
         self.config_file.parent.mkdir(parents=True, exist_ok=True)
         self._load_config()
 
     def _load_config(self) -> None:
         """Load configuration from file."""
         if self.config_file.exists():
-            import yaml
-
             with open(self.config_file) as f:
-                self.config = _as_str_any_dict(yaml.safe_load(f))
+                self.config = _as_str_any_dict(yaml_safe_load_stream(f))
         else:
             self.config = self._get_defaults()
 
@@ -50,7 +50,7 @@ class ConfigAPI:
         with open(self.config_file, "w") as f:
             yaml.safe_dump(self.config, f, default_flow_style=False)
 
-    def _get_defaults(self) -> dict[str, Any]:
+    def _get_defaults(self) -> dict[str, object]:
         """Get default configuration.
 
         Returns:
@@ -72,7 +72,7 @@ class ConfigAPI:
             },
         }
 
-    def get_config(self) -> dict[str, Any]:
+    def get_config(self) -> dict[str, object]:
         """Get current configuration.
 
         Returns:
@@ -80,7 +80,7 @@ class ConfigAPI:
         """
         return self.config.copy()
 
-    def get_config_schema(self) -> dict[str, Any]:
+    def get_config_schema(self) -> dict[str, object]:
         """Get configuration schema.
 
         Returns:
@@ -157,7 +157,7 @@ class ConfigAPI:
             },
         }
 
-    def update_config(self, updates: dict[str, Any]) -> dict[str, str]:
+    def update_config(self, updates: dict[str, object]) -> dict[str, str]:
         """Update configuration.
 
         Args:
@@ -172,7 +172,7 @@ class ConfigAPI:
 
         return {"message": "Configuration updated"}
 
-    def _deep_merge(self, base: dict[str, Any], updates: dict[str, Any]) -> None:
+    def _deep_merge(self, base: dict[str, object], updates: dict[str, object]) -> None:
         """Deep merge updates into base dict.
 
         Args:
@@ -182,9 +182,10 @@ class ConfigAPI:
         for key, value in updates.items():
             current = base.get(key)
             if isinstance(current, dict) and isinstance(value, dict):
-                nested = _as_str_any_dict(current)
+                nested = _as_str_any_dict(cast(dict[object, object], current))
                 base[key] = nested
-                self._deep_merge(nested, _as_str_any_dict(value))
+                updates_nested = _as_str_any_dict(cast(dict[object, object], value))
+                self._deep_merge(nested, updates_nested)
             else:
                 base[key] = value
 

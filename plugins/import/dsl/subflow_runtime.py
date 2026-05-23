@@ -5,39 +5,92 @@ ASCII-only.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from copy import deepcopy
-from typing import Any
+from typing import Protocol, TypeGuard
 
 from ..errors import FinalizeError
 from .expr_eval import eval_expr_ref
 from .loop_runtime import execute_loop
 
-RunGraph = Callable[[dict[str, Any], dict[str, Any], str], dict[str, Any]]
-ApplyWrites = Callable[..., dict[str, Any]]
-AppendTrace = Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _as_object_list(value: object) -> list[object]:
+    return [item for item in value] if _is_object_list(value) else []
+
+
+def _to_int_or_default(value: object, default: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _state_vars_dict(state: dict[str, object]) -> dict[str, object]:
+    vars_map = _as_str_object_dict(state.get("vars"))
+    state["vars"] = vars_map
+    return vars_map
+
+
+class RunGraph(Protocol):
+    def __call__(
+        self,
+        graph: dict[str, object],
+        state: dict[str, object],
+        session_id: str,
+    ) -> dict[str, object]: ...
+
+
+class ApplyWrites(Protocol):
+    def __call__(
+        self,
+        *,
+        state: dict[str, object],
+        step: dict[str, object],
+        inputs: dict[str, object],
+        op_outputs: dict[str, object],
+    ) -> dict[str, object]: ...
+
+
+class AppendTrace(Protocol):
+    def __call__(self, state: dict[str, object], event: dict[str, object]) -> dict[str, object]: ...
+
 
 _RESERVED_VAR_NAMESPACES = {"branches", "subflows", "loops"}
 
 
-def _state_view(state: dict[str, Any]) -> dict[str, Any]:
+def _state_view(state: dict[str, object]) -> dict[str, object]:
     return {
-        "answers": dict(state.get("answers") or {}),
-        "vars": dict(state.get("vars") or {}),
-        "jobs": dict(state.get("jobs") or {}),
-        "source": dict(state.get("source") or {}),
+        "answers": _as_str_object_dict(state.get("answers")),
+        "vars": _as_str_object_dict(state.get("vars")),
+        "jobs": _as_str_object_dict(state.get("jobs")),
+        "source": _as_str_object_dict(state.get("source")),
         "status": state.get("status"),
-        "cursor": dict(state.get("cursor") or {}),
+        "cursor": _as_str_object_dict(state.get("cursor")),
     }
 
 
 def _resolve_expr(
-    expr_ref: dict[str, Any],
+    expr_ref: dict[str, object],
     *,
-    state: dict[str, Any],
-    inputs: dict[str, Any],
+    state: dict[str, object],
+    inputs: dict[str, object],
     path: str,
-) -> Any:
+) -> object:
     ok, value, error = eval_expr_ref(
         expr_ref,
         state=_state_view(state),
@@ -49,27 +102,27 @@ def _resolve_expr(
     if ok:
         return value
     reason = "expr_error"
-    if isinstance(error, dict) and isinstance(error.get("reason"), str):
+    if _is_str_object_dict(error) and isinstance(error.get("reason"), str):
         reason = str(error.get("reason"))
     raise FinalizeError(reason)
 
 
-def runtime_input_context(state: dict[str, Any]) -> dict[str, Any]:
+def runtime_input_context(state: dict[str, object]) -> dict[str, object]:
     vars_any = state.get("vars")
-    vars_dict = dict(vars_any) if isinstance(vars_any, dict) else {}
-    subflows = dict(vars_dict.get("subflows") or {})
+    vars_dict = _as_str_object_dict(vars_any)
+    subflows = _as_str_object_dict(vars_dict.get("subflows"))
     current = subflows.get("_current_inputs")
-    return dict(current) if isinstance(current, dict) else {}
+    return _as_str_object_dict(current)
 
 
 def resolve_phase2_input_value(
-    value: Any,
+    value: object,
     *,
-    state: dict[str, Any],
-    inputs: dict[str, Any],
+    state: dict[str, object],
+    inputs: dict[str, object],
     path: str,
-) -> Any:
-    if isinstance(value, dict):
+) -> object:
+    if _is_str_object_dict(value):
         if set(value.keys()) == {"expr"}:
             return _resolve_expr(value, state=state, inputs=inputs, path=path)
         return {
@@ -81,7 +134,7 @@ def resolve_phase2_input_value(
             )
             for key, item in value.items()
         }
-    if isinstance(value, list):
+    if _is_object_list(value):
         return [
             resolve_phase2_input_value(
                 item,
@@ -95,23 +148,23 @@ def resolve_phase2_input_value(
 
 
 def ensure_phase2_namespaces(
-    state: dict[str, Any],
+    state: dict[str, object],
     *namespaces: str,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     vars_any = state.get("vars")
-    vars_dict = dict(vars_any) if isinstance(vars_any, dict) else {}
+    vars_dict = _as_str_object_dict(vars_any)
     targets = namespaces or tuple(sorted(_RESERVED_VAR_NAMESPACES))
     for key in targets:
         if key not in _RESERVED_VAR_NAMESPACES:
             raise FinalizeError("phase2_namespace_invalid")
         current = vars_dict.get(key)
-        vars_dict[key] = dict(current) if isinstance(current, dict) else {}
+        vars_dict[key] = _as_str_object_dict(current)
     state["vars"] = vars_dict
     return state
 
 
 def _library_id(
-    libraries: dict[str, Any],
+    libraries: dict[str, object],
     *,
     target_library: str,
     target_subflow: str,
@@ -125,12 +178,12 @@ def _library_id(
     raise FinalizeError("subflow_target_not_found")
 
 
-def _bindings_map(bindings_any: Any) -> dict[str, Any]:
-    if not isinstance(bindings_any, list):
+def _bindings_map(bindings_any: object) -> dict[str, object]:
+    if not _is_object_list(bindings_any):
         raise FinalizeError("subflow_bindings_invalid")
-    out: dict[str, Any] = {}
+    out: dict[str, object] = {}
     for item in bindings_any:
-        if not isinstance(item, dict):
+        if not _is_str_object_dict(item):
             raise FinalizeError("subflow_bindings_invalid")
         name = item.get("name")
         if not isinstance(name, str) or not name:
@@ -141,37 +194,43 @@ def _bindings_map(bindings_any: Any) -> dict[str, Any]:
     return out
 
 
-def _set_current_inputs(state: dict[str, Any], bindings: dict[str, Any]) -> dict[str, Any] | None:
+def _set_current_inputs(
+    state: dict[str, object], bindings: dict[str, object]
+) -> dict[str, object] | None:
     state = ensure_phase2_namespaces(state, "subflows")
-    subflows = dict((state.get("vars") or {}).get("subflows") or {})
+    vars_map = _state_vars_dict(state)
+    subflows = _as_str_object_dict(vars_map.get("subflows"))
     previous = subflows.get("_current_inputs")
-    previous_dict = dict(previous) if isinstance(previous, dict) else None
+    previous_dict = _as_str_object_dict(previous) if _is_str_object_dict(previous) else None
     subflows["_current_inputs"] = dict(bindings)
-    state["vars"]["subflows"] = subflows
+    vars_map["subflows"] = subflows
+    state["vars"] = vars_map
     return previous_dict
 
 
-def _restore_current_inputs(state: dict[str, Any], previous: dict[str, Any] | None) -> None:
+def _restore_current_inputs(state: dict[str, object], previous: dict[str, object] | None) -> None:
     state = ensure_phase2_namespaces(state, "subflows")
-    subflows = dict((state.get("vars") or {}).get("subflows") or {})
+    vars_map = _state_vars_dict(state)
+    subflows = _as_str_object_dict(vars_map.get("subflows"))
     if previous is None:
         subflows.pop("_current_inputs", None)
     else:
         subflows["_current_inputs"] = dict(previous)
-    state["vars"]["subflows"] = subflows
+    vars_map["subflows"] = subflows
+    state["vars"] = vars_map
 
 
 def execute_flow_invoke(
     *,
-    effective_model: dict[str, Any],
-    state: dict[str, Any],
+    effective_model: dict[str, object],
+    state: dict[str, object],
     session_id: str,
     step_id: str,
-    inputs: dict[str, Any],
+    inputs: dict[str, object],
     run_graph: RunGraph,
-) -> tuple[dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, object], dict[str, object]]:
     libraries_any = effective_model.get("libraries")
-    libraries = dict(libraries_any) if isinstance(libraries_any, dict) else {}
+    libraries = _as_str_object_dict(libraries_any)
     target_library = str(inputs.get("target_library") or "")
     target_subflow = str(inputs.get("target_subflow") or "")
     library_id = _library_id(
@@ -180,29 +239,31 @@ def execute_flow_invoke(
         target_subflow=target_subflow,
     )
     library_any = libraries.get(library_id)
-    if not isinstance(library_any, dict):
+    if not _is_str_object_dict(library_any):
         raise FinalizeError("subflow_target_invalid")
     bindings = _bindings_map(inputs.get("param_bindings"))
     state = ensure_phase2_namespaces(state, "subflows")
     saved_status = state.get("status")
     saved_current = str(state.get("current_step_id") or "")
-    saved_cursor = dict(state.get("cursor") or {})
+    saved_cursor = _as_str_object_dict(state.get("cursor"))
     previous_inputs = _set_current_inputs(state, bindings)
     state["status"] = "in_progress"
     entry_step_id = str(library_any.get("entry_step_id") or "")
     state["current_step_id"] = entry_step_id
     state["cursor"] = {"step_id": entry_step_id}
-    subflows = dict((state.get("vars") or {}).get("subflows") or {})
+    vars_map = _state_vars_dict(state)
+    subflows = _as_str_object_dict(vars_map.get("subflows"))
     subflows[step_id] = {
         "target_library": library_id,
         "target_subflow": target_subflow,
         "param_bindings": dict(bindings),
     }
-    state["vars"]["subflows"] = subflows
+    vars_map["subflows"] = subflows
+    state["vars"] = vars_map
     try:
         state = run_graph(dict(library_any), state, session_id)
         return_values = resolve_phase2_input_value(
-            dict(library_any.get("returns") or {}),
+            _as_str_object_dict(library_any.get("returns")),
             state=state,
             inputs=bindings,
             path=f"$.libraries.{library_id}.returns",
@@ -220,7 +281,7 @@ def execute_flow_invoke(
     }
 
 
-def _merge_dicts(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+def _merge_dicts(base: dict[str, object], incoming: dict[str, object]) -> dict[str, object]:
     merged = deepcopy(base)
     for key, value in incoming.items():
         if key in _RESERVED_VAR_NAMESPACES:
@@ -229,7 +290,7 @@ def _merge_dicts(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, An
             merged[key] = deepcopy(value)
             continue
         current = merged[key]
-        if isinstance(current, dict) and isinstance(value, dict):
+        if _is_str_object_dict(current) and _is_str_object_dict(value):
             merged[key] = _merge_dicts(current, value)
             continue
         if current != value:
@@ -237,23 +298,27 @@ def _merge_dicts(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, An
     return merged
 
 
-def _merge_jobs(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
-    merged = {
-        "emitted": list(base.get("emitted") or []),
-        "submitted": list(base.get("submitted") or []),
+def _merge_jobs(base: dict[str, object], incoming: dict[str, object]) -> dict[str, object]:
+    merged_emitted = _as_object_list(base.get("emitted"))
+    merged_submitted = _as_object_list(base.get("submitted"))
+    merged: dict[str, object] = {
+        "emitted": merged_emitted,
+        "submitted": merged_submitted,
     }
     for key in ("emitted", "submitted"):
-        seen = set(str(item) for item in merged[key])
-        for item in incoming.get(key) or []:
+        merged_items = _as_object_list(merged.get(key))
+        seen = {str(item) for item in merged_items}
+        for item in _as_object_list(incoming.get(key)):
             item_key = str(item)
             if item_key not in seen:
-                merged[key].append(item)
+                merged_items.append(item)
                 seen.add(item_key)
+        merged[key] = merged_items
     return merged
 
 
 def record_trace(
-    state: dict[str, Any],
+    state: dict[str, object],
     *,
     step_id: str,
     primitive_id: str,
@@ -261,7 +326,7 @@ def record_trace(
     result: str,
     writes: list[str],
     append_trace: AppendTrace,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     return append_trace(
         state,
         {
@@ -275,21 +340,21 @@ def record_trace(
 
 
 def guard_parallel_map_write_conflicts(
-    step: dict[str, Any],
-    inputs: dict[str, Any],
+    step: dict[str, object],
+    inputs: dict[str, object],
 ) -> None:
     primitive_id = str(step.get("primitive_id") or "")
-    primitive_version = int(step.get("primitive_version") or 0)
+    primitive_version = _to_int_or_default(step.get("primitive_version"), 0)
     if primitive_id != "parallel.map" or primitive_version != 1:
         return
     if inputs.get("merge_mode", "fail_on_conflict") != "fail_on_conflict":
         return
     writes_any = step.get("writes")
-    if not isinstance(writes_any, list) or not writes_any:
+    if not _is_object_list(writes_any) or not writes_any:
         return
     write_counts: dict[str, int] = {}
     for write_any in writes_any:
-        if not isinstance(write_any, dict):
+        if not _is_str_object_dict(write_any):
             continue
         to_path = write_any.get("to_path")
         if not isinstance(to_path, str) or not to_path:
@@ -301,18 +366,18 @@ def guard_parallel_map_write_conflicts(
 
 def execute_phase2_step(
     *,
-    effective_model: dict[str, Any],
-    state: dict[str, Any],
+    effective_model: dict[str, object],
+    state: dict[str, object],
     session_id: str,
     step_id: str,
-    step: dict[str, Any],
-    inputs: dict[str, Any],
+    step: dict[str, object],
+    inputs: dict[str, object],
     run_graph: RunGraph,
     apply_writes: ApplyWrites,
     append_trace: AppendTrace,
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], bool] | None:
+) -> tuple[dict[str, object], dict[str, object], dict[str, object], bool] | None:
     primitive_id = str(step.get("primitive_id") or "")
-    primitive_version = int(step.get("primitive_version") or 0)
+    primitive_version = _to_int_or_default(step.get("primitive_version"), 0)
     if primitive_id == "parallel.fork_join" and primitive_version == 1:
         state, outputs = execute_fork_join(
             effective_model=effective_model,
@@ -323,7 +388,7 @@ def execute_phase2_step(
             run_graph=run_graph,
             append_trace=append_trace,
         )
-        return state, outputs, dict(state.get("jobs") or {}), False
+        return state, outputs, _as_str_object_dict(state.get("jobs")), False
     if primitive_id == "flow.invoke" and primitive_version == 1:
         state, outputs = execute_flow_invoke(
             effective_model=effective_model,
@@ -333,21 +398,21 @@ def execute_phase2_step(
             inputs=inputs,
             run_graph=run_graph,
         )
-        return state, outputs, dict(state.get("jobs") or {}), False
+        return state, outputs, _as_str_object_dict(state.get("jobs")), False
     if primitive_id == "flow.loop" and primitive_version == 1:
 
         def _invoke_loop_subflow(
-            current_state: dict[str, Any],
-            parent_step_id: str,
-            invoke_inputs: dict[str, Any],
-            loop_inputs: dict[str, Any],
-        ) -> tuple[dict[str, Any], dict[str, Any]]:
-            raw_inputs = dict(step.get("inputs") or {})
+            state: dict[str, object],
+            step_id: str,
+            invoke_inputs: dict[str, object],
+            loop_inputs: dict[str, object],
+        ) -> tuple[dict[str, object], dict[str, object]]:
+            raw_inputs = _as_str_object_dict(step.get("inputs"))
             raw_bindings_any = raw_inputs.get("param_bindings")
-            resolved_bindings: list[dict[str, Any]] = []
-            if isinstance(raw_bindings_any, list):
+            resolved_bindings: list[dict[str, object]] = []
+            if _is_object_list(raw_bindings_any):
                 for index, binding_any in enumerate(raw_bindings_any):
-                    if not isinstance(binding_any, dict):
+                    if not _is_str_object_dict(binding_any):
                         raise FinalizeError("subflow_binding_invalid")
                     name = binding_any.get("name")
                     if not isinstance(name, str) or not name:
@@ -357,7 +422,7 @@ def execute_phase2_step(
                             "name": name,
                             "value": resolve_phase2_input_value(
                                 binding_any.get("value"),
-                                state=current_state,
+                                state=state,
                                 inputs=loop_inputs,
                                 path=f"$.inputs.param_bindings[{index}].value",
                             ),
@@ -365,9 +430,9 @@ def execute_phase2_step(
                     )
             return execute_flow_invoke(
                 effective_model=effective_model,
-                state=current_state,
+                state=state,
                 session_id=session_id,
-                step_id=f"{parent_step_id}.invoke",
+                step_id=f"{step_id}.invoke",
                 inputs={
                     **invoke_inputs,
                     "param_bindings": resolved_bindings,
@@ -383,41 +448,41 @@ def execute_phase2_step(
             append_trace=append_trace,
             invoke_subflow=_invoke_loop_subflow,
         )
-        return state, outputs, dict(state.get("jobs") or {}), True
+        return state, outputs, _as_str_object_dict(state.get("jobs")), True
     return None
 
 
 def execute_fork_join(
     *,
-    effective_model: dict[str, Any],
-    state: dict[str, Any],
+    effective_model: dict[str, object],
+    state: dict[str, object],
     session_id: str,
     step_id: str,
-    inputs: dict[str, Any],
+    inputs: dict[str, object],
     run_graph: RunGraph,
     append_trace: AppendTrace,
-) -> tuple[dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, object], dict[str, object]]:
     state = ensure_phase2_namespaces(state, "branches")
     branch_order_any = inputs.get("branch_order")
     branches_any = inputs.get("branches")
-    if not isinstance(branch_order_any, list) or not isinstance(branches_any, dict):
+    if not _is_object_list(branch_order_any) or not _is_str_object_dict(branches_any):
         raise FinalizeError("parallel_fork_join_invalid")
-    base_trace_len = len(list(state.get("trace") or []))
-    merged_answers = deepcopy(dict(state.get("answers") or {}))
-    merged_vars = deepcopy(dict(state.get("vars") or {}))
-    merged_jobs = deepcopy(dict(state.get("jobs") or {}))
-    branch_results: dict[str, Any] = {}
-    branch_events: list[dict[str, Any]] = []
+    base_trace_len = len(_as_object_list(state.get("trace")))
+    merged_answers = deepcopy(_as_str_object_dict(state.get("answers")))
+    merged_vars = deepcopy(_as_str_object_dict(state.get("vars")))
+    merged_jobs = deepcopy(_as_str_object_dict(state.get("jobs")))
+    branch_results: dict[str, object] = {}
+    branch_events: list[dict[str, object]] = []
     for branch_id_any in branch_order_any:
         branch_id = str(branch_id_any)
         spec_any = branches_any.get(branch_id)
-        if not isinstance(spec_any, dict):
+        if not _is_str_object_dict(spec_any):
             raise FinalizeError("parallel_fork_join_invalid")
         branch_state = deepcopy(state)
         branch_inputs = {
             "target_library": spec_any.get("target_library"),
             "target_subflow": spec_any.get("target_subflow"),
-            "param_bindings": list(spec_any.get("param_bindings") or []),
+            "param_bindings": _as_object_list(spec_any.get("param_bindings")),
         }
         branch_state, outputs = execute_flow_invoke(
             effective_model=effective_model,
@@ -429,25 +494,36 @@ def execute_fork_join(
         )
         branch_results[branch_id] = outputs
         trace_any = branch_state.get("trace")
-        trace = list(trace_any) if isinstance(trace_any, list) else []
+        trace = _as_object_list(trace_any)
         branch_events.extend(
-            [dict(item) for item in trace[base_trace_len:] if isinstance(item, dict)]
+            [dict(item) for item in trace[base_trace_len:] if _is_str_object_dict(item)]
         )
-        merged_answers = _merge_dicts(merged_answers, dict(branch_state.get("answers") or {}))
-        merged_vars = _merge_dicts(merged_vars, dict(branch_state.get("vars") or {}))
-        merged_jobs = _merge_jobs(merged_jobs, dict(branch_state.get("jobs") or {}))
+        merged_answers = _merge_dicts(
+            merged_answers,
+            _as_str_object_dict(branch_state.get("answers")),
+        )
+        merged_vars = _merge_dicts(
+            merged_vars,
+            _as_str_object_dict(branch_state.get("vars")),
+        )
+        merged_jobs = _merge_jobs(
+            merged_jobs,
+            _as_str_object_dict(branch_state.get("jobs")),
+        )
     state["answers"] = merged_answers
     state["vars"] = merged_vars
     state["jobs"] = merged_jobs
     state = ensure_phase2_namespaces(state, "branches")
-    branches = dict((state.get("vars") or {}).get("branches") or {})
+    vars_map = _state_vars_dict(state)
+    branches = _as_str_object_dict(vars_map.get("branches"))
     branches[step_id] = {
         "branch_order": [str(item) for item in branch_order_any],
         "join_policy": inputs.get("join_policy"),
         "merge_mode": inputs.get("merge_mode"),
         "results": dict(branch_results),
     }
-    state["vars"]["branches"] = branches
+    vars_map["branches"] = branches
+    state["vars"] = vars_map
     for event in branch_events:
         event.pop("seq", None)
         state = append_trace(state, event)

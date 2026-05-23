@@ -21,6 +21,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import sys
 from collections.abc import Callable
 from enum import IntEnum
@@ -192,7 +193,14 @@ class AudioMasonLogger:
             Formatted message
         """
         # Add color if enabled
-        if _use_colors and sys.stdout.isatty():
+        stdout_is_tty = False
+        stdout = sys.stdout
+        if stdout is not None:
+            try:
+                stdout_is_tty = os.isatty(stdout.fileno())  # type: ignore[misc]
+            except Exception:
+                stdout_is_tty = False
+        if _use_colors and stdout_is_tty:
             color = self.COLORS.get(level, "")
             reset = self.COLORS["RESET"]
             return f"{color}[{level.lower()}]{reset} {message}"

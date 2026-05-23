@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from importlib import import_module
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.diagnostics import build_envelope
@@ -15,7 +15,7 @@ read_json = import_module("plugins.import.storage").read_json
 RootName = import_module("plugins.file_io.service").RootName
 
 
-def _make_plugin(tmp_path: Path) -> tuple[Any, dict[str, Path]]:
+def _make_plugin(tmp_path: Path) -> tuple[object, dict[str, Path]]:
     roots = {
         name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
     }
@@ -82,7 +82,7 @@ def _mutate_state_for_finalize(roots: dict[str, Path], session_id: str, *, polic
     state_path.write_text(json.dumps(state), encoding="utf-8")
 
 
-def _start_processing(plugin: Any, roots: dict[str, Path], monkeypatch) -> tuple[str, str]:
+def _start_processing(plugin: object, roots: dict[str, Path], monkeypatch) -> tuple[str, str]:
     engine = plugin.get_engine()
     diag_mod = import_module("plugins.import.engine_diagnostics_required")
     monkeypatch.setattr(diag_mod, "submit_process_job", lambda **_kw: None)
@@ -109,7 +109,7 @@ def _start_processing(plugin: Any, roots: dict[str, Path], monkeypatch) -> tuple
 def test_finalize_success_artifacts_and_ignore_registry_are_success_only(
     tmp_path: Path, monkeypatch
 ) -> None:
-    cast(Any, processed_required)._INSTALLED = False
+    cast(object, processed_required)._INSTALLED = False
     bus = get_event_bus()
     bus.clear()
 

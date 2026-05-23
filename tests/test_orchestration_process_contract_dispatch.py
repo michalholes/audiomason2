@@ -4,7 +4,6 @@ import asyncio
 import time
 from importlib import import_module
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -18,11 +17,11 @@ from audiomason.core.process_job_contracts import IMPORT_PROCESS_CONTRACT_ID
 
 class _FakeImportPlugin:
     def __init__(self, *, delay: float = 0.0) -> None:
-        self.calls: list[dict[str, Any]] = []
+        self.calls: list[dict[str, object]] = []
         self.delay = delay
 
     async def run_process_contract(
-        self, *, job_id: str, job_meta: dict[str, str], plugin_loader: Any
+        self, *, job_id: str, job_meta: dict[str, str], plugin_loader: object
     ) -> None:
         if self.delay > 0.0:
             await asyncio.sleep(self.delay)
@@ -39,7 +38,7 @@ class _FakeLoader:
     def __init__(self, plugin: _FakeImportPlugin) -> None:
         self._plugin = plugin
 
-    def get_plugin(self, name: str) -> Any:
+    def get_plugin(self, name: str) -> object:
         assert name == "import"
         return self._plugin
 
@@ -58,7 +57,7 @@ def _reset_process_contract_runtime() -> None:
     reset_process_contract_runtime_for_tests()
 
 
-def _wait_for_terminal_state(orchestrator: Orchestrator, job_id: str) -> Any:
+def _wait_for_terminal_state(orchestrator: Orchestrator, job_id: str) -> object:
     deadline = time.monotonic() + 3.0
     while time.monotonic() < deadline:
         job = orchestrator.get_job(job_id)
@@ -75,9 +74,9 @@ def test_import_live_and_detached_entrypoints_share_completion_authority(
     diag_mod = import_module("plugins.import.engine_diagnostics_required")
     completion_mod = import_module("plugins.import.process_contract_completion")
 
-    calls: list[dict[str, Any]] = []
+    calls: list[dict[str, object]] = []
 
-    async def _fake_completion(**kwargs: Any) -> None:
+    async def _fake_completion(**kwargs: object) -> None:
         calls.append(dict(kwargs))
 
     monkeypatch.setattr(

@@ -8,7 +8,7 @@ ASCII-only.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import TypeGuard
 
 from .engine_diagnostics_required import emit_required
 from .errors import (
@@ -25,19 +25,35 @@ from .field_schema_validation import FieldSchemaValidationError
 from .fingerprints import sha256_hex
 
 
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _selection_item_sort_key(item: dict[str, str]) -> tuple[str, str]:
+    return (item.get("label", ""), item.get("item_id", ""))
+
+
 def _to_ascii(text: str) -> str:
     return text.encode("ascii", errors="replace").decode("ascii")
 
 
 def _derive_selection_items(
-    discovery: list[dict[str, Any]],
+    discovery: list[dict[str, object]],
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     authors: dict[str, dict[str, str]] = {}
     books: dict[str, dict[str, str]] = {}
 
     dirs: list[str] = []
     for it in discovery:
-        if not (isinstance(it, dict) and it.get("kind") == "dir"):
+        if not (_is_str_object_dict(it) and it.get("kind") == "dir"):
             continue
         rel_any = it.get("relative_path")
         if not isinstance(rel_any, str):
@@ -76,30 +92,32 @@ def _derive_selection_items(
             {"item_id": book_id, "label": book_label, "display_label": label},
         )
 
-    authors_items = sorted(authors.values(), key=lambda x: (x["label"], x["item_id"]))
-    books_items = sorted(books.values(), key=lambda x: (x["label"], x["item_id"]))
+    authors_items = sorted(list(authors.values()), key=_selection_item_sort_key)
+    books_items = sorted(list(books.values()), key=_selection_item_sort_key)
     return authors_items, books_items
 
 
 def _inject_selection_items(
     *,
-    effective_model: dict[str, Any],
+    effective_model: dict[str, object],
     authors_items: list[dict[str, str]],
     books_items: list[dict[str, str]],
-) -> dict[str, Any]:
+) -> dict[str, object]:
     steps_any = effective_model.get("steps")
-    if not isinstance(steps_any, list):
+    if not _is_object_list(steps_any):
         return effective_model
 
-    steps: list[dict[str, Any]] = [s for s in steps_any if isinstance(s, dict)]
+    steps: list[dict[str, object]] = [dict(step) for step in steps_any if _is_str_object_dict(step)]
     for step in steps:
         step_id = step.get("step_id")
         if step_id not in {"select_authors", "select_books"}:
             continue
         fields_any = step.get("fields")
-        if not isinstance(fields_any, list):
+        if not _is_object_list(fields_any):
             continue
-        fields: list[dict[str, Any]] = [f for f in fields_any if isinstance(f, dict)]
+        fields: list[dict[str, object]] = [
+            dict(field) for field in fields_any if _is_str_object_dict(field)
+        ]
         for fld in fields:
             if fld.get("type") != "multi_select_indexed":
                 continue
@@ -109,8 +127,8 @@ def _inject_selection_items(
     return effective_model
 
 
-def _emit_required(event: str, operation: str, data: dict[str, Any]) -> None:
-    required_ctx: dict[str, Any] = {}
+def _emit_required(event: str, operation: str, data: dict[str, object]) -> None:
+    required_ctx: dict[str, object] = {}
     for key in [
         "session_id",
         "model_fingerprint",
@@ -127,9 +145,11 @@ def _iso_utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def sync_session_cursor(state: dict[str, Any], *, step_id: str | None = None) -> dict[str, Any]:
+def sync_session_cursor(
+    state: dict[str, object], *, step_id: str | None = None
+) -> dict[str, object]:
     cursor_any = state.get("cursor")
-    cursor = dict(cursor_any) if isinstance(cursor_any, dict) else {}
+    cursor = _as_str_object_dict(cursor_any)
     if step_id is None:
         step_id = str(state.get("current_step_id") or cursor.get("step_id") or "")
     cursor["step_id"] = str(step_id or "")
@@ -142,9 +162,9 @@ def sync_session_cursor(state: dict[str, Any], *, step_id: str | None = None) ->
 MAX_TRACE_EVENTS = 1000
 
 
-def append_trace_event(state: dict[str, Any], event: dict[str, Any]) -> dict[str, Any]:
+def append_trace_event(state: dict[str, object], event: dict[str, object]) -> dict[str, object]:
     trace_any = state.get("trace")
-    trace = list(trace_any) if isinstance(trace_any, list) else []
+    trace = [item for item in trace_any] if _is_object_list(trace_any) else []
     item = dict(event)
     item["seq"] = len(trace) + 1
     trace.append(item)
@@ -157,14 +177,14 @@ def append_trace_event(state: dict[str, Any], event: dict[str, Any]) -> dict[str
     return state
 
 
-def _ensure_session_state_fields(state: dict[str, Any]) -> dict[str, Any]:
+def _ensure_session_state_fields(state: dict[str, object]) -> dict[str, object]:
     """Ensure SessionState contains minimally required fields (spec 10.*).
 
     This is a backward-compatible upgrader for existing sessions.
     """
     changed = False
 
-    def _setdefault(key: str, value: Any) -> None:
+    def _setdefault(key: str, value: object) -> None:
         nonlocal changed
         if key not in state:
             state[key] = value
@@ -190,9 +210,9 @@ def _ensure_session_state_fields(state: dict[str, Any]) -> dict[str, Any]:
     inputs_any = state.get("inputs")
 
     if (
-        isinstance(answers_any, dict)
+        _is_str_object_dict(answers_any)
         and not answers_any
-        and isinstance(inputs_any, dict)
+        and _is_str_object_dict(inputs_any)
         and inputs_any
     ):
         state["answers"] = dict(inputs_any)
@@ -201,11 +221,11 @@ def _ensure_session_state_fields(state: dict[str, Any]) -> dict[str, Any]:
     sync_session_cursor(state)
 
     jobs_any = state.get("jobs")
-    jobs = dict(jobs_any) if isinstance(jobs_any, dict) else {}
-    if "emitted" not in jobs or not isinstance(jobs.get("emitted"), list):
+    jobs = _as_str_object_dict(jobs_any)
+    if "emitted" not in jobs or not _is_object_list(jobs.get("emitted")):
         jobs["emitted"] = []
         changed = True
-    if "submitted" not in jobs or not isinstance(jobs.get("submitted"), list):
+    if "submitted" not in jobs or not _is_object_list(jobs.get("submitted")):
         jobs["submitted"] = []
         changed = True
     state["jobs"] = jobs
@@ -215,7 +235,7 @@ def _ensure_session_state_fields(state: dict[str, Any]) -> dict[str, Any]:
     return state
 
 
-def _exception_envelope(exc: Exception) -> dict[str, Any]:
+def _exception_envelope(exc: Exception) -> dict[str, object]:
     if isinstance(exc, SessionNotFoundError):
         return error_envelope(
             "NOT_FOUND",

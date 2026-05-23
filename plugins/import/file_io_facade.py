@@ -9,8 +9,9 @@ ASCII-only.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Protocol, TypeGuard, cast
 
+from audiomason.core.config import ConfigResolver
 from plugins.file_io.import_runtime import normalize_relative_path
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
@@ -18,8 +19,46 @@ from plugins.file_io.service.types import RootName
 from .file_io_boundary import join_source_relative_path, materialize_local_path
 
 
-def file_service_from_resolver(resolver):
-    return FileService.from_resolver(resolver)
+class _DiscoverCoverPlugin(Protocol):
+    def discover_cover_candidates(
+        self,
+        source_dir: Path,
+        *,
+        audio_file: Path | None,
+        group_root: str | None = None,
+    ) -> list[dict[str, object]]: ...
+
+
+class _ApplyCoverPlugin(Protocol):
+    async def apply_cover_candidate(
+        self,
+        candidate: dict[str, object],
+        *,
+        output_dir: Path,
+    ) -> Path | None: ...
+
+    async def extract_embedded_cover(self, audio_file: Path) -> Path | None: ...
+
+    async def download_cover(
+        self,
+        url: str,
+        *,
+        output_dir: Path,
+        mime_type: str,
+        cache_key: str,
+    ) -> Path | None: ...
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def file_service_from_resolver(resolver: object) -> FileService:
+    return FileService.from_resolver(cast(ConfigResolver, resolver))
 
 
 ROOT_MAP = {rn.value: rn for rn in RootName}
@@ -55,7 +94,7 @@ def path_to_source_relative(*, source_dir: Path, abs_path: Path) -> str:
 
 def canonicalize_ref_candidate(
     *,
-    candidate: dict[str, Any],
+    candidate: dict[str, object],
     source_root: RootName,
     source_relative_path: str,
 ) -> dict[str, str]:
@@ -92,7 +131,7 @@ def canonicalize_ref_candidate(
 
 def canonicalize_path_candidate(
     *,
-    candidate: dict[str, Any],
+    candidate: dict[str, object],
     source_root: RootName,
     source_dir: Path,
     source_relative_path: str,
@@ -137,7 +176,7 @@ def discover_path_cover_candidates(
     source_rel: str,
     source_relative_path: str,
     group_root: str | None,
-    plugin: Any,
+    plugin: _DiscoverCoverPlugin,
 ) -> list[dict[str, str]]:
     source_dir = materialize_local_path(fs, source_root, source_rel)
     if source_dir.exists() and source_dir.is_file():
@@ -157,17 +196,17 @@ def discover_path_cover_candidates(
             source_relative_path=source_relative_path,
         )
         for candidate in candidates
-        if isinstance(candidate, dict)
+        if _is_str_object_dict(candidate)
     ]
 
 
 async def apply_path_cover_candidate(
     *,
     fs: FileService,
-    candidate: dict[str, Any],
+    candidate: dict[str, object],
     output_root: RootName,
     output_rel: str,
-    plugin: Any,
+    plugin: _ApplyCoverPlugin,
 ) -> dict[str, str] | None:
     mode = str(candidate.get("apply_mode") or "")
     source_root_text = str(candidate.get("source_root") or "")

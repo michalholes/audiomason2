@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from typing import Any
+from typing import Protocol, TypeGuard, cast
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.logging import (
@@ -43,6 +43,44 @@ from .wizard_editor import (
     show_wizard_definition,
     validate_wizard_definition,
 )
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+class _LauncherArgs(Protocol):
+    no_launcher: bool
+    launcher_mode: str | None
+    root: str | None
+    path: str | None
+    noninteractive: bool
+    max_list_items: object | None
+    show_ids: bool
+    confirm_defaults: bool
+    no_confirm_defaults: bool
+
+
+class _LegacyArgs(Protocol):
+    cmd: str | None
+    wiz_cmd: str | None
+    ed_area: str | None
+    ed_cmd: str | None
+    root: str
+    path: str
+    intent: str | None
+    session_id: str
+    step_id: str
+    payload_json: str
+    def_cmd: str | None
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -192,8 +230,8 @@ def _print_help() -> None:
 
 
 def _error_envelope(
-    *, code: str, message_id: str, default_message: str, details: Any
-) -> dict[str, Any]:
+    *, code: str, message_id: str, default_message: str, details: object
+) -> dict[str, object]:
     return {
         "code": code,
         "message_id": message_id,
@@ -202,11 +240,11 @@ def _error_envelope(
     }
 
 
-def _dump(obj: Any) -> None:
+def _dump(obj: object) -> None:
     print(json.dumps(obj, indent=2, sort_keys=True))
 
 
-def _current_prompt(engine: ImportWizardEngine, session_id: str) -> dict[str, Any]:
+def _current_prompt(engine: ImportWizardEngine, session_id: str) -> dict[str, object]:
     state = engine.get_state(session_id)
     step_id = str(state.get("current_step_id") or "")
     step_def = engine.get_step_definition(session_id, step_id) if step_id else None
@@ -227,16 +265,18 @@ def import_cli_main(
     # interactive CLI renderer or show help.
     launcher_parser = _build_launcher_parser()
     try:
-        ns, rest = launcher_parser.parse_known_args(argv)
+        ns_any, rest = launcher_parser.parse_known_args(argv)
     except SystemExit:
         _print_help()
         raise SystemExit(1) from None
+
+    ns = cast(_LauncherArgs, ns_any)
 
     if rest and rest[0] in {"wizard", "editor"}:
         # User mixed launcher flags with explicit subcommands. Let legacy parser handle it.
         return _run_legacy(argv, engine=engine)
 
-    cli_overrides: dict[str, Any] = {}
+    cli_overrides: dict[str, object] = {}
     if ns.no_launcher:
         cli_overrides["launcher_mode"] = "disabled"
     elif ns.launcher_mode:
@@ -298,10 +338,12 @@ def _run_legacy(argv: list[str], *, engine: ImportWizardEngine) -> int:
         return 0
 
     try:
-        ns = parser.parse_args(argv)
+        ns_any = parser.parse_args(argv)
     except SystemExit:
         _print_help()
         raise SystemExit(1) from None
+
+    ns = cast(_LegacyArgs, ns_any)
 
     if ns.cmd not in ("wizard", "editor"):
         _print_help()
@@ -434,12 +476,15 @@ def _run_legacy(argv: list[str], *, engine: ImportWizardEngine) -> int:
                 mode="stage",
                 intent=ns.intent,
             )
-            if (
-                isinstance(state, dict)
-                and state.get("error", {}).get("code") == "SESSION_START_CONFLICT"
-            ):
-                details = state.get("error", {}).get("details")
-                meta = details[0].get("meta") if isinstance(details, list) and details else {}
+            error_payload = _as_str_object_dict(state.get("error"))
+            if error_payload.get("code") == "SESSION_START_CONFLICT":
+                details = error_payload.get("details")
+                first_detail = details[0] if _is_object_list(details) and details else None
+                meta = (
+                    _as_str_object_dict(first_detail.get("meta"))
+                    if _is_str_object_dict(first_detail)
+                    else {}
+                )
                 env = _error_envelope(
                     code="session_start_conflict",
                     message_id="cli.import.wizard.start_conflict",
@@ -453,7 +498,7 @@ def _run_legacy(argv: list[str], *, engine: ImportWizardEngine) -> int:
                 )
                 _dump(env)
                 raise SystemExit(1) from None
-            if isinstance(state, dict) and "error" in state:
+            if "error" in state:
                 _dump(state)
                 raise SystemExit(1) from None
             out = {
@@ -481,7 +526,7 @@ def _run_legacy(argv: list[str], *, engine: ImportWizardEngine) -> int:
 
         if ns.wiz_cmd == "step":
             try:
-                payload = json.loads(ns.payload_json)
+                payload_any = cast(object, json.loads(ns.payload_json))
             except Exception as e:
                 env = _error_envelope(
                     code="invalid_json",
@@ -491,6 +536,7 @@ def _run_legacy(argv: list[str], *, engine: ImportWizardEngine) -> int:
                 )
                 _dump(env)
                 raise SystemExit(1) from None
+            payload = payload_any
             if not isinstance(payload, dict):
                 env = _error_envelope(
                     code="invalid_payload",
@@ -521,7 +567,7 @@ def _run_legacy(argv: list[str], *, engine: ImportWizardEngine) -> int:
             return 0
 
         if ns.wiz_cmd == "definition":
-            if getattr(ns, "def_cmd", None) is None:
+            if ns.def_cmd is None:
                 _print_help()
                 raise SystemExit(1)
             if ns.def_cmd == "show":
@@ -551,7 +597,8 @@ def _run_legacy(argv: list[str], *, engine: ImportWizardEngine) -> int:
         raise SystemExit(1)
 
     except FileNotFoundError as e:
-        missing_path = getattr(e, "filename", None) or str(e)
+        missing_path_any = cast(object, getattr(e, "filename", None))
+        missing_path = str(missing_path_any or str(e))
         if ns.wiz_cmd in ("start", "resume"):
             env = _error_envelope(
                 code="missing_wizard_model",

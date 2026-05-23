@@ -10,7 +10,11 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from typing import TypeGuard, cast
+
+from plugins.file_io.service import FileService
+from plugins.file_io.service.types import RootName
 
 from . import core_facade, file_io_facade
 from .detached_runtime import (
@@ -25,10 +29,18 @@ from .process_contract_completion import (
 from .storage import read_json
 
 _INSTALLED = False
-_REGISTERED_FILE_SERVICES: list[Any] = []
+_REGISTERED_FILE_SERVICES: list[FileService] = []
 
 
-def _file_service_signature(fs: Any) -> tuple[tuple[str, str], ...]:
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _file_service_signature(fs: FileService) -> tuple[tuple[str, str], ...]:
     items: list[tuple[str, str]] = []
     for root_name in sorted(file_io_facade.ROOT_MAP):
         root = file_io_facade.ROOT_MAP[root_name]
@@ -36,7 +48,7 @@ def _file_service_signature(fs: Any) -> tuple[tuple[str, str], ...]:
     return tuple(items)
 
 
-def _register_file_service(fs: Any) -> None:
+def _register_file_service(fs: FileService) -> None:
     sig = _file_service_signature(fs)
     for existing in _REGISTERED_FILE_SERVICES:
         if _file_service_signature(existing) == sig:
@@ -44,7 +56,7 @@ def _register_file_service(fs: Any) -> None:
     _REGISTERED_FILE_SERVICES.append(fs)
 
 
-def _file_service_from_detached_runtime(job_meta: dict[str, Any]) -> Any | None:
+def _file_service_from_detached_runtime(job_meta: dict[str, object]) -> FileService | None:
     try:
         bootstrap = load_detached_runtime_bootstrap_from_meta(job_meta=job_meta)
     except Exception:
@@ -55,13 +67,12 @@ def _file_service_from_detached_runtime(job_meta: dict[str, Any]) -> Any | None:
     return runtime.get_file_service()
 
 
-def _match_score(*, job_meta: dict[str, Any], job_requests: dict[str, Any]) -> int:
-    diagnostics_any = job_requests.get("diagnostics_context")
-    diagnostics = dict(diagnostics_any) if isinstance(diagnostics_any, dict) else {}
+def _match_score(*, job_meta: dict[str, object], job_requests: dict[str, object]) -> int:
+    diagnostics = _as_str_object_dict(job_requests.get("diagnostics_context"))
 
     score = 0
 
-    def _require(meta_key: str, actual: Any) -> bool:
+    def _require(meta_key: str, actual: object) -> bool:
         nonlocal score
         expected = str(job_meta.get(meta_key) or "").strip()
         if not expected:
@@ -87,11 +98,11 @@ def _match_score(*, job_meta: dict[str, Any], job_requests: dict[str, Any]) -> i
 
 def _candidate_from_registered_file_services(
     *,
-    job_meta: dict[str, Any],
-    root: Any,
+    job_meta: dict[str, object],
+    root: RootName,
     rel_path: str,
-) -> tuple[Any, dict[str, Any]] | None:
-    matches: list[tuple[int, Any, dict[str, Any]]] = []
+) -> tuple[FileService, dict[str, object]] | None:
+    matches: list[tuple[int, FileService, dict[str, object]]] = []
     for fs in _REGISTERED_FILE_SERVICES:
         if not fs.exists(root, rel_path):
             continue
@@ -99,7 +110,7 @@ def _candidate_from_registered_file_services(
             job_requests_any = read_json(fs, root, rel_path)
         except Exception:
             continue
-        if not isinstance(job_requests_any, dict):
+        if not _is_str_object_dict(job_requests_any):
             continue
         if len(_REGISTERED_FILE_SERVICES) == 1:
             return fs, job_requests_any
@@ -127,7 +138,7 @@ def _candidate_from_registered_file_services(
     return fs, job_requests
 
 
-def install_processed_registry_subscriber(*, resolver: Any) -> None:
+def install_processed_registry_subscriber(*, resolver: object) -> None:
     """Install the processed registry subscriber (idempotent)."""
 
     global _INSTALLED
@@ -136,14 +147,12 @@ def install_processed_registry_subscriber(*, resolver: Any) -> None:
     if _INSTALLED:
         return
 
-    def _on_any(event: str, payload: dict[str, Any]) -> None:
+    def _on_any(event: str, payload: dict[str, object]) -> None:
         if event != "diag.job.end":
-            return
-        if not isinstance(payload, dict):
             return
 
         data_any = payload.get("data")
-        if not isinstance(data_any, dict):
+        if not _is_str_object_dict(data_any):
             return
 
         if data_any.get("status") != "succeeded":
@@ -157,7 +166,7 @@ def install_processed_registry_subscriber(*, resolver: Any) -> None:
             return
 
         job = core_facade.get_job_service().get_job(job_id)
-        meta = dict(job.meta or {})
+        meta = _as_str_object_dict(job.meta)
         if meta.get("source") != "import":
             return
 
@@ -182,7 +191,7 @@ def install_processed_registry_subscriber(*, resolver: Any) -> None:
                 job_requests_any = read_json(detached_fs, root, rel_path)
             except Exception:
                 return
-            if not isinstance(job_requests_any, dict):
+            if not _is_str_object_dict(job_requests_any):
                 return
             selected = (detached_fs, job_requests_any)
         else:
@@ -209,10 +218,10 @@ def install_processed_registry_subscriber(*, resolver: Any) -> None:
         )
 
     bus = core_facade.get_bus()
-    subscribe_all = getattr(bus, "subscribe_all", None)
+    subscribe_all = cast(object, getattr(bus, "subscribe_all", None))
     if not callable(subscribe_all):
         return
-    subscribe_all(_on_any)
+    cast(Callable[[Callable[[str, dict[str, object]], None]], None], subscribe_all)(_on_any)
     _INSTALLED = True
 
 

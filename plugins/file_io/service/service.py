@@ -9,10 +9,10 @@ from __future__ import annotations
 import shutil
 import time
 import traceback
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, BinaryIO, Protocol, cast, runtime_checkable
+from typing import BinaryIO, Protocol, cast, runtime_checkable
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.diagnostics import build_envelope
@@ -45,7 +45,7 @@ def _short_traceback(*, max_lines: int = 20) -> str:
     return "\n".join(tb_lines[-max_lines:])
 
 
-def _safe_publish(event: str, payload: dict[str, Any]) -> None:
+def _safe_publish(event: str, payload: dict[str, object]) -> None:
     try:
         get_event_bus().publish(event, payload)
     except Exception:
@@ -57,8 +57,8 @@ def _safe_publish(event: str, payload: dict[str, Any]) -> None:
 def _observe_operation(
     *,
     operation: str,
-    base: dict[str, Any],
-) -> Iterator[dict[str, Any]]:
+    base: Mapping[str, object],
+) -> Iterator[dict[str, object]]:
     start = time.perf_counter()
 
     _safe_publish(
@@ -71,7 +71,7 @@ def _observe_operation(
         ),
     )
 
-    summary: dict[str, Any] = {}
+    summary: dict[str, object] = {}
     try:
         yield summary
     except Exception as e:
@@ -178,8 +178,29 @@ class _CountingBinaryIO:
         for line in lines:
             self.write(line)
 
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._raw, name)
+    def close(self) -> None:
+        self._raw.close()
+
+    def flush(self) -> None:
+        self._raw.flush()
+
+    def seek(self, offset: int, whence: int = 0) -> int:
+        return int(self._raw.seek(offset, whence))
+
+    def tell(self) -> int:
+        return int(self._raw.tell())
+
+    def readable(self) -> bool:
+        return bool(self._raw.readable())
+
+    def writable(self) -> bool:
+        return bool(self._raw.writable())
+
+    def seekable(self) -> bool:
+        return bool(self._raw.seekable())
+
+    def fileno(self) -> int:
+        return int(self._raw.fileno())
 
 
 class FileService:

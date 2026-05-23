@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from importlib import import_module
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -25,8 +24,8 @@ class _FakeAudioProcessor:
         source: Path,
         output_dir: Path,
         *,
-        chapters: list[dict[str, Any]] | None = None,
-    ) -> list[dict[str, Any]]:
+        chapters: list[dict[str, object]] | None = None,
+    ) -> list[dict[str, object]]:
         self.calls.append(f"audio.plan:{source.name}")
         planned_outputs = self._planned_outputs or [f"{source.stem}.mp3"]
         return [
@@ -34,7 +33,7 @@ class _FakeAudioProcessor:
             for index, name in enumerate(planned_outputs, start=1)
         ]
 
-    async def _execute_plan(self, plan: list[dict[str, Any]]) -> list[Path]:
+    async def _execute_plan(self, plan: list[dict[str, object]]) -> list[Path]:
         outputs: list[Path] = []
         for item in plan:
             output = Path(item["output"])
@@ -59,7 +58,7 @@ class _FakeCoverHandler:
 
     async def apply_cover_candidate(
         self,
-        candidate: dict[str, Any],
+        candidate: dict[str, object],
         *,
         output_dir: Path | None = None,
     ) -> Path | None:
@@ -88,7 +87,7 @@ class _FakeID3Tagger:
     async def write_tags(
         self,
         mp3_file: Path,
-        tags: dict[str, Any],
+        tags: dict[str, object],
         *,
         wipe_before_write: bool = True,
         preserve_cover: bool = True,
@@ -113,7 +112,7 @@ class _FakeLoader:
             "id3_tagger": _FakeID3Tagger(calls),
         }
 
-    def get_plugin(self, name: str) -> Any:
+    def get_plugin(self, name: str) -> object:
         return self._plugins[name]
 
 

@@ -11,7 +11,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any, TypeGuard
+from typing import TypeGuard
 
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
@@ -38,9 +38,27 @@ from .wizard_definition_runtime_errors import invalid_authored_wizard_definition
 WIZARD_DEFINITION_REL_PATH = "import/definitions/wizard_definition.json"
 
 
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_dict_list(value: object) -> list[dict[str, object]]:
+    if not _is_object_list(value):
+        return []
+    return [dict(item) for item in value if _is_str_object_dict(item)]
+
+
 # The default workflow definition is Python-defined and is used only for
 # bootstrap if the runtime artifact is missing.
-DEFAULT_WIZARD_DEFINITION: dict[str, Any] = {
+DEFAULT_WIZARD_DEFINITION: dict[str, object] = {
     "version": 2,
     "graph": {
         "entry_step_id": CANONICAL_STEP_ORDER[0],
@@ -68,7 +86,7 @@ _MANDATORY_CHAIN: tuple[str, ...] = (
 )
 
 
-def _bootstrap_default_definition(version: int) -> dict[str, Any]:
+def _bootstrap_default_definition(version: int) -> dict[str, object]:
     if version == 3:
         return build_default_wizard_definition_v3()
     if version == 2:
@@ -80,10 +98,10 @@ def _validated_bootstrap_definition(
     fs: FileService,
     *,
     bootstrap_default_version: int,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     default_definition = _bootstrap_default_definition(bootstrap_default_version)
     default_any = canonicalize_wizard_definition(default_definition)
-    if not isinstance(default_any, dict):
+    if not _is_str_object_dict(default_any):
         raise RuntimeError("default WizardDefinition must be an object")
     if default_any.get("version") != bootstrap_default_version:
         raise RuntimeError("default WizardDefinition version mismatch")
@@ -103,7 +121,7 @@ def load_or_bootstrap_wizard_definition(
     fs: FileService,
     *,
     bootstrap_default_version: int = 3,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Load WizardDefinition JSON, bootstrapping it if missing.
 
     The file is a runtime artifact located under the wizards root.
@@ -122,7 +140,7 @@ def load_or_bootstrap_wizard_definition(
         WIZARD_DEFINITION_REL_PATH,
         default_definition,
     )
-    wd = read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH)
+    wd = _as_str_object_dict(read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH))
 
     if wd.get("version") == 1:
         wd = migrate_v1_to_v2(wd)
@@ -130,10 +148,11 @@ def load_or_bootstrap_wizard_definition(
 
     try:
         validate_wizard_definition_structure(wd)
-        wd = canonicalize_wizard_definition(wd)
+        wd_any = canonicalize_wizard_definition(wd)
 
-        if not isinstance(wd, dict):
+        if not _is_str_object_dict(wd_any):
             raise ValueError("WizardDefinition must be an object")
+        wd = wd_any
 
         ver = wd.get("version")
         if ver == 2:
@@ -156,7 +175,7 @@ def load_or_bootstrap_wizard_definition(
 
 def _assert_exact_keys(
     *,
-    obj: dict[str, Any],
+    obj: dict[str, object],
     allowed: set[str],
     context: str,
 ) -> None:
@@ -165,10 +184,10 @@ def _assert_exact_keys(
         raise FinalizeError(context + " contains unknown key(s): " + ", ".join(unknown))
 
 
-def validate_wizard_definition_structure(wd: Any) -> None:
+def validate_wizard_definition_structure(wd: object) -> None:
     """Validate WizardDefinition v1/v2/v3 structure and invariants."""
 
-    if not isinstance(wd, dict):
+    if not _is_str_object_dict(wd):
         raise FinalizeError("wizard_definition must be a JSON object")
 
     version_any = wd.get("version")
@@ -195,7 +214,7 @@ def validate_wizard_definition_structure(wd: Any) -> None:
     raise FinalizeError("wizard_definition version must be 1, 2, or 3")
 
 
-def canonicalize_wizard_definition(wd: Any) -> Any:
+def canonicalize_wizard_definition(wd: object) -> object:
     """Return a canonicalized WizardDefinition.
 
     Canonicalization is ordering-only. For v2 WizardDefinition, edges are
@@ -205,7 +224,7 @@ def canonicalize_wizard_definition(wd: Any) -> Any:
     No nodes or edges are added or removed.
     """
 
-    if not isinstance(wd, dict):
+    if not _is_str_object_dict(wd):
         return wd
 
     version_any = wd.get("version")
@@ -216,15 +235,15 @@ def canonicalize_wizard_definition(wd: Any) -> Any:
         return wd
 
     graph_any = wd.get("graph")
-    if not isinstance(graph_any, dict):
+    if not _is_str_object_dict(graph_any):
         return wd
 
     edges_any = graph_any.get("edges")
-    if not isinstance(edges_any, list):
+    if not _is_object_list(edges_any):
         return wd
 
-    def edge_key(e: Any) -> tuple[str, int, str]:
-        if not isinstance(e, dict):
+    def edge_key(e: object) -> tuple[str, int, str]:
+        if not _is_str_object_dict(e):
             return ("", 0, "")
         frm = e.get("from_step_id")
         to = e.get("to_step_id")
@@ -244,8 +263,14 @@ def canonicalize_wizard_definition(wd: Any) -> Any:
     return out
 
 
-def migrate_v1_to_v2(wd: dict[str, Any]) -> dict[str, Any]:
-    order = [s["step_id"] for s in wd.get("steps", [])] or CANONICAL_STEP_ORDER
+def migrate_v1_to_v2(wd: dict[str, object]) -> dict[str, object]:
+    order: list[str] = []
+    for step in _as_dict_list(wd.get("steps")):
+        step_id = step.get("step_id")
+        if isinstance(step_id, str) and step_id:
+            order.append(step_id)
+    if not order:
+        order = list(CANONICAL_STEP_ORDER)
     return {
         "version": 2,
         "graph": {
@@ -266,8 +291,8 @@ def migrate_v1_to_v2(wd: dict[str, Any]) -> dict[str, Any]:
 
 def build_effective_workflow_snapshot(
     *,
-    wizard_definition: dict[str, Any],
-    flow_config: dict[str, Any],
+    wizard_definition: dict[str, object],
+    flow_config: dict[str, object],
 ) -> list[str]:
     """Return the effective ordered step_ids for a session.
 
@@ -336,9 +361,9 @@ def build_effective_workflow_snapshot(
 
 def build_legacy_runtime_flow_model_from_definition(
     *,
-    wizard_definition: dict[str, Any],
-    flow_config: dict[str, Any],
-) -> dict[str, Any]:
+    wizard_definition: dict[str, object],
+    flow_config: dict[str, object],
+) -> dict[str, object]:
     """Build a legacy runtime FlowModel without persisted legacy JSON authority."""
 
     step_order = build_effective_workflow_snapshot(
@@ -368,7 +393,7 @@ def build_legacy_runtime_flow_model_from_definition(
     )
 
 
-def validate_wizard_definition_constraints_v2(wd: dict[str, Any]) -> None:
+def validate_wizard_definition_constraints_v2(wd: dict[str, object]) -> None:
     """Validate WizardDefinition v2 constraints that depend on node ordering.
 
     Ordering constraints are derived from graph.nodes order, not edges.
@@ -438,7 +463,7 @@ def enforce_mandatory_constraints(step_order: list[str]) -> None:
         raise FinalizeError("wizard_definition processing must be the terminal step")
 
 
-def _validate_v1_steps(wd: dict[str, Any]) -> None:
+def _validate_v1_steps(wd: dict[str, object]) -> None:
     steps_any = wd.get("steps")
     if not isinstance(steps_any, list) or not steps_any:
         raise FinalizeError("wizard_definition steps must be a non-empty list")
@@ -460,7 +485,7 @@ def _validate_v1_steps(wd: dict[str, Any]) -> None:
         seen.add(sid)
 
 
-def _validate_v2_graph(wd: dict[str, Any]) -> None:
+def _validate_v2_graph(wd: dict[str, object]) -> None:
     graph_any = wd.get("graph")
     if not isinstance(graph_any, dict):
         raise FinalizeError("wizard_definition graph must be an object")
@@ -507,7 +532,7 @@ def _validate_v2_graph(wd: dict[str, Any]) -> None:
     if not isinstance(edges_any, list):
         raise FinalizeError("wizard_definition graph edges must be a list")
 
-    outgoing: dict[str, list[dict[str, Any]]] = {sid: [] for sid in nodes}
+    outgoing: dict[str, list[dict[str, object]]] = {sid: [] for sid in nodes}
     priorities_by_from: dict[str, set[int]] = {sid: set() for sid in nodes}
 
     for e in edges_any:
@@ -563,7 +588,7 @@ def _validate_v2_graph(wd: dict[str, Any]) -> None:
     _validate_v2_reachability(entry_any, nodes, edges_any)
 
 
-def _validate_v2_reachability(entry: str, nodes: list[str], edges_any: list[Any]) -> None:
+def _validate_v2_reachability(entry: str, nodes: list[str], edges_any: list[object]) -> None:
     adj: dict[str, set[str]] = {n: set() for n in nodes}
     for e in edges_any:
         if not isinstance(e, dict):
@@ -608,9 +633,9 @@ def _reachable_from(start: str, adj: dict[str, set[str]]) -> set[str]:
     return seen
 
 
-def _derived_legacy_catalog() -> dict[str, Any]:
+def _derived_legacy_catalog() -> dict[str, object]:
     projection = build_default_step_catalog_projection()
-    steps: list[dict[str, Any]] = []
+    steps: list[dict[str, object]] = []
     for step_id in projection:
         entry = projection[step_id]
         steps.append(
@@ -633,7 +658,7 @@ def _known_step_ids() -> set[str]:
     return set(_default_catalog_step_ids()) | set(CANONICAL_STEP_ORDER)
 
 
-def _is_enabled(step_id: str, flow_config: dict[str, Any]) -> bool:
+def _is_enabled(step_id: str, flow_config: dict[str, object]) -> bool:
     steps_any = flow_config.get("steps") if isinstance(flow_config, dict) else None
     if not isinstance(steps_any, dict):
         return True
@@ -646,5 +671,5 @@ def _is_enabled(step_id: str, flow_config: dict[str, Any]) -> bool:
     return bool(enabled)
 
 
-def _is_strict_int(v: Any) -> TypeGuard[int]:
+def _is_strict_int(v: object) -> TypeGuard[int]:
     return isinstance(v, int) and not isinstance(v, bool)

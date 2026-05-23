@@ -14,7 +14,7 @@ import json
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Protocol, TextIO, TypeGuard, cast
 
 from .editor_storage import (
     list_history,
@@ -31,7 +31,19 @@ from .engine import ImportWizardEngine
 @dataclass(frozen=True)
 class EditorResult:
     ok: bool
-    data: Any
+    data: object
+
+
+class _ValidateFn(Protocol):
+    def __call__(self, obj: object) -> dict[str, object]: ...
+
+
+class _SaveFn(Protocol):
+    def __call__(self, obj: object) -> None: ...
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
 
 
 def show_catalog(engine: ImportWizardEngine) -> EditorResult:
@@ -108,11 +120,18 @@ def edit_catalog_interactive(engine: ImportWizardEngine) -> EditorResult:
 def edit_flow_interactive(engine: ImportWizardEngine) -> EditorResult:
     fs = engine.get_file_service()
     current = load_flow_config(fs)
+
+    def _validate(obj: object) -> dict[str, object]:
+        return engine.validate_flow_config(obj)
+
+    def _save(obj: object) -> None:
+        save_flow_config(fs, obj)
+
     return _edit_interactive(
         title="flow_config",
         current=current,
-        validate_fn=lambda obj: engine.validate_flow_config(obj),
-        save_fn=lambda obj: save_flow_config(fs, obj),
+        validate_fn=_validate,
+        save_fn=_save,
     )
 
 
@@ -152,18 +171,19 @@ def rollback_history(engine: ImportWizardEngine, *, kind: str, fingerprint: str)
 def _edit_interactive(
     *,
     title: str,
-    current: Any,
-    validate_fn: Any,
-    save_fn: Any,
+    current: object,
+    validate_fn: _ValidateFn,
+    save_fn: _SaveFn,
 ) -> EditorResult:
+    stdin = cast(TextIO, sys.stdin)
     sys.stdout.write(_banner_lines(title))
     sys.stdout.write(json.dumps(current, indent=2, sort_keys=True, ensure_ascii=True) + "\n")
     sys.stdout.write("\nPaste replacement JSON. End with a single line containing only '.'\n")
     sys.stdout.flush()
 
-    text = "\n".join(_read_until_dot(sys.stdin))
+    text = "\n".join(_read_until_dot(stdin))
     try:
-        new_obj = json.loads(text)
+        new_obj = cast(object, json.loads(text))
     except Exception as e:
         return EditorResult(
             ok=False,
@@ -176,12 +196,14 @@ def _edit_interactive(
         )
 
     validation = validate_fn(new_obj)
+    if not _is_str_object_dict(validation):
+        return EditorResult(ok=False, data={"ok": False, "error": "invalid validation response"})
     if not bool(validation.get("ok")):
         return EditorResult(ok=False, data=validation)
 
     sys.stdout.write("Validation OK. Save changes? Type 'yes' to confirm: ")
     sys.stdout.flush()
-    answer = sys.stdin.readline().strip().lower()
+    answer = stdin.readline().strip().lower()
     if answer != "yes":
         return EditorResult(
             ok=False, data={"ok": False, "rejected": True, "reason": "not_confirmed"}
@@ -195,7 +217,7 @@ def _banner_lines(title: str) -> str:
     return f"=== Import Wizard editor: {title} ===\nCurrent JSON follows.\n\n"
 
 
-def _read_until_dot(stream: Any) -> Iterable[str]:
+def _read_until_dot(stream: TextIO) -> Iterable[str]:
     for line in stream:
         line = line.rstrip("\n")
         if line == ".":

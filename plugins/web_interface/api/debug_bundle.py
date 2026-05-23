@@ -5,16 +5,18 @@ import json
 import re
 import socket
 import zipfile
-from dataclasses import asdict, is_dataclass
+from collections.abc import Mapping
+from dataclasses import is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Protocol, cast, runtime_checkable
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.orchestration import Orchestrator
+from audiomason.core.serde import json_loads_object
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
 
@@ -31,27 +33,71 @@ _SECRET_KEY_RE = re.compile(
 )
 
 
+@runtime_checkable
+class _PluginLoaderView(Protocol):
+    def list_plugins(self) -> list[str]: ...
+
+    def get_manifest(self, name: str) -> object: ...
+
+
+class _StateView(Protocol):
+    config_resolver: object
+    file_service: object
+    plugin_loader: object
+
+
+def _dict_str_object(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        return {}
+    out: dict[str, object] = {}
+    for key, item in value.items():
+        if isinstance(key, str):
+            out[key] = item
+    return out
+
+
+def _to_str_or_none(value: object) -> str | None:
+    if isinstance(value, str):
+        text = value.strip()
+        if text:
+            return text
+    return None
+
+
+def _job_id_key(item: dict[str, object]) -> str:
+    job_id = _to_str_or_none(item.get("job_id"))
+    return job_id or ""
+
+
 def _get_resolver(request: Request) -> ConfigResolver:
-    resolver = getattr(request.app.state, "config_resolver", None)
+    state = cast(_StateView, request.state)
+    try:
+        resolver = state.config_resolver
+    except Exception:
+        resolver = None
     if isinstance(resolver, ConfigResolver):
         return resolver
     return ConfigResolver()
 
 
 def _get_file_service(request: Request) -> FileService:
-    fs = getattr(request.app.state, "file_service", None)
+    state = cast(_StateView, request.state)
+    try:
+        fs = state.file_service
+    except Exception:
+        fs = None
     if isinstance(fs, FileService):
         return fs
     resolver = _get_resolver(request)
     fs = FileService.from_resolver(resolver)
-    request.app.state.file_service = fs
+    state.file_service = fs
     return fs
 
 
-def _sanitize(obj: Any) -> Any:
+def _sanitize(obj: object) -> object:
     """Redact known secrets from dict/list structures."""
     if isinstance(obj, dict):
-        out: dict[str, Any] = {}
+        out: dict[str, object] = {}
         for k, v in obj.items():
             if isinstance(k, str) and _SECRET_KEY_RE.search(k):
                 out[k] = "***REDACTED***"
@@ -66,7 +112,7 @@ def _sanitize(obj: Any) -> Any:
 def _effective_config_json(resolver: ConfigResolver) -> str:
     resolved = resolver.resolve_all()
     # ConfigResolver returns key->ConfigSource(value, source). Build a flat map of values.
-    out: dict[str, Any] = {}
+    out: dict[str, object] = {}
     for k, src in resolved.items():
         try:
             out[k] = src.value
@@ -118,7 +164,7 @@ def _try_find_git_sha() -> str | None:
     return None
 
 
-def _api_roots(request: Request, resolver: ConfigResolver) -> dict[str, Any]:
+def _api_roots(request: Request, resolver: ConfigResolver) -> dict[str, object]:
     show_jobs = _resolve_show_jobs_root(resolver)
     items: list[dict[str, str]] = [
         {"id": "inbox", "label": "Inbox"},
@@ -130,11 +176,11 @@ def _api_roots(request: Request, resolver: ConfigResolver) -> dict[str, Any]:
     return {"items": items}
 
 
-def _api_jobs() -> dict[str, Any]:
+def _api_jobs() -> dict[str, object]:
     orch = Orchestrator()
-    jobs = [j.to_dict() for j in orch.list_jobs()]
+    jobs: list[dict[str, object]] = [j.to_dict() for j in orch.list_jobs()]
     # stable ordering
-    jobs.sort(key=lambda x: x.get("job_id") or "")
+    jobs.sort(key=_job_id_key)
     return {"items": jobs}
 
 
@@ -171,43 +217,45 @@ def _try_include_abs_file(
             _ = fs.tail_bytes(root, rel, max_bytes=max_bytes)
         except Exception:
             return (False, "read_failed")
-        return (True, json.dumps({"root": root.value, "rel": rel, "zip": name_in_zip}))
+        detail: dict[str, str] = {"root": str(root.value), "rel": rel, "zip": name_in_zip}
+        return (True, json.dumps(detail))
 
     return (False, "outside_roots")
 
 
-def _plugin_info(request: Request) -> dict[str, Any]:
-    loader = getattr(request.app.state, "plugin_loader", None)
-    if loader is None:
+def _plugin_info(request: Request) -> dict[str, object]:
+    state = cast(_StateView, request.state)
+    try:
+        loader_obj = state.plugin_loader
+    except Exception:
+        loader_obj = None
+    if not isinstance(loader_obj, _PluginLoaderView):
         return {"loaded": [], "manifests": {}}
 
     loaded: list[str] = []
-    manifests: dict[str, Any] = {}
+    manifests: dict[str, object] = {}
     try:
-        loaded = list(loader.list_plugins())
+        loaded = list(loader_obj.list_plugins())
     except Exception:
         loaded = []
 
     for name in loaded:
         try:
-            man = loader.get_manifest(name)
-            if is_dataclass(man) and not isinstance(man, type):
-                manifests[name] = asdict(man)
-            elif is_dataclass(man):
-                manifests[name] = {"dataclass": getattr(man, "__name__", str(man))}
-            elif isinstance(man, dict):
-                manifests[name] = man
+            man = loader_obj.get_manifest(name)
+            if is_dataclass(man):
+                manifests[name] = {"dataclass": type(man).__name__}
+            elif isinstance(man, Mapping):
+                manifests[name] = _dict_str_object(man)
             else:
                 manifests[name] = {"value": str(man)}
         except Exception:
             # best-effort only
             continue
 
-    return _sanitize({"loaded": loaded, "manifests": manifests})
+    return _dict_str_object(_sanitize({"loaded": loaded, "manifests": manifests}))
 
 
 def mount_debug_bundle(app: FastAPI) -> None:
-    @app.get("/api/debug/bundle")
     def api_debug_bundle(
         request: Request,
         logs_tail_lines: int = 2000,
@@ -221,29 +269,32 @@ def mount_debug_bundle(app: FastAPI) -> None:
 
         now = datetime.now(tz=UTC)
 
+        included: dict[str, object] = {}
+        omitted: dict[str, object] = {}
+
         # Collect content.
-        manifest: dict[str, Any] = {
+        manifest: dict[str, object] = {
             "version": 1,
             "timestamp_utc": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "hostname": socket.gethostname(),
             "stage_dir": str(fs.root_dir(RootName.STAGE)),
             "git_sha": _try_find_git_sha(),
             "params": {"logs_tail_lines": int(logs_tail_lines)},
-            "included": {},
-            "omitted": {},
+            "included": included,
+            "omitted": omitted,
         }
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as z:
             _zip_add_text(z, "config/effective_config.json", _effective_config_json(resolver))
-            manifest["included"]["effective_config"] = {"path": "config/effective_config.json"}
+            included["effective_config"] = {"path": "config/effective_config.json"}
 
             _zip_add_text(
                 z,
                 "plugins/plugins.json",
                 json.dumps(_plugin_info(request), indent=2, sort_keys=True) + "\n",
             )
-            manifest["included"]["plugins"] = {"path": "plugins/plugins.json"}
+            included["plugins"] = {"path": "plugins/plugins.json"}
 
             # UI overrides (config root)
             ui_rel = "web_interface_ui.json"
@@ -252,7 +303,7 @@ def mount_debug_bundle(app: FastAPI) -> None:
                     with fs.open_read(RootName.CONFIG, ui_rel) as f:
                         raw = f.read()
                     try:
-                        obj = json.loads(raw.decode("utf-8"))
+                        obj = json_loads_object(raw.decode("utf-8"))
                     except Exception:
                         obj = {"raw": raw.decode("utf-8", errors="replace")[:200000]}
                     _zip_add_text(
@@ -260,11 +311,11 @@ def mount_debug_bundle(app: FastAPI) -> None:
                         "ui/ui_overrides.json",
                         json.dumps(_sanitize(obj), indent=2, sort_keys=True) + "\n",
                     )
-                    manifest["included"]["ui_overrides"] = {"root": "config", "rel": ui_rel}
+                    included["ui_overrides"] = {"root": "config", "rel": ui_rel}
                 else:
-                    manifest["omitted"]["ui_overrides"] = "not_found"
+                    omitted["ui_overrides"] = "not_found"
             except Exception as e:
-                manifest["omitted"]["ui_overrides"] = f"error:{type(e).__name__}"
+                omitted["ui_overrides"] = f"error:{type(e).__name__}"
 
             # Logs: system log (path may live under a root)
             try:
@@ -280,14 +331,24 @@ def mount_debug_bundle(app: FastAPI) -> None:
             )
             if ok:
                 # re-read using info encoded in detail for determinism
-                info = json.loads(detail)
-                raw = fs.tail_bytes(RootName(info["root"]), info["rel"], max_bytes=2_000_000)
-                _zip_add_bytes(
-                    z, info["zip"], _tail_lines_from_bytes(raw, max_lines=int(logs_tail_lines))
-                )
-                manifest["included"]["system_log"] = info
+                parsed_info = _dict_str_object(json_loads_object(detail))
+                root_name = _to_str_or_none(parsed_info.get("root"))
+                rel_path = _to_str_or_none(parsed_info.get("rel"))
+                zip_name = _to_str_or_none(parsed_info.get("zip"))
+                if root_name is None or rel_path is None or zip_name is None:
+                    omitted["system_log"] = "invalid_detail"
+                else:
+                    raw = fs.tail_bytes(RootName(root_name), rel_path, max_bytes=2_000_000)
+                    _zip_add_bytes(
+                        z, zip_name, _tail_lines_from_bytes(raw, max_lines=int(logs_tail_lines))
+                    )
+                    included["system_log"] = {
+                        "root": root_name,
+                        "rel": rel_path,
+                        "zip": zip_name,
+                    }
             else:
-                manifest["omitted"]["system_log"] = detail
+                omitted["system_log"] = detail
 
             # Logs: diagnostics.jsonl (stage root)
             diag_rel = "diagnostics/diagnostics.jsonl"
@@ -299,11 +360,11 @@ def mount_debug_bundle(app: FastAPI) -> None:
                         "diagnostics/diagnostics.jsonl",
                         _tail_lines_from_bytes(raw, max_lines=int(logs_tail_lines)),
                     )
-                    manifest["included"]["diagnostics_jsonl"] = {"root": "stage", "rel": diag_rel}
+                    included["diagnostics_jsonl"] = {"root": "stage", "rel": diag_rel}
                 else:
-                    manifest["omitted"]["diagnostics_jsonl"] = "not_found"
+                    omitted["diagnostics_jsonl"] = "not_found"
             except Exception as e:
-                manifest["omitted"]["diagnostics_jsonl"] = f"error:{type(e).__name__}"
+                omitted["diagnostics_jsonl"] = f"error:{type(e).__name__}"
 
             # API snapshots
             try:
@@ -312,9 +373,9 @@ def mount_debug_bundle(app: FastAPI) -> None:
                     "api/status.json",
                     json.dumps(build_status(), indent=2, sort_keys=True) + "\n",
                 )
-                manifest["included"]["api_status"] = {"path": "api/status.json"}
+                included["api_status"] = {"path": "api/status.json"}
             except Exception as e:
-                manifest["omitted"]["api_status"] = f"error:{type(e).__name__}"
+                omitted["api_status"] = f"error:{type(e).__name__}"
 
             try:
                 _zip_add_text(
@@ -322,17 +383,17 @@ def mount_debug_bundle(app: FastAPI) -> None:
                     "api/roots.json",
                     json.dumps(_api_roots(request, resolver), indent=2, sort_keys=True) + "\n",
                 )
-                manifest["included"]["api_roots"] = {"path": "api/roots.json"}
+                included["api_roots"] = {"path": "api/roots.json"}
             except Exception as e:
-                manifest["omitted"]["api_roots"] = f"error:{type(e).__name__}"
+                omitted["api_roots"] = f"error:{type(e).__name__}"
 
             try:
                 _zip_add_text(
                     z, "api/jobs.json", json.dumps(_api_jobs(), indent=2, sort_keys=True) + "\n"
                 )
-                manifest["included"]["api_jobs"] = {"path": "api/jobs.json"}
+                included["api_jobs"] = {"path": "api/jobs.json"}
             except Exception as e:
-                manifest["omitted"]["api_jobs"] = f"error:{type(e).__name__}"
+                omitted["api_jobs"] = f"error:{type(e).__name__}"
 
             # Notes
             notes = (
@@ -345,7 +406,7 @@ def mount_debug_bundle(app: FastAPI) -> None:
                 "Bundle contents are best-effort; missing system.log is not an error.\n"
             )
             _zip_add_text(z, "notes.txt", notes)
-            manifest["included"]["notes"] = {"path": "notes.txt"}
+            included["notes"] = {"path": "notes.txt"}
 
             _zip_add_text(z, "manifest.json", json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
@@ -353,3 +414,5 @@ def mount_debug_bundle(app: FastAPI) -> None:
 
         headers = {"Content-Disposition": 'attachment; filename="audiomason_debug_bundle.zip"'}
         return StreamingResponse(buf, media_type="application/zip", headers=headers)
+
+    app.add_api_route("/api/debug/bundle", api_debug_bundle, methods=["GET"])

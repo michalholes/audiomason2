@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import json
-from typing import Any
+from typing import cast
 
 from plugins.file_io.service import FileService, RootName
 
@@ -29,7 +29,7 @@ def atomic_write_json(
     fs: FileService,
     root: RootName,
     rel_path: str,
-    obj: Any,
+    obj: object,
 ) -> None:
     data = (
         json.dumps(
@@ -47,7 +47,7 @@ def atomic_write_json_if_missing(
     fs: FileService,
     root: RootName,
     rel_path: str,
-    obj: Any,
+    obj: object,
 ) -> bool:
     """Atomically write JSON only if the destination does not exist.
 
@@ -89,13 +89,13 @@ def atomic_write_text(
     _atomic_write_bytes(fs, root, rel_path, text.encode("utf-8"))
 
 
-def read_json(fs: FileService, root: RootName, rel_path: str) -> Any:
+def read_json(fs: FileService, root: RootName, rel_path: str) -> object:
     with fs.open_read(root, rel_path) as f:
         data = f.read()
-    return json.loads(data.decode("utf-8"))
+    return cast(object, json.loads(data.decode("utf-8")))
 
 
-def append_jsonl(fs: FileService, root: RootName, rel_path: str, obj: Any) -> None:
+def append_jsonl(fs: FileService, root: RootName, rel_path: str, obj: object) -> None:
     """Append a JSON object as a JSONL line, atomically.
 
     Spec 10.7 requires atomic writes (temp + rename). JSONL append is implemented

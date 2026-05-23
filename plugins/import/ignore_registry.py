@@ -5,7 +5,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypeGuard
 
 from plugins.file_io.service import FileService, RootName
 
@@ -16,20 +16,24 @@ _REGISTRY_PATH = "import/processed/ignore_registry.json"
 _SCHEMA_VERSION = 1
 
 
-def load_registry(fs: FileService) -> dict[str, Any]:
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def load_registry(fs: FileService) -> dict[str, object]:
     if fs.exists(RootName.WIZARDS, _REGISTRY_PATH):
         data = read_json(fs, RootName.WIZARDS, _REGISTRY_PATH)
-        if isinstance(data, dict):
+        if _is_str_object_dict(data):
             return data
     return {"schema_version": _SCHEMA_VERSION, "sources": []}
 
 
-def _normalize_sources(data: Any) -> list[dict[str, str]]:
+def _normalize_sources(data: object) -> list[dict[str, str]]:
     if not isinstance(data, list):
         return []
     seen: dict[tuple[str, str], dict[str, str]] = {}
     for item in data:
-        if not isinstance(item, dict):
+        if not _is_str_object_dict(item):
             continue
         root = item.get("root")
         rel = item.get("relative_path")
@@ -41,8 +45,8 @@ def _normalize_sources(data: Any) -> list[dict[str, str]]:
     return [seen[key] for key in sorted(seen.keys())]
 
 
-def _ensure_registry_shape(reg: Any) -> dict[str, Any]:
-    if not isinstance(reg, dict):
+def _ensure_registry_shape(reg: object) -> dict[str, object]:
+    if not _is_str_object_dict(reg):
         return {"schema_version": _SCHEMA_VERSION, "sources": []}
     schema_version = reg.get("schema_version")
     if schema_version != _SCHEMA_VERSION:
@@ -53,14 +57,14 @@ def _ensure_registry_shape(reg: Any) -> dict[str, Any]:
     }
 
 
-def _source_ref(record: dict[str, Any]) -> dict[str, str]:
+def _source_ref(record: dict[str, object]) -> dict[str, str]:
     return {
         "root": str(record["source_root"]),
         "relative_path": str(record["source_relative_path"]),
     }
 
 
-def apply_successful_job_requests(fs: FileService, job_requests: dict[str, Any]) -> bool:
+def apply_successful_job_requests(fs: FileService, job_requests: dict[str, object]) -> bool:
     """Update the ignore registry from successful import job_requests."""
 
     records = iter_import_book_records(job_requests)

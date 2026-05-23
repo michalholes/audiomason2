@@ -8,7 +8,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
 from plugins.file_io.service.types import RootName
 
@@ -21,6 +21,9 @@ from .engine_session_create import (
 )
 from .errors import error_envelope
 
+if TYPE_CHECKING:
+    from .engine import ImportWizardEngine
+
 ALLOWED_USER_START_INTENTS = {"resume", "new"}
 
 
@@ -30,7 +33,7 @@ def build_start_conflict_envelope(
     root: str,
     relative_path: str,
     mode: str,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     return error_envelope(
         "SESSION_START_CONFLICT",
         "existing session requires explicit start intent",
@@ -63,13 +66,13 @@ def _validate_intent(intent: str | None) -> str | None:
 
 def start_user_facing_session(
     *,
-    engine: Any,
+    engine: ImportWizardEngine,
     root: str,
     relative_path: str,
     mode: str,
     intent: str | None,
-    flow_overrides: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+    flow_overrides: dict[str, object] | None = None,
+) -> dict[str, object]:
     normalized_intent = _validate_intent(intent)
     ctx = resolve_session_start_context(
         engine=engine,

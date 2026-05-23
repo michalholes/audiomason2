@@ -8,10 +8,20 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypeGuard
 
 
-def extract_action_job_requests(effective_model: dict[str, Any]) -> list[dict[str, Any]] | None:
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def extract_action_job_requests(
+    effective_model: dict[str, object],
+) -> list[dict[str, object]] | None:
     """Return PHASE 1 action-step job_request objects or None.
 
     Source of truth is effective_model["steps"]. Selection rules:
@@ -22,20 +32,20 @@ def extract_action_job_requests(effective_model: dict[str, Any]) -> list[dict[st
     Output: canonical JSON list ordered by effective_model["steps"].
     """
 
-    steps_any = effective_model.get("steps") if isinstance(effective_model, dict) else None
-    if not isinstance(steps_any, list):
+    steps_any = effective_model.get("steps")
+    if not _is_object_list(steps_any):
         return None
 
-    out: list[dict[str, Any]] = []
+    out: list[dict[str, object]] = []
     for step in steps_any:
-        if not isinstance(step, dict):
+        if not _is_str_object_dict(step):
             continue
         if step.get("phase") != 1:
             continue
         if step.get("execution") != "job":
             continue
         job_req = step.get("job_request")
-        if not isinstance(job_req, dict):
+        if not _is_str_object_dict(job_req):
             continue
         out.append(dict(job_req))
 

@@ -4,15 +4,20 @@ import contextlib
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import TypeGuard
 
 from audiomason.core.diagnostics import build_envelope
 from audiomason.core.events import get_event_bus
 from audiomason.core.jobs.model import Job, JobState
 from audiomason.core.jobs.paths import jobs_root
 from audiomason.core.logging import get_logger
+from audiomason.core.serde import json_loads_object
 
 _LOGGER = get_logger(__name__)
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict)
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
@@ -43,18 +48,18 @@ def _shorten_traceback(tb: str) -> str:
     return _shorten_text("\n".join(lines), max_chars=2000)
 
 
-def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
+def _emit_diag(event: str, *, operation: str, data: dict[str, object]) -> None:
     # Fail-safe: diagnostics must not affect runtime behavior.
     with contextlib.suppress(Exception):
         envelope = build_envelope(event=event, component="jobs", operation=operation, data=data)
         get_event_bus().publish(event, envelope)
 
 
-def _emit_op_start(operation: str, data: dict[str, Any]) -> None:
+def _emit_op_start(operation: str, data: dict[str, object]) -> None:
     _emit_diag("operation.start", operation=operation, data=data)
 
 
-def _emit_op_end(operation: str, data: dict[str, Any]) -> None:
+def _emit_op_end(operation: str, data: dict[str, object]) -> None:
     _emit_diag("operation.end", operation=operation, data=data)
 
 
@@ -104,7 +109,9 @@ class JobStore:
         if not path.exists():
             return None
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = json_loads_object(path.read_text(encoding="utf-8"))
+            if not _is_str_object_dict(data):
+                return None
             return Job.from_dict(data)
         except Exception:
             return None
@@ -129,7 +136,7 @@ class JobStore:
         error_changed = prev_error != job.error
 
         if state_changed or progress_changed:
-            data: dict[str, Any] = {
+            data: dict[str, object] = {
                 "job_id": job.job_id,
                 "job_type": job.type.value,
                 "state": job.state.value,
@@ -232,7 +239,9 @@ class JobStore:
 
     def load_job(self, job_id: str) -> Job:
         path = self.job_json_path(job_id)
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json_loads_object(path.read_text(encoding="utf-8"))
+        if not _is_str_object_dict(data):
+            raise ValueError(f"Invalid job payload in {path}")
         return Job.from_dict(data)
 
     def list_job_ids(self) -> list[str]:

@@ -8,7 +8,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, TypeGuard
 
 from .dsl.flowmodel_v3 import FLOWMODEL_KIND
 from .dsl.interpreter_v3 import prompt_ui_from_resolved_inputs, resolve_inputs
@@ -16,8 +16,19 @@ from .engine_util import _exception_envelope
 from .primitives import is_prompt_primitive
 from .prompt_select_ui_projection import build_prompt_select_ui_items
 
+if TYPE_CHECKING:
+    from .engine import ImportWizardEngine
 
-def get_step_definition_impl(*, engine: Any, session_id: str, step_id: str) -> dict[str, Any]:
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in value)
+
+
+def get_step_definition_impl(
+    *, engine: ImportWizardEngine, session_id: str, step_id: str
+) -> dict[str, object]:
     """Return the catalog step definition for step_id.
 
     This is a UI helper. It does not perform any state transitions.
@@ -28,15 +39,18 @@ def get_step_definition_impl(*, engine: Any, session_id: str, step_id: str) -> d
         steps_any = effective_model.get("steps")
         if not isinstance(steps_any, list):
             raise ValueError("effective model missing steps")
-        current_step_id = str(
-            (state.get("cursor") or {}).get("step_id") or state.get("current_step_id") or ""
-        )
+        cursor = state.get("cursor")
+        cursor_dict = cursor if _is_str_object_dict(cursor) else {}
+        current_step_id = str(cursor_dict.get("step_id") or state.get("current_step_id") or "")
         for step in steps_any:
-            if not isinstance(step, dict) or step.get("step_id") != step_id:
+            if not _is_str_object_dict(step) or step.get("step_id") != step_id:
                 continue
             out = dict(step)
             primitive_id = str(step.get("primitive_id") or "")
-            primitive_version = int(step.get("primitive_version") or 0)
+            primitive_version_any = step.get("primitive_version")
+            primitive_version = (
+                primitive_version_any if isinstance(primitive_version_any, int) else 0
+            )
             is_v3 = str(effective_model.get("flowmodel_kind") or "") == FLOWMODEL_KIND
             if is_v3 and step_id == current_step_id:
                 if is_prompt_primitive(primitive_id, primitive_version):
@@ -49,9 +63,11 @@ def get_step_definition_impl(*, engine: Any, session_id: str, step_id: str) -> d
                     if ui:
                         out["ui"] = ui
                     else:
-                        out.pop("ui", None)
+                        if "ui" in out:
+                            del out["ui"]
                 else:
-                    out.pop("ui", None)
+                    if "ui" in out:
+                        del out["ui"]
             return out
         raise ValueError("unknown step_id")
     except Exception as e:

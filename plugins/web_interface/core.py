@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import inspect
 import logging
 import sys
 import traceback
 from contextlib import suppress
-from typing import Any
+from typing import Protocol, runtime_checkable
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import Response
 
 from audiomason.core.diagnostics import build_envelope
 from audiomason.core.errors import PluginNotFoundError
@@ -26,6 +29,16 @@ from .api.wizards import mount_wizards
 from .ui_static import mount_ui_static
 from .util.diag_stream import install_event_tap
 from .util.status import build_status
+
+
+@runtime_checkable
+class _SupportsGetPlugin(Protocol):
+    def get_plugin(self, plugin_name: str) -> object: ...
+
+
+@runtime_checkable
+class _SupportsFastApiRouter(Protocol):
+    def get_fastapi_router(self) -> APIRouter | None: ...
 
 
 def _uvicorn_log_settings(verbosity: int) -> tuple[str, bool]:
@@ -59,22 +72,26 @@ class WebInterfacePlugin:
     def create_app(
         self,
         *,
-        config_resolver: Any | None = None,
-        plugin_loader: Any | None = None,
+        config_resolver: object | None = None,
+        plugin_loader: object | None = None,
         verbosity: int = 1,
     ) -> FastAPI:
         app = FastAPI(title="AudioMason Web Interface")
+        web_logger = get_logger("web_interface")
+        web_verbosity = int(verbosity)
 
         app.state.config_resolver = config_resolver
         app.state.plugin_loader = plugin_loader
-        app.state.verbosity = int(verbosity)
-        app.state.web_logger = get_logger("web_interface")
+        app.state.verbosity = web_verbosity
+        app.state.web_logger = web_logger
         # Tap the core EventBus once per process so the Logs UI can stream
         # diagnostics/events without tailing a web-specific log file.
         install_event_tap()
 
-        @app.middleware("http")
-        async def _emit_route_boundary(request: Request, call_next: Any) -> Any:
+        async def _emit_route_boundary(
+            request: Request,
+            call_next: RequestResponseEndpoint,
+        ) -> Response:
             # Emit deterministic call-boundary diagnostics for each HTTP route.
             path = request.url.path
             method = request.method
@@ -83,10 +100,8 @@ class WebInterfacePlugin:
             def _ascii(text: str) -> str:
                 return (text or "").encode("ascii", "backslashreplace").decode("ascii")
 
-            logger = getattr(request.app.state, "web_logger", get_logger("web_interface"))
-
-            start_data: dict[str, Any] = {"path": path, "method": method}
-            if int(getattr(request.app.state, "verbosity", 1)) >= 3:
+            start_data: dict[str, object] = {"path": path, "method": method}
+            if web_verbosity >= 3:
                 with suppress(Exception):
                     start_data["query"] = dict(request.query_params)
 
@@ -99,7 +114,7 @@ class WebInterfacePlugin:
             with suppress(Exception):
                 get_event_bus().publish("boundary.start", start_env)
             with suppress(Exception):
-                logger.info(_ascii(f"{op}: start {start_data}"))
+                web_logger.info(_ascii(f"{op}: start {start_data}"))
 
             import time as _time
 
@@ -113,7 +128,7 @@ class WebInterfacePlugin:
                 except Exception:
                     tb = None
 
-                fail_data: dict[str, Any] = {
+                fail_data: dict[str, object] = {
                     "status": "failed",
                     "error_type": type(e).__name__,
                     "error": str(e),
@@ -129,13 +144,13 @@ class WebInterfacePlugin:
                 with suppress(Exception):
                     get_event_bus().publish("boundary.end", fail_env)
                 with suppress(Exception):
-                    logger.error(_ascii(f"{op}: failed {fail_data}"))
+                    web_logger.error(_ascii(f"{op}: failed {fail_data}"))
                 raise
 
             dur_ms = int((_time.monotonic() - t0) * 1000)
-            end_data: dict[str, Any] = {
+            end_data: dict[str, object] = {
                 "status": "succeeded",
-                "status_code": int(getattr(response, "status_code", 200)),
+                "status_code": response.status_code,
                 "duration_ms": dur_ms,
             }
             end_env = build_envelope(
@@ -147,9 +162,11 @@ class WebInterfacePlugin:
             with suppress(Exception):
                 get_event_bus().publish("boundary.end", end_env)
             with suppress(Exception):
-                logger.info(_ascii(f"{op}: end {end_data}"))
+                web_logger.info(_ascii(f"{op}: end {end_data}"))
 
             return response
+
+        app.add_middleware(BaseHTTPMiddleware, dispatch=_emit_route_boundary)
 
         # API first (avoid catch-all swallowing /api/*)
         mount_am_config(app)
@@ -165,12 +182,11 @@ class WebInterfacePlugin:
         # Mount UI routes provided by the import plugin (thin renderer contract).
         # Fail-safe: absence or failure must not crash web_interface.
         def _try_mount_import_ui() -> None:
-            loader = getattr(app.state, "plugin_loader", None)
+            loader = plugin_loader
+            logger = web_logger
+            verbosity = web_verbosity
 
-            logger = getattr(app.state, "web_logger", get_logger("web_interface"))
-            verbosity = int(getattr(app.state, "verbosity", 1))
-
-            def _emit(event: str, data: dict[str, Any]) -> None:
+            def _emit(event: str, data: dict[str, object]) -> None:
                 env = build_envelope(
                     event=event,
                     component="web_interface",
@@ -180,13 +196,13 @@ class WebInterfacePlugin:
                 with suppress(Exception):
                     get_event_bus().publish(event, env)
 
-            def _plugin_origin(p: Any | None) -> str | None:
+            def _plugin_origin(p: object | None) -> str | None:
                 if p is None:
                     return None
-                module_name = getattr(p.__class__, "__module__", None)
-                if isinstance(module_name, str) and module_name:
+                module_name = p.__class__.__module__
+                if module_name:
                     mod = sys.modules.get(module_name)
-                    module_file = getattr(mod, "__file__", None)
+                    module_file = inspect.getsourcefile(mod) if mod is not None else None
                     if isinstance(module_file, str) and module_file:
                         return module_file
                 try:
@@ -194,15 +210,15 @@ class WebInterfacePlugin:
                 except Exception:
                     return None
 
-            plugin: Any | None = None
+            plugin: object | None = None
 
-            if loader is None:
+            if not isinstance(loader, _SupportsGetPlugin):
                 _emit(
                     "web_interface.import_ui_mount_failed",
                     {
                         "phase": "get_plugin",
-                        "exc_type": "ValueError",
-                        "exc_message": "plugin_loader is None",
+                        "exc_type": "TypeError",
+                        "exc_message": "plugin_loader has no get_plugin",
                         "plugin_origin": None,
                     },
                 )
@@ -241,9 +257,7 @@ class WebInterfacePlugin:
                 return
 
             plugin_origin = _plugin_origin(plugin)
-
-            get_router = getattr(plugin, "get_fastapi_router", None)
-            if not callable(get_router):
+            if not isinstance(plugin, _SupportsFastApiRouter):
                 _emit(
                     "web_interface.import_ui_mount_failed",
                     {
@@ -257,7 +271,7 @@ class WebInterfacePlugin:
                 return
 
             try:
-                router = get_router()
+                router = plugin.get_fastapi_router()
             except Exception as exc:
                 _emit(
                     "web_interface.import_ui_mount_failed",
@@ -280,19 +294,6 @@ class WebInterfacePlugin:
                         "phase": "build_router",
                         "exc_type": "ValueError",
                         "exc_message": "get_fastapi_router returned None",
-                        "plugin_origin": plugin_origin,
-                    },
-                )
-                logger.info(f"import_ui_mount: failed phase=build_router origin={plugin_origin}")
-                return
-
-            if not isinstance(router, APIRouter):
-                _emit(
-                    "web_interface.import_ui_mount_failed",
-                    {
-                        "phase": "build_router",
-                        "exc_type": "TypeError",
-                        "exc_message": "get_fastapi_router must return APIRouter",
                         "plugin_origin": plugin_origin,
                     },
                 )
@@ -327,20 +328,23 @@ class WebInterfacePlugin:
         # Import Wizard is explicitly not implemented in web_interface.
         # Provide a deterministic 404 for all HTTP methods under /api/import_wizard/*
         # to avoid SPA fallback producing 405 for POST/PUT/etc.
-        @app.api_route(
-            "/api/import_wizard/{rest:path}",
-            methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
-        )
         def api_import_wizard_removed(rest: str) -> JSONResponse:  # noqa: ARG001
-            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+            content: dict[str, str] = {"detail": "Not Found"}
+            return JSONResponse(status_code=404, content=content)
 
-        @app.get("/api/health")
-        def api_health() -> dict[str, Any]:
+        def api_health() -> dict[str, object]:
             return {"ok": True}
 
-        @app.get("/api/status")
-        def api_status() -> dict[str, Any]:
+        def api_status() -> dict[str, object]:
             return build_status()
+
+        app.add_api_route(
+            "/api/import_wizard/{rest:path}",
+            api_import_wizard_removed,
+            methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
+        )
+        app.add_api_route("/api/health", api_health, methods=["GET"])
+        app.add_api_route("/api/status", api_status, methods=["GET"])
 
         # UI static + SPA fallback last
         mount_ui_static(app)
@@ -352,8 +356,8 @@ class WebInterfacePlugin:
         host: str,
         port: int,
         *,
-        config_resolver: Any | None = None,
-        plugin_loader: Any | None = None,
+        config_resolver: object | None = None,
+        plugin_loader: object | None = None,
         verbosity: int = 1,
     ) -> None:
         """Run the web server in a standalone (non-async) context."""
@@ -384,8 +388,8 @@ class WebInterfacePlugin:
         host: str,
         port: int,
         *,
-        config_resolver: Any | None = None,
-        plugin_loader: Any | None = None,
+        config_resolver: object | None = None,
+        plugin_loader: object | None = None,
         verbosity: int = 1,
     ) -> None:
         """Serve the web server inside an existing asyncio event loop."""

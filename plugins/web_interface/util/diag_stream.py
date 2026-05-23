@@ -5,7 +5,6 @@ import threading
 import time
 from collections import deque
 from collections.abc import Iterator
-from typing import Any
 
 from audiomason.core.events import get_event_bus
 
@@ -27,10 +26,14 @@ def install_event_tap() -> None:
     if _INSTALLED:
         return
 
-    def _on_any(event: str, data: dict[str, Any]) -> None:
+    def _on_any(event: str, data: dict[str, object]) -> None:
         try:
+            payload_obj: dict[str, object] = {
+                "event": str(event),
+                "data": dict(data),
+            }
             payload = json.dumps(
-                {"event": event, "data": data},
+                payload_obj,
                 ensure_ascii=True,
                 separators=(",", ":"),
                 sort_keys=True,
@@ -80,10 +83,14 @@ def stream(*, since_id: int = 0, heartbeat_s: float = 15.0) -> Iterator[tuple[in
 
         # Heartbeat to keep SSE alive. Do not emit an SSE id for heartbeat.
         now = time.time()
+        heartbeat: dict[str, object] = {
+            "event": "heartbeat",
+            "data": {"ts": now},
+        }
         yield (
             None,
             json.dumps(
-                {"event": "heartbeat", "data": {"ts": now}},
+                heartbeat,
                 separators=(",", ":"),
                 sort_keys=True,
             ),

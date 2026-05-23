@@ -5,12 +5,22 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypeGuard
 
 from ..fingerprints import sha256_hex
 
 
-def _object_schema() -> dict[str, Any]:
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _as_str_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _object_schema() -> dict[str, object]:
     return {
         "type": "object",
         "properties": {},
@@ -19,7 +29,7 @@ def _object_schema() -> dict[str, Any]:
     }
 
 
-REGISTRY_ENTRIES: list[dict[str, Any]] = [
+REGISTRY_ENTRIES: list[dict[str, object]] = [
     {
         "primitive_id": "job.emit",
         "version": 1,
@@ -50,25 +60,25 @@ def execute_emit(
     *,
     session_id: str,
     step_id: str,
-    state: dict[str, Any],
-    inputs: dict[str, Any],
-) -> tuple[dict[str, Any], str]:
-    jobs_any = state.get("jobs")
-    jobs = jobs_any if isinstance(jobs_any, dict) else {}
-    emitted_any = jobs.get("emitted")
-    emitted = list(emitted_any) if isinstance(emitted_any, list) else []
+    state: dict[str, object],
+    inputs: dict[str, object],
+) -> tuple[dict[str, object], str]:
+    jobs = state.get("jobs")
+    jobs_doc = jobs if _is_str_object_dict(jobs) else {}
+    emitted = _as_str_list(jobs_doc.get("emitted"))
     job_id = _job_id(session_id=session_id, step_id=step_id, index=len(emitted) + 1)
     return {"job_id": job_id, "request": dict(inputs)}, job_id
 
 
-def execute_submit(*, state: dict[str, Any], inputs: dict[str, Any]) -> tuple[dict[str, Any], str]:
+def execute_submit(
+    *, state: dict[str, object], inputs: dict[str, object]
+) -> tuple[dict[str, object], str]:
     job_id = inputs.get("job_id")
     if not isinstance(job_id, str) or not job_id:
         raise ValueError("job.submit@1 requires job_id")
-    jobs_any = state.get("jobs")
-    jobs = jobs_any if isinstance(jobs_any, dict) else {}
-    emitted_any = jobs.get("emitted")
-    emitted = list(emitted_any) if isinstance(emitted_any, list) else []
+    jobs = state.get("jobs")
+    jobs_doc = jobs if _is_str_object_dict(jobs) else {}
+    emitted = _as_str_list(jobs_doc.get("emitted"))
     if job_id not in emitted:
         raise RuntimeError("job.submit@1 requires previously emitted job_id")
     return {"job_id": job_id}, job_id

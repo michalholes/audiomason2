@@ -5,10 +5,10 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import TypedDict
 
-FlowGraphInputs = dict[str, Any]
-FlowGraphConflicts = dict[str, Any]
+FlowGraphInputs = dict[str, object]
+FlowGraphConflicts = dict[str, object]
 
 
 class FlowGraphRuntimeState(TypedDict):
@@ -22,13 +22,13 @@ class FlowGraphStateView(TypedDict):
     state: FlowGraphRuntimeState
 
 
-def _dict_view(raw: Any) -> dict[str, Any]:
+def _dict_view(raw: object) -> dict[str, object]:
     if isinstance(raw, dict):
         return raw
     return {}
 
 
-def build_flow_graph_state_view(state: dict[str, Any]) -> FlowGraphStateView:
+def build_flow_graph_state_view(state: dict[str, object]) -> FlowGraphStateView:
     return {
         "inputs": _dict_view(state.get("inputs")),
         "state": {

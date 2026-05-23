@@ -7,58 +7,109 @@ ASCII-only.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Protocol, TypeGuard, cast
+
+from plugins.file_io.service import FileService
 
 
-def build_router(*, engine: Any):
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+class _UiEngine(Protocol):
+    _fs: FileService
+
+    def get_file_service(self) -> FileService: ...
+
+    def get_flow_model(self) -> dict[str, object]: ...
+
+    def get_state(self, session_id: str) -> dict[str, object]: ...
+
+    def get_step_definition(self, session_id: str, step_id: str) -> dict[str, object]: ...
+
+    def submit_step(
+        self, session_id: str, step_id: str, body: dict[str, object]
+    ) -> dict[str, object]: ...
+
+    def preview_action(
+        self, session_id: str, step_id: str, body: dict[str, object]
+    ) -> dict[str, object]: ...
+
+    def start_processing(self, session_id: str, body: dict[str, object]) -> dict[str, object]: ...
+
+
+class _RouteRegistrar(Protocol):
+    def add_api_route(self, path: str, endpoint: object, *, methods: list[str]) -> object: ...
+
+
+class _JsonResponseFactory(Protocol):
+    def __call__(self, *, status_code: int, content: dict[str, object]) -> object: ...
+
+
+class _HtmlResponseFactory(Protocol):
+    def __call__(self, content: str) -> object: ...
+
+
+class _FileResponseFactory(Protocol):
+    def __call__(self, path: str) -> object: ...
+
+
+def build_router(*, engine: object):
     try:
         from fastapi import APIRouter
         from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
     except Exception as e:  # pragma: no cover
         raise RuntimeError("fastapi is required for import UI router") from e
 
-    from .engine import _exception_envelope
+    from .engine import ImportWizardEngine, _exception_envelope
     from .engine_diagnostics_required import start_process_runtime
     from .engine_session_start_boundary import ALLOWED_USER_START_INTENTS, start_user_facing_session
     from .field_schema_validation import FieldSchemaValidationError
     from .session_effective_model import EffectiveModelJsonError
     from .ui_editor_api import bind_editor_routes
 
-    start_process_runtime(engine=engine)
+    engine_api = cast(_UiEngine, engine)
+    engine_start = cast(ImportWizardEngine, engine)
+
+    start_process_runtime(engine=engine_api)
     router = APIRouter(prefix="/import/ui")
+    route_registrar = cast(_RouteRegistrar, router)
+    json_response = cast(_JsonResponseFactory, JSONResponse)
+    html_response = cast(_HtmlResponseFactory, HTMLResponse)
+    file_response = cast(_FileResponseFactory, FileResponse)
 
     base_dir = Path(__file__).resolve().parent
     ui_web_dir = base_dir / "ui" / "web"
     assets_dir = ui_web_dir / "assets"
 
-    @router.get("/assets/{asset_path:path}")
-    def ui_asset(asset_path: str):
+    def ui_asset(asset_path: str) -> object:
         if not assets_dir.is_dir():
-            return JSONResponse(status_code=404, content={"error": {"code": "NOT_FOUND"}})
+            return json_response(status_code=404, content={"error": {"code": "NOT_FOUND"}})
 
         rel = Path(asset_path)
         if rel.is_absolute() or ".." in rel.parts:
-            return JSONResponse(status_code=404, content={"error": {"code": "NOT_FOUND"}})
+            return json_response(status_code=404, content={"error": {"code": "NOT_FOUND"}})
 
         root = assets_dir.resolve()
         candidate = (assets_dir / rel).resolve()
         try:
             candidate.relative_to(root)
         except ValueError:
-            return JSONResponse(status_code=404, content={"error": {"code": "NOT_FOUND"}})
+            return json_response(status_code=404, content={"error": {"code": "NOT_FOUND"}})
 
         if not candidate.is_file():
-            return JSONResponse(status_code=404, content={"error": {"code": "NOT_FOUND"}})
+            return json_response(status_code=404, content={"error": {"code": "NOT_FOUND"}})
 
-        return FileResponse(str(candidate))
+        return file_response(str(candidate))
 
     session_start_allowed_keys = {"intent", "mode", "path", "root"}
     session_start_required_keys = {"mode", "path", "root"}
     session_start_allowed_modes = {"inplace", "stage"}
 
-    def _validate_session_start_body(body: Any) -> tuple[str, str, str, str | None]:
-        if not isinstance(body, dict):
+    def _validate_session_start_body(body: object) -> tuple[str, str, str, str | None]:
+        if not _is_str_object_dict(body):
             raise FieldSchemaValidationError(
                 message="request body must be an object",
                 path="$",
@@ -66,7 +117,9 @@ def build_router(*, engine: Any):
                 meta={},
             )
 
-        keys = {k for k in body if isinstance(k, str)}
+        payload = dict(body)
+
+        keys = set(payload)
         unknown = sorted(keys - session_start_allowed_keys)
         if unknown:
             key = unknown[0]
@@ -90,7 +143,7 @@ def build_router(*, engine: Any):
                 meta={"required": sorted(session_start_required_keys)},
             )
 
-        root = body.get("root")
+        root = payload.get("root")
         if not isinstance(root, str) or not root:
             raise FieldSchemaValidationError(
                 message="root must be a non-empty string",
@@ -99,7 +152,7 @@ def build_router(*, engine: Any):
                 meta={},
             )
 
-        path = body.get("path")
+        path = payload.get("path")
         if not isinstance(path, str) or not path:
             raise FieldSchemaValidationError(
                 message="path must be a non-empty string",
@@ -108,7 +161,7 @@ def build_router(*, engine: Any):
                 meta={},
             )
 
-        mode = body.get("mode")
+        mode = payload.get("mode")
         if not isinstance(mode, str) or not mode:
             raise FieldSchemaValidationError(
                 message="mode must be a non-empty string",
@@ -127,7 +180,7 @@ def build_router(*, engine: Any):
                 },
             )
 
-        intent = body.get("intent")
+        intent = payload.get("intent")
         if intent is not None:
             if not isinstance(intent, str) or not intent:
                 raise FieldSchemaValidationError(
@@ -146,9 +199,9 @@ def build_router(*, engine: Any):
 
         return root, path, mode, intent
 
-    def _status_code_for_envelope(envelope: dict[str, Any]) -> int:
+    def _status_code_for_envelope(envelope: dict[str, object]) -> int:
         err = envelope.get("error")
-        if not isinstance(err, dict):
+        if not _is_str_object_dict(err):
             return 500
         code = err.get("code")
         if code == "NOT_FOUND":
@@ -161,9 +214,9 @@ def build_router(*, engine: Any):
             return 500
         return 500
 
-    def _as_response(result: Any):
-        if isinstance(result, dict) and "error" in result:
-            return JSONResponse(
+    def _as_response(result: object) -> object:
+        if _is_str_object_dict(result) and "error" in result:
+            return json_response(
                 status_code=_status_code_for_envelope(result),
                 content=result,
             )
@@ -178,11 +231,11 @@ def build_router(*, engine: Any):
             return "invalid_type"
         return "invalid"
 
-    def _call(handler):
+    def _call(handler: Callable[[], object]) -> object:
         try:
             return _as_response(handler())
         except EffectiveModelJsonError as e:
-            env = {
+            env: dict[str, object] = {
                 "error": {
                     "code": "VALIDATION_ERROR",
                     "message": str(e),
@@ -195,16 +248,18 @@ def build_router(*, engine: Any):
                     ],
                 }
             }
-            return JSONResponse(status_code=400, content=env)
+            return json_response(status_code=400, content=env)
         except Exception as e:
-            env = _exception_envelope(e)
-            return JSONResponse(status_code=_status_code_for_envelope(env), content=env)
+            env_error: dict[str, object] = _exception_envelope(e)
+            return json_response(
+                status_code=_status_code_for_envelope(env_error),
+                content=env_error,
+            )
 
-    @router.get("/")
-    def ui_index():
+    def ui_index() -> object:
         idx = ui_web_dir / "index.html"
         if not idx.is_file():
-            env = {
+            env: dict[str, object] = {
                 "error": {
                     "code": "NOT_FOUND",
                     "message": "import UI index.html is missing",
@@ -217,21 +272,19 @@ def build_router(*, engine: Any):
                     ],
                 }
             }
-            return JSONResponse(status_code=404, content=env)
-        return HTMLResponse(idx.read_text(encoding="utf-8"))
+            return json_response(status_code=404, content=env)
+        return html_response(idx.read_text(encoding="utf-8"))
 
-    @router.get("/flow")
-    def get_flow():
-        return _call(lambda: engine.get_flow_model())
+    def get_flow() -> object:
+        return _call(lambda: engine_api.get_flow_model())
 
-    bind_editor_routes(router=router, engine=engine, call=_call)
+    bind_editor_routes(router=router, engine=engine_api, call=_call)
 
-    @router.post("/session/start")
-    def session_start(body: dict[str, Any]):
-        def _impl():
+    def session_start(body: dict[str, object]) -> object:
+        def _impl() -> dict[str, object]:
             root, path, mode, intent = _validate_session_start_body(body)
             return start_user_facing_session(
-                engine=engine,
+                engine=engine_start,
                 root=root,
                 relative_path=path,
                 mode=mode,
@@ -240,24 +293,45 @@ def build_router(*, engine: Any):
 
         return _call(_impl)
 
-    @router.get("/session/{session_id}/state")
-    def session_state(session_id: str):
-        return _call(lambda: engine.get_state(session_id))
+    def session_state(session_id: str) -> object:
+        return _call(lambda: engine_api.get_state(session_id))
 
-    @router.get("/session/{session_id}/step/{step_id}")
-    def step_definition(session_id: str, step_id: str):
-        return _call(lambda: engine.get_step_definition(session_id, step_id))
+    def step_definition(session_id: str, step_id: str) -> object:
+        return _call(lambda: engine_api.get_step_definition(session_id, step_id))
 
-    @router.post("/session/{session_id}/step/{step_id}")
-    def step_submit(session_id: str, step_id: str, body: dict[str, Any]):
-        return _call(lambda: engine.submit_step(session_id, step_id, body))
+    def step_submit(session_id: str, step_id: str, body: dict[str, object]) -> object:
+        return _call(lambda: engine_api.submit_step(session_id, step_id, body))
 
-    @router.post("/session/{session_id}/preview/{step_id}")
-    def step_preview(session_id: str, step_id: str, body: dict[str, Any]):
-        return _call(lambda: engine.preview_action(session_id, step_id, body))
+    def step_preview(session_id: str, step_id: str, body: dict[str, object]) -> object:
+        return _call(lambda: engine_api.preview_action(session_id, step_id, body))
 
-    @router.post("/session/{session_id}/start_processing")
-    def start_processing(session_id: str, body: dict[str, Any]):
-        return _call(lambda: engine.start_processing(session_id, body))
+    def start_processing(session_id: str, body: dict[str, object]) -> object:
+        return _call(lambda: engine_api.start_processing(session_id, body))
+
+    route_registrar.add_api_route("/assets/{asset_path:path}", ui_asset, methods=["GET"])
+    route_registrar.add_api_route("/", ui_index, methods=["GET"])
+    route_registrar.add_api_route("/flow", get_flow, methods=["GET"])
+    route_registrar.add_api_route("/session/start", session_start, methods=["POST"])
+    route_registrar.add_api_route("/session/{session_id}/state", session_state, methods=["GET"])
+    route_registrar.add_api_route(
+        "/session/{session_id}/step/{step_id}",
+        step_definition,
+        methods=["GET"],
+    )
+    route_registrar.add_api_route(
+        "/session/{session_id}/step/{step_id}",
+        step_submit,
+        methods=["POST"],
+    )
+    route_registrar.add_api_route(
+        "/session/{session_id}/preview/{step_id}",
+        step_preview,
+        methods=["POST"],
+    )
+    route_registrar.add_api_route(
+        "/session/{session_id}/start_processing",
+        start_processing,
+        methods=["POST"],
+    )
 
     return router

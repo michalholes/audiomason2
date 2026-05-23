@@ -8,12 +8,21 @@ from __future__ import annotations
 import shutil
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import TypeGuard
 
 from audiomason.core import PluginLoader
 from audiomason.core.config_service import ConfigService
 from audiomason.core.errors import PluginError
 from audiomason.core.plugin_registry import PluginRegistry
+from audiomason.core.serde import yaml_safe_load_stream
+
+
+def _path_name(path: Path) -> str:
+    return path.name
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict)
 
 
 class PluginAPI:
@@ -38,15 +47,15 @@ class PluginAPI:
         self._registry = registry or PluginRegistry(self._config_service)
         self.loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=self._registry)
 
-    def list_plugins(self) -> list[dict[str, Any]]:
+    def list_plugins(self) -> list[dict[str, object]]:
         """List all plugins.
 
         Returns:
             List of plugin info dicts
         """
-        plugins: list[dict[str, Any]] = []
+        plugins: list[dict[str, object]] = []
 
-        for plugin_dir in sorted(self.plugins_dir.iterdir(), key=lambda p: p.name):
+        for plugin_dir in sorted(self.plugins_dir.iterdir(), key=_path_name):
             if not plugin_dir.is_dir():
                 continue
 
@@ -71,7 +80,7 @@ class PluginAPI:
 
         return plugins
 
-    def get_plugin(self, name: str) -> dict[str, Any]:
+    def get_plugin(self, name: str) -> dict[str, object]:
         """Get plugin details.
 
         Args:
@@ -120,11 +129,11 @@ class PluginAPI:
 
         return {"message": f"Plugin '{name}' deleted"}
 
-    def get_plugin_config(self, name: str) -> dict[str, Any]:
+    def get_plugin_config(self, name: str) -> dict[str, object]:
         """Get plugin configuration."""
         return self._registry.get_plugin_config(name)
 
-    def update_plugin_config(self, name: str, config: dict[str, Any]) -> dict[str, str]:
+    def update_plugin_config(self, name: str, config: dict[str, object]) -> dict[str, str]:
         """Update plugin configuration."""
         self._registry.set_plugin_config(name, config)
         return {"message": f"Plugin '{name}' configuration updated"}
@@ -168,14 +177,16 @@ class PluginAPI:
 
             plugin_dir = plugin_yaml.parent
 
-            import yaml
-
             with open(plugin_yaml) as f:
-                manifest = yaml.safe_load(f)
+                manifest = yaml_safe_load_stream(f)
 
-            plugin_name = manifest.get("name")
-            if not plugin_name:
+            if not _is_str_object_dict(manifest):
+                raise PluginError("Invalid plugin manifest in ZIP")
+
+            plugin_name_raw = manifest.get("name")
+            if not isinstance(plugin_name_raw, str) or not plugin_name_raw:
                 raise PluginError("Plugin name not specified in manifest")
+            plugin_name = plugin_name_raw
 
             target_dir = self.plugins_dir / plugin_name
             if target_dir.exists():

@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import tarfile
 import zipfile
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Literal, cast
 
@@ -116,10 +116,15 @@ def _tarinfo_deterministic(name: str, size: int) -> tarfile.TarInfo:
 
 
 def _local_path(fs: FileService, root: RootName, rel_path: str) -> Path:
-    resolver = getattr(fs, "_resolve_local_path", None)
-    if callable(resolver):
-        return cast(Callable[[RootName, str], Path], resolver)(root, rel_path)
-    return fs.resolve_abs_path(root, rel_path)
+    return fs._resolve_local_path(root, rel_path)
+
+
+def _zipinfo_filename(info: zipfile.ZipInfo) -> str:
+    return info.filename
+
+
+def _tarinfo_name(info: tarfile.TarInfo) -> str:
+    return info.name
 
 
 class ArchiveService:
@@ -669,9 +674,7 @@ class ArchiveService:
         total = 0
         used: set[str] = set()
         with zipfile.ZipFile(abs_src, "r") as zf:
-            for info in sorted(
-                [i for i in zf.infolist() if not i.is_dir()], key=lambda x: x.filename
-            ):
+            for info in sorted([i for i in zf.infolist() if not i.is_dir()], key=_zipinfo_filename):
                 name = info.filename
                 out = name if preserve_tree and not flatten else _apply_flatten(name)
                 out = out.lstrip("/")
@@ -716,7 +719,7 @@ class ArchiveService:
         used: set[str] = set()
         with tarfile.open(name=str(abs_src), mode=mode) as tf:
             members = [m for m in tf.getmembers() if m.isfile()]
-            for m in sorted(members, key=lambda x: x.name):
+            for m in sorted(members, key=_tarinfo_name):
                 name = m.name
                 out = name if preserve_tree and not flatten else _apply_flatten(name)
                 out = out.lstrip("/")
@@ -784,7 +787,11 @@ class ArchiveService:
 
     def _flatten_dir(self, base: Path, *, collision: CollisionPolicy) -> list[Path]:
         files = [p for p in base.rglob("*") if p.is_file()]
-        files_sorted = sorted(files, key=lambda p: str(p.relative_to(base)).replace(os.sep, "/"))
+
+        def _relative_path_key(path: Path) -> str:
+            return str(path.relative_to(base)).replace(os.sep, "/")
+
+        files_sorted = sorted(files, key=_relative_path_key)
         used: set[str] = set()
         out_files: list[Path] = []
         for p in files_sorted:

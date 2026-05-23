@@ -11,7 +11,7 @@ from __future__ import annotations
 import shutil
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Protocol, TypeGuard, cast
 
 from audiomason.core.diagnostics import build_envelope
 from audiomason.core.events import get_event_bus as _core_get_event_bus
@@ -21,6 +21,8 @@ from audiomason.core.jobs.store import JobStore
 from audiomason.core.orchestration import Orchestrator
 from audiomason.core.process_contract_authority import _ContractPluginLoader
 from audiomason.core.process_job_contracts import IMPORT_PROCESS_CONTRACT_ID
+from plugins.file_io.service import FileService
+from plugins.file_io.service.types import RootName
 
 from .detached_runtime import (
     DetachedImportRuntime,
@@ -33,10 +35,44 @@ _METADATA_OPENLIBRARY_TIMEOUT_SECONDS = 2.0
 
 
 class _EventBus(Protocol):
-    def publish(self, event: str, payload: dict[str, Any]) -> None: ...
+    def publish(self, event: str, payload: dict[str, object]) -> None: ...
 
 
-def _detached_runtime_from_meta(*, job_meta: dict[str, Any]) -> DetachedImportRuntime | None:
+class _SupportsFileService(Protocol):
+    def get_file_service(self) -> FileService: ...
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _to_int_or_default(value: object, default: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _to_float_or_default(value: object, default: float) -> float:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _detached_runtime_from_meta(*, job_meta: dict[str, object]) -> DetachedImportRuntime | None:
     try:
         bootstrap = load_detached_runtime_bootstrap_from_meta(job_meta=job_meta)
     except Exception:
@@ -47,24 +83,24 @@ def _detached_runtime_from_meta(*, job_meta: dict[str, Any]) -> DetachedImportRu
         return None
 
 
-def _jobs_root_from_meta(*, job_meta: dict[str, Any]) -> Path | None:
+def _jobs_root_from_meta(*, job_meta: dict[str, object]) -> Path | None:
     runtime = _detached_runtime_from_meta(job_meta=job_meta)
     if runtime is None:
         return None
-    root_name = import_module("plugins.file_io.service").RootName.JOBS
+    root_name = RootName.JOBS
     return materialize_root_dir(runtime.get_file_service(), root_name)
 
 
-def _job_service_for_meta(*, job_meta: dict[str, Any]) -> JobService:
+def _job_service_for_meta(*, job_meta: dict[str, object]) -> JobService:
     jobs_root = _jobs_root_from_meta(job_meta=job_meta)
     if jobs_root is None:
         return JobService()
     return JobService(store=JobStore(root=jobs_root))
 
 
-def _job_service_for_engine(*, engine: object) -> JobService:
-    fs = cast(Any, engine).get_file_service()
-    root_name = import_module("plugins.file_io.service").RootName.JOBS
+def _job_service_for_engine(*, engine: _SupportsFileService) -> JobService:
+    fs = engine.get_file_service()
+    root_name = RootName.JOBS
     return JobService(store=JobStore(root=materialize_root_dir(fs, root_name)))
 
 
@@ -98,8 +134,8 @@ def emit_required(
     *,
     event: str,
     operation: str,
-    data: dict[str, Any],
-    required_ctx: dict[str, Any] | None,
+    data: dict[str, object],
+    required_ctx: dict[str, object] | None,
 ) -> None:
     """Emit diagnostics with required context fields.
 
@@ -142,10 +178,11 @@ def _get_bus() -> _EventBus:
     # Prefer the import engine test seam when present.
     try:
         engine_mod = import_module("plugins.import.engine")
-        fn = getattr(engine_mod, "get_event_bus", None)
+        fn = cast(object, getattr(engine_mod, "get_event_bus", None))
         if callable(fn):
-            bus = fn()
-            if callable(getattr(bus, "publish", None)):
+            bus = cast(object, fn())
+            publish = cast(object, getattr(bus, "publish", None))
+            if callable(publish):
                 return cast(_EventBus, bus)
     except Exception:
         pass
@@ -153,7 +190,7 @@ def _get_bus() -> _EventBus:
 
 
 class _RuntimeImportPlugin:
-    def __init__(self, *, engine: object) -> None:
+    def __init__(self, *, engine: _SupportsFileService) -> None:
         self._engine = engine
 
     async def run_process_contract(
@@ -193,37 +230,47 @@ class _ProcessContractPluginLoader:
         return list(self._plugins.keys())
 
 
-def _plugin_loader(*, engine: object) -> _ProcessContractPluginLoader:
+def _plugin_loader(*, engine: _SupportsFileService) -> _ProcessContractPluginLoader:
     loader = _ProcessContractPluginLoader()
     loader.add_plugin("import", _RuntimeImportPlugin(engine=engine))
     return loader
 
 
 def resolve_import_plugin(*, plugin_name: str) -> object:
-    loader = _ContractPluginLoader(job_meta={}, contract_plugin_name=plugin_name)
+    empty_meta: dict[str, str] = {}
+    loader = _ContractPluginLoader(job_meta=empty_meta, contract_plugin_name=plugin_name)
     plugin = loader.get_plugin(plugin_name)
     if plugin_name == "metadata_openlibrary":
         tuned_plugin = cast(_MetadataOpenLibraryTuningPlugin, plugin)
-        default_max_bytes = getattr(
-            plugin,
-            "DEFAULT_MAX_RESPONSE_BYTES",
+        empty_config: dict[str, object] = {}
+        default_max_bytes = _to_int_or_default(
+            cast(
+                object,
+                getattr(
+                    plugin,
+                    "DEFAULT_MAX_RESPONSE_BYTES",
+                    2 * 1024 * 1024,
+                ),
+            ),
             2 * 1024 * 1024,
         )
-        config = dict(getattr(plugin, "config", {}) or {})
+        config = _as_str_object_dict(
+            cast(
+                object,
+                getattr(plugin, "config", empty_config),
+            )
+        )
         config["timeout_seconds"] = _METADATA_OPENLIBRARY_TIMEOUT_SECONDS
-        try:
-            config["max_response_bytes"] = int(default_max_bytes)
-        except (TypeError, ValueError):
-            config["max_response_bytes"] = 2 * 1024 * 1024
+        config["max_response_bytes"] = default_max_bytes
         tuned_plugin.config = config
-        try:
-            tuned_plugin.timeout_seconds = float(config["timeout_seconds"])
-        except (TypeError, ValueError):
-            tuned_plugin.timeout_seconds = _METADATA_OPENLIBRARY_TIMEOUT_SECONDS
-        try:
-            tuned_plugin.max_response_bytes = int(config["max_response_bytes"])
-        except (TypeError, ValueError):
-            tuned_plugin.max_response_bytes = 2 * 1024 * 1024
+        tuned_plugin.timeout_seconds = _to_float_or_default(
+            config.get("timeout_seconds"),
+            _METADATA_OPENLIBRARY_TIMEOUT_SECONDS,
+        )
+        tuned_plugin.max_response_bytes = _to_int_or_default(
+            config.get("max_response_bytes"),
+            2 * 1024 * 1024,
+        )
     return plugin
 
 
@@ -236,7 +283,7 @@ def _ensure_required_process_plugins(*, loader: _ProcessContractPluginLoader) ->
 
 
 def build_process_contract_plugin_loader(
-    *, job_meta: dict[str, Any]
+    *, job_meta: dict[str, object]
 ) -> _ProcessContractPluginLoader:
     runtime = _detached_runtime_from_meta(job_meta=job_meta)
     if runtime is None:
@@ -246,7 +293,7 @@ def build_process_contract_plugin_loader(
     return loader
 
 
-def start_process_runtime(*, engine: object | None = None) -> None:
+def start_process_runtime(*, engine: _SupportsFileService | None = None) -> None:
     try:
         if engine is None:
             Orchestrator().start_process_runtime()
@@ -257,7 +304,7 @@ def start_process_runtime(*, engine: object | None = None) -> None:
         return
 
 
-def create_process_job(*, meta: dict[str, Any]) -> str:
+def create_process_job(*, meta: dict[str, object]) -> str:
     """Create a PROCESS job and return job_id.
 
     This is a thin core-facing facade to keep core imports out of engine.py.
@@ -266,12 +313,13 @@ def create_process_job(*, meta: dict[str, Any]) -> str:
     payload = dict(meta)
     payload.setdefault("contract_id", IMPORT_PROCESS_CONTRACT_ID)
     service = _job_service_for_meta(job_meta=payload)
-    job = service.create_job(JobType.PROCESS, meta=payload)
+    payload_meta = {key: str(value) for key, value in payload.items()}
+    job = service.create_job(JobType.PROCESS, meta=payload_meta)
     _link_job_alias(job_id=str(job.job_id), primary=service)
     return str(job.job_id)
 
 
-def submit_process_job(*, engine: object, job_id: str, verbosity: int = 1) -> None:
+def submit_process_job(*, engine: _SupportsFileService, job_id: str, verbosity: int = 1) -> None:
     """Submit an existing PROCESS job through core orchestration."""
 
     orch = Orchestrator(job_service=_job_service_for_engine(engine=engine))

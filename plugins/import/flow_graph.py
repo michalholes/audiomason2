@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, TypeGuard
+from typing import TypeGuard
 
 from .conditions import eval_condition, find_invalid_condition_path
 from .errors import FinalizeError
@@ -25,7 +25,7 @@ MAX_TRANSITION_HOPS = 50
 class FlowEdge:
     from_step_id: str
     to_step_id: str
-    when: Any | None = None
+    when: object | None = None
     priority: int = 0
 
 
@@ -40,8 +40,12 @@ class FlowGraph:
         return tuple(e for e in self.edges if e.from_step_id == step_id)
 
 
+def _edge_priority(edge: FlowEdge) -> int:
+    return edge.priority
+
+
 def normalize_to_graph(
-    wizard_definition: dict[str, Any],
+    wizard_definition: dict[str, object],
     *,
     known_step_ids: set[str],
 ) -> FlowGraph:
@@ -239,17 +243,17 @@ def select_next_step(
     current_step_id: str,
     state_view: FlowGraphStateView,
     is_step_enabled: Callable[[str], bool],
-    debug_log: Callable[[str, dict[str, Any]], None] | None = None,
+    debug_log: Callable[[str, dict[str, object]], None] | None = None,
 ) -> str:
     if current_step_id not in graph.nodes:
         raise FinalizeError(f"unknown current_step_id: {current_step_id}")
 
-    edges = tuple(sorted(graph.outgoing(current_step_id), key=lambda e: e.priority))
+    edges = tuple(sorted(graph.outgoing(current_step_id), key=_edge_priority))
 
-    evaluated_edges: list[dict[str, Any]] = []
+    evaluated_edges: list[dict[str, object]] = []
     matched_edges: list[FlowEdge] = []
 
-    def _warn(kind: str, payload: dict[str, Any]) -> None:
+    def _warn(kind: str, payload: dict[str, object]) -> None:
         if debug_log is None:
             return
         debug_log(kind, dict(payload))
@@ -465,7 +469,7 @@ def _inject_conflict_rules(graph: FlowGraph) -> FlowGraph:
 _CONFLICT_FROM_IDS: set[str] = {"final_summary_confirm", "resolve_conflicts_batch"}
 
 
-def _summarize_when(when: Any | None) -> str:
+def _summarize_when(when: object | None) -> str:
     if when is None:
         return "<unconditional>"
     if isinstance(when, bool):
@@ -511,5 +515,5 @@ def _validate_graph(graph: FlowGraph) -> None:
                 )
 
 
-def _is_strict_int(v: Any) -> TypeGuard[int]:
+def _is_strict_int(v: object) -> TypeGuard[int]:
     return isinstance(v, int) and not isinstance(v, bool)

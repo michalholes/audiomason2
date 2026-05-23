@@ -9,7 +9,6 @@ from __future__ import annotations
 import traceback
 from collections import defaultdict
 from collections.abc import Callable
-from typing import Any
 
 from audiomason.core.logging import get_logger
 
@@ -37,10 +36,10 @@ class EventBus:
 
     def __init__(self) -> None:
         """Initialize event bus."""
-        self._subscribers: dict[str, list[Callable[[dict[str, Any]], None]]] = defaultdict(list)
-        self._all_subscribers: list[Callable[[str, dict[str, Any]], None]] = []
+        self._subscribers: dict[str, list[Callable[[dict[str, object]], None]]] = defaultdict(list)
+        self._all_subscribers: list[Callable[[str, dict[str, object]], None]] = []
 
-    def subscribe(self, event: str, callback: Callable[[dict[str, Any]], None]) -> None:
+    def subscribe(self, event: str, callback: Callable[[dict[str, object]], None]) -> None:
         """Subscribe to an event.
 
         Args:
@@ -49,7 +48,7 @@ class EventBus:
         """
         self._subscribers[event].append(callback)
 
-    def unsubscribe(self, event: str, callback: Callable[[dict[str, Any]], None]) -> None:
+    def unsubscribe(self, event: str, callback: Callable[[dict[str, object]], None]) -> None:
         """Unsubscribe from an event.
 
         Args:
@@ -59,7 +58,7 @@ class EventBus:
         if event in self._subscribers:
             self._subscribers[event].remove(callback)
 
-    def subscribe_all(self, callback: Callable[[str, dict[str, Any]], None]) -> None:
+    def subscribe_all(self, callback: Callable[[str, dict[str, object]], None]) -> None:
         """Subscribe to all published events.
 
         Args:
@@ -67,7 +66,7 @@ class EventBus:
         """
         self._all_subscribers.append(callback)
 
-    def publish(self, event: str, data: dict[str, Any] | None = None) -> None:
+    def publish(self, event: str, data: dict[str, object] | None = None) -> None:
         """Publish an event.
 
         Args:
@@ -103,7 +102,7 @@ class EventBus:
                 )
                 _logger.error(msg)
 
-    async def publish_async(self, event: str, data: dict[str, Any] | None = None) -> None:
+    async def publish_async(self, event: str, data: dict[str, object] | None = None) -> None:
         """Publish an event asynchronously.
 
         Args:

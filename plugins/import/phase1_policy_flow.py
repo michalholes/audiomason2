@@ -6,26 +6,39 @@ ASCII-only.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import TypeGuard
 
-DEFAULT_AUDIO_POLICY = {
+DEFAULT_AUDIO_POLICY: dict[str, object] = {
     "bitrate": "128k",
     "loudnorm": False,
     "split_chapters": False,
 }
-DEFAULT_PARALLELISM = {"workers": 1}
-DEFAULT_SKIP_PROCESSED_BOOKS = {"mode": "no", "enabled": False}
-_ROOT_AUDIO_BASELINE = {"author": "__ROOT_AUDIO__", "title": "Untitled"}
+DEFAULT_PARALLELISM: dict[str, object] = {"workers": 1}
+DEFAULT_SKIP_PROCESSED_BOOKS: dict[str, object] = {"mode": "no", "enabled": False}
+_ROOT_AUDIO_BASELINE: dict[str, object] = {"author": "__ROOT_AUDIO__", "title": "Untitled"}
 
 
-def _answer_dict(state: dict[str, Any], key: str) -> dict[str, Any]:
-    answers_any = state.get("answers")
-    answers = dict(answers_any) if isinstance(answers_any, dict) else {}
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _as_str_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _answer_dict(state: dict[str, object], key: str) -> dict[str, object]:
+    answers = _as_str_object_dict(state.get("answers"))
     value = answers.get(key)
-    return dict(value) if isinstance(value, dict) else {}
+    return _as_str_object_dict(value)
 
 
-def _normalize_clean_inbox(answer: dict[str, Any]) -> str:
+def _normalize_clean_inbox(answer: dict[str, object]) -> str:
     clean_inbox = str(answer.get("clean_inbox") or "").strip().lower()
     if clean_inbox in {"ask", "yes", "no"}:
         return clean_inbox
@@ -40,7 +53,7 @@ def _normalize_clean_inbox(answer: dict[str, Any]) -> str:
     return "ask"
 
 
-def _normalize_skip_processed_books(answer: dict[str, Any]) -> dict[str, Any]:
+def _normalize_skip_processed_books(answer: dict[str, object]) -> dict[str, object]:
     mode = str(answer.get("mode") or "").strip().lower()
     if mode in {"yes", "no"}:
         return {"mode": mode, "enabled": mode == "yes"}
@@ -52,28 +65,26 @@ def _normalize_skip_processed_books(answer: dict[str, Any]) -> dict[str, Any]:
 
 def build_phase1_policy_projection(
     *,
-    state: dict[str, Any],
-    source_projection: dict[str, Any],
-) -> dict[str, Any]:
+    state: dict[str, object],
+    source_projection: dict[str, object],
+) -> dict[str, object]:
     mode = str(state.get("mode") or "stage")
     target_root = "stage" if mode == "stage" else "outbox"
-    selected_any = source_projection.get("select_books")
-    selected = dict(selected_any) if isinstance(selected_any, dict) else {}
-    selected_ids_any = selected.get("selected_ids")
-    selected_count = len(selected_ids_any) if isinstance(selected_ids_any, list) else 0
+    selected = _as_str_object_dict(source_projection.get("select_books"))
+    selected_count = len(_as_str_list(selected.get("selected_ids")))
 
-    conflict_policy = {"mode": "ask"}
+    conflict_policy: dict[str, object] = {"mode": "ask"}
     conflict_policy.update(_answer_dict(state, "conflict_policy"))
 
-    audio_processing = deepcopy(DEFAULT_AUDIO_POLICY)
+    audio_processing: dict[str, object] = deepcopy(DEFAULT_AUDIO_POLICY)
     audio_processing.update(_answer_dict(state, "audio_processing"))
 
-    publish_policy = {"target_root": target_root}
+    publish_policy: dict[str, object] = {"target_root": target_root}
     publish_policy.update(_answer_dict(state, "publish_policy"))
 
     delete_source_answer = _answer_dict(state, "delete_source_policy")
     clean_inbox = _normalize_clean_inbox(delete_source_answer)
-    delete_source_policy = {
+    delete_source_policy: dict[str, object] = {
         "clean_inbox": clean_inbox,
         "enabled": clean_inbox == "yes",
         "mode": "delete" if clean_inbox == "yes" else ("keep" if clean_inbox == "no" else "ask"),
@@ -85,7 +96,7 @@ def build_phase1_policy_projection(
         "delete" if clean_inbox == "yes" else ("keep" if clean_inbox == "no" else "ask")
     )
 
-    parallelism = deepcopy(DEFAULT_PARALLELISM)
+    parallelism: dict[str, object] = deepcopy(DEFAULT_PARALLELISM)
     parallelism.update(_answer_dict(state, "parallelism"))
 
     skip_processed_books_policy = _normalize_skip_processed_books(

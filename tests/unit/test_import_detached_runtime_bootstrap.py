@@ -4,7 +4,6 @@ import json
 import os
 from importlib import import_module
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -50,13 +49,13 @@ class _FakeAudioProcessor:
         source: Path,
         output_dir: Path,
         *,
-        chapters: list[dict[str, Any]] | None = None,
-    ) -> list[dict[str, Any]]:
+        chapters: list[dict[str, object]] | None = None,
+    ) -> list[dict[str, object]]:
         del chapters
         self.calls.append(f"audio.plan:{source.name}")
         return [{"source": source, "output": output_dir / f"{source.stem}.mp3", "order": 1}]
 
-    async def _execute_plan(self, plan: list[dict[str, Any]]) -> list[Path]:
+    async def _execute_plan(self, plan: list[dict[str, object]]) -> list[Path]:
         outputs: list[Path] = []
         for item in plan:
             output = Path(item["output"])
@@ -73,7 +72,7 @@ class _FakeCoverHandler:
 
     async def apply_cover_candidate(
         self,
-        candidate: dict[str, Any],
+        candidate: dict[str, object],
         *,
         output_dir: Path | None = None,
     ) -> Path | None:
@@ -104,7 +103,7 @@ class _FakeID3Tagger:
     async def write_tags(
         self,
         mp3_file: Path,
-        tags: dict[str, Any],
+        tags: dict[str, object],
         *,
         wipe_before_write: bool = True,
         preserve_cover: bool = True,
@@ -117,7 +116,7 @@ class _FakeID3Tagger:
 
 
 class _FakeLoader:
-    def __init__(self, import_plugin: Any, calls: list[str]) -> None:
+    def __init__(self, import_plugin: object, calls: list[str]) -> None:
         self._plugins = {
             "import": import_plugin,
             "audio_processor": _FakeAudioProcessor(calls),
@@ -125,7 +124,7 @@ class _FakeLoader:
             "id3_tagger": _FakeID3Tagger(calls),
         }
 
-    def get_plugin(self, name: str) -> Any:
+    def get_plugin(self, name: str) -> object:
         return self._plugins[name]
 
 
@@ -166,7 +165,7 @@ def _resolver_for_roots(tmp_path: Path, roots: dict[str, Path]) -> ConfigResolve
     )
 
 
-def _make_plugin(tmp_path: Path, roots: dict[str, Path]) -> Any:
+def _make_plugin(tmp_path: Path, roots: dict[str, Path]) -> object:
     return ImportPlugin(resolver=_resolver_for_roots(tmp_path, roots))
 
 
@@ -202,7 +201,7 @@ def _mutate_state_for_finalize(roots: dict[str, Path], session_id: str) -> None:
 def _prepare_pending_process_job(
     tmp_path: Path,
     monkeypatch,
-) -> tuple[Any, dict[str, Path], str, str, dict[str, Any]]:
+) -> tuple[object, dict[str, Path], str, str, dict[str, object]]:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     roots = _roots(tmp_path, prefix="host")
     plugin = _make_plugin(tmp_path, roots)
@@ -320,7 +319,7 @@ def test_detached_process_loader_completes_finalize_without_parent_subscriber(
     runtime_plugin_cls = diag_mod._ImportProcessRuntimePlugin
     calls: list[str] = []
 
-    def _fake_loader_factory(*, engine: Any) -> _FakeLoader:
+    def _fake_loader_factory(*, engine: object) -> _FakeLoader:
         return _FakeLoader(runtime_plugin_cls(engine=engine), calls)
 
     monkeypatch.setattr(diag_mod, "_plugin_loader", _fake_loader_factory)
@@ -330,7 +329,7 @@ def test_detached_process_loader_completes_finalize_without_parent_subscriber(
     real_apply = completion_mod.apply_successful_process_completion
     completion_calls: list[str] = []
 
-    def _count_apply(**kwargs: Any) -> dict[str, Any] | None:
+    def _count_apply(**kwargs: object) -> dict[str, object] | None:
         completion_calls.append(str(kwargs.get("job_id") or ""))
         return real_apply(**kwargs)
 

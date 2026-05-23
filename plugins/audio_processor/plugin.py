@@ -6,13 +6,13 @@ Based on AM1 audio.py functionality.
 from __future__ import annotations
 
 import asyncio
-import json
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import TypeGuard
 
 from audiomason.core import ProcessingContext
 from audiomason.core.errors import AudioMasonError
+from audiomason.core.serde import json_loads_object
 
 
 class FFmpegError(AudioMasonError):
@@ -26,22 +26,80 @@ _CONVERTIBLE_FORMATS = {".m4a", ".m4b", ".opus"}
 _CHAPTER_FORMATS = {".m4a", ".m4b"}
 
 
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _to_int_or_default(value: object, default: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _to_float_or_none(value: object) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _to_str_or_default(value: object, default: str) -> str:
+    return value if isinstance(value, str) and value else default
+
+
+def _to_bool(value: object) -> bool:
+    return value if isinstance(value, bool) else False
+
+
+def _require_path(action: dict[str, object], key: str) -> Path:
+    value = action.get(key)
+    if isinstance(value, Path):
+        return value
+    if isinstance(value, str) and value:
+        return Path(value)
+    raise FFmpegError(f"Invalid conversion action path: {key}")
+
+
+def _require_float(action: dict[str, object], key: str) -> float:
+    value = _to_float_or_none(action.get(key))
+    if value is None:
+        raise FFmpegError(f"Invalid conversion action numeric field: {key}")
+    return value
+
+
+def _action_order(action: dict[str, object]) -> int:
+    return _to_int_or_default(action.get("order"), 0)
+
+
 class AudioProcessorPlugin:
     """Audio processor plugin.
 
     Handles deterministic import conversion planning for Phase 2.
     """
 
-    def __init__(self, config: dict | None = None) -> None:
+    def __init__(self, config: dict[str, object] | None = None) -> None:
         """Initialize plugin.
 
         Args:
             config: Plugin configuration
         """
-        self.config = config or {}
-        self.bitrate = self.config.get("bitrate", "128k")
-        self.loudnorm = self.config.get("loudnorm", False)
-        self.split_chapters = self.config.get("split_chapters", False)
+        self.config = dict(config) if config is not None else {}
+        self.bitrate = _to_str_or_default(self.config.get("bitrate"), "128k")
+        self.loudnorm = _to_bool(self.config.get("loudnorm"))
+        self.split_chapters = _to_bool(self.config.get("split_chapters"))
 
     async def process(self, context: ProcessingContext) -> ProcessingContext:
         """Process audio file.
@@ -67,7 +125,7 @@ class AudioProcessorPlugin:
                 "Install with: sudo apt-get install ffmpeg",
             )
 
-        chapters: list[dict[str, Any]] = []
+        chapters: list[dict[str, object]] = []
         if fmt in _CHAPTER_FORMATS:
             chapters = await self._detect_chapters(source)
             context.add_warning(f"M4A file: {len(chapters)} chapter(s) detected")
@@ -90,8 +148,8 @@ class AudioProcessorPlugin:
         source: Path,
         output_dir: Path,
         *,
-        chapters: list[dict[str, Any]] | None = None,
-    ) -> list[dict[str, Any]]:
+        chapters: list[dict[str, object]] | None = None,
+    ) -> list[dict[str, object]]:
         """Return deterministic conversion actions for import runtime."""
         fmt = self.source_format(source)
         if fmt not in _SUPPORTED_FORMATS:
@@ -126,11 +184,11 @@ class AudioProcessorPlugin:
             }
         ]
 
-    def build_conversion_command(self, action: dict[str, Any]) -> list[str]:
+    def build_conversion_command(self, action: dict[str, object]) -> list[str]:
         """Build deterministic FFmpeg command for a planned action."""
         operation = str(action.get("operation") or "")
-        source = Path(action["source"])
-        output = Path(action["output"])
+        source = _require_path(action, "source")
+        output = _require_path(action, "output")
         if operation not in {"convert", "split_chapter"}:
             raise FFmpegError(f"Unsupported conversion action: {operation}")
 
@@ -143,8 +201,8 @@ class AudioProcessorPlugin:
             "-y",
         ]
         if operation == "split_chapter":
-            start = float(action["start_time"])
-            end = float(action["end_time"])
+            start = _require_float(action, "start_time")
+            end = _require_float(action, "end_time")
             cmd.extend(["-ss", str(start), "-i", str(source), "-t", str(end - start), "-vn"])
         else:
             cmd.extend(["-i", str(source), "-vn"])
@@ -167,27 +225,26 @@ class AudioProcessorPlugin:
         self,
         source: Path,
         output_dir: Path,
-        chapters: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
+        chapters: list[dict[str, object]],
+    ) -> list[dict[str, object]]:
         """Return deterministic chapter split actions when enabled."""
         if not self.split_chapters or len(chapters) < 2:
             return []
 
         normalized_chapters: list[tuple[float, float, int]] = []
         for original_index, chapter in enumerate(chapters):
-            try:
-                start = float(chapter["start_time"])
-                end = float(chapter["end_time"])
-            except Exception:
+            start = _to_float_or_none(chapter.get("start_time"))
+            end = _to_float_or_none(chapter.get("end_time"))
+            if start is None or end is None:
                 return []
             if end <= start:
                 return []
             normalized_chapters.append((start, end, original_index))
 
-        normalized_chapters.sort(key=lambda item: (item[0], item[1], item[2]))
+        normalized_chapters.sort()
 
         source_format = self.source_format(source)
-        plan: list[dict[str, Any]] = []
+        plan: list[dict[str, object]] = []
         for chapter_index, (start, end, _original_index) in enumerate(normalized_chapters, 1):
             plan.append(
                 {
@@ -205,14 +262,14 @@ class AudioProcessorPlugin:
             )
         return plan
 
-    async def _execute_plan(self, plan: list[dict[str, Any]]) -> list[Path]:
+    async def _execute_plan(self, plan: list[dict[str, object]]) -> list[Path]:
         """Execute planned actions in declared order."""
         outputs: list[Path] = []
-        for action in sorted(plan, key=lambda item: int(item.get("order", 0))):
+        for action in sorted(plan, key=_action_order):
             operation = str(action.get("operation") or "")
-            output = Path(action["output"])
+            output = _require_path(action, "output")
             if operation == "copy":
-                shutil.copy2(Path(action["source"]), output)
+                shutil.copy2(_require_path(action, "source"), output)
                 outputs.append(output)
                 continue
             cmd = self.build_conversion_command(action)
@@ -256,7 +313,7 @@ class AudioProcessorPlugin:
         plan = self.plan_import_conversion(context.source, stage_dir)
         context.converted_files.extend(await self._execute_plan(plan))
 
-    async def _detect_chapters(self, path: Path) -> list[dict[str, Any]]:
+    async def _detect_chapters(self, path: Path) -> list[dict[str, object]]:
         """Detect chapters using ffprobe."""
         cmd = [
             "ffprobe",
@@ -276,17 +333,18 @@ class AudioProcessorPlugin:
             stdout, _stderr = await proc.communicate()
             if proc.returncode != 0:
                 return []
-            data = json.loads(stdout.decode())
-            chapters = data.get("chapters", [])
-            if isinstance(chapters, list):
-                return [chapter for chapter in chapters if isinstance(chapter, dict)]
+            parsed = json_loads_object(stdout.decode())
+            data = parsed if _is_str_object_dict(parsed) else {}
+            chapters = data.get("chapters")
+            if _is_object_list(chapters):
+                return [chapter for chapter in chapters if _is_str_object_dict(chapter)]
             return []
         except Exception:
             return []
 
     async def _convert_to_mp3(self, source: Path, output: Path) -> None:
         """Backward-compatible single-file conversion wrapper."""
-        action = {
+        action: dict[str, object] = {
             "operation": "convert",
             "source": source,
             "output": output,
@@ -298,7 +356,7 @@ class AudioProcessorPlugin:
         self,
         source: Path,
         output_dir: Path,
-        chapters: list[dict[str, Any]],
+        chapters: list[dict[str, object]],
     ) -> list[Path]:
         """Backward-compatible chapter split wrapper."""
         plan = self._plan_split_actions(source, output_dir, chapters)

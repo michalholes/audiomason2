@@ -13,7 +13,6 @@ from __future__ import annotations
 import contextlib
 import sys
 from dataclasses import dataclass
-from typing import Any
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.diagnostics import build_envelope
@@ -34,7 +33,7 @@ _ALLOWED_FORMATS = {"jsonl", "plain"}
 _ALLOWED_DEFAULT_CMDS = {"tail", "status", "cat"}
 
 
-def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
+def _emit_diag(event: str, *, operation: str, data: dict[str, object]) -> None:
     """Emit a runtime diagnostic event via the authoritative entrypoint.
 
     Fail-safe: must never raise.
@@ -266,7 +265,7 @@ class SyslogPlugin:
             data={"status": "succeeded", "subscribed": True},
         )
 
-    def get_cli_commands(self) -> dict[str, Any]:
+    def get_cli_commands(self) -> dict[str, object]:
         return {"syslog": self._handle_syslog}
 
     def _resolve_config(self, resolver: ConfigResolver) -> SyslogConfig:

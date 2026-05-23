@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import Any
 from urllib.error import HTTPError
 
 import pytest
@@ -15,8 +14,8 @@ from plugins.metadata_openlibrary.plugin import OpenLibraryPlugin
 class _FakeOpenLibrary(OpenLibraryPlugin):
     def __init__(
         self,
-        docs: list[dict[str, Any]],
-        googlebooks_items: list[dict[str, Any]] | None = None,
+        docs: list[dict[str, object]],
+        googlebooks_items: list[dict[str, object]] | None = None,
     ) -> None:
         super().__init__()
         self.docs = docs
@@ -24,11 +23,11 @@ class _FakeOpenLibrary(OpenLibraryPlugin):
         self.urls: list[str] = []
         self.googlebooks_queries: list[tuple[str, int]] = []
 
-    async def _api_request(self, url: str) -> dict[str, Any]:
+    async def _api_request(self, url: str) -> dict[str, object]:
         self.urls.append(url)
         return {"docs": self.docs}
 
-    async def _googlebooks_request(self, *, query: str, limit: int) -> dict[str, Any]:
+    async def _googlebooks_request(self, *, query: str, limit: int) -> dict[str, object]:
         self.googlebooks_queries.append((query, limit))
         return {"items": self.googlebooks_items}
 
@@ -342,20 +341,20 @@ def test_metadata_boundary_routes_phase1_validation_via_explicit_job_boundary(
     urls: list[str] = []
     googlebooks_queries: list[tuple[str, int]] = []
 
-    async def _api_request(self, url: str) -> dict[str, Any]:
+    async def _api_request(self, url: str) -> dict[str, object]:
         urls.append(url)
         return {"docs": docs}
 
-    async def _googlebooks_request(self, *, query: str, limit: int) -> dict[str, Any]:
+    async def _googlebooks_request(self, *, query: str, limit: int) -> dict[str, object]:
         googlebooks_queries.append((query, limit))
         return {"items": googlebooks_items}
 
-    async def _execute_job(self, job: dict[str, Any]) -> dict[str, Any]:
+    async def _execute_job(self, job: dict[str, object]) -> dict[str, object]:
         seen["job"] = dict(job)
         request = dict(job.get("request") or {})
         return await OpenLibraryPlugin._execute_request(self, request)
 
-    async def _private_execute_job(self, _job: dict[str, Any]) -> dict[str, Any]:
+    async def _private_execute_job(self, _job: dict[str, object]) -> dict[str, object]:
         raise AssertionError("metadata boundary must not call private provider runner")
 
     boundary.validate_author_title.cache_clear()

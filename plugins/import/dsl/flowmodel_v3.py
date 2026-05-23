@@ -5,13 +5,34 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypeGuard
 
 from ..errors import FinalizeError
 from ..primitives.ui_v1 import project_prompt_ui
 
 FLOWMODEL_KIND = "dsl_step_graph_v3"
 FLOW_ID = "import_v3"
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _edge_sort_key(item: dict[str, object]) -> tuple[str, str, str]:
+    condition = _as_str_object_dict(item.get("condition_expr"))
+    return (
+        str(item.get("from") or ""),
+        str(item.get("to") or ""),
+        str(condition.get("expr") or ""),
+    )
 
 
 def _step_projection_kind(primitive_id: str, primitive_version: int) -> str:
@@ -24,7 +45,7 @@ def _step_projection_kind(primitive_id: str, primitive_version: int) -> str:
     return "step"
 
 
-def _step_projection_title(step_id: str, primitive_id: str, ui: dict[str, Any] | None) -> str:
+def _step_projection_title(step_id: str, primitive_id: str, ui: dict[str, object] | None) -> str:
     del primitive_id
     del ui
     return step_id
@@ -36,21 +57,26 @@ def _step_phase(step_id: str) -> int:
     return 1
 
 
-def _project_phase2_fields(step: dict[str, Any], inputs: dict[str, Any]) -> None:
+def _project_phase2_fields(step: dict[str, object], inputs: dict[str, object]) -> None:
     primitive_id = str(step.get("primitive_id") or "")
-    primitive_version = int(step.get("primitive_version") or 0)
+    primitive_version_any = step.get("primitive_version")
+    primitive_version = primitive_version_any if isinstance(primitive_version_any, int) else 0
     if primitive_version != 1:
         return
     if primitive_id == "parallel.fork_join":
-        step["branch_order"] = list(inputs.get("branch_order") or [])
+        branch_order_any = inputs.get("branch_order")
+        step["branch_order"] = list(branch_order_any) if _is_object_list(branch_order_any) else []
         step["join_policy"] = inputs.get("join_policy")
         step["merge_mode"] = inputs.get("merge_mode")
-        step["branches"] = dict(inputs.get("branches") or {})
+        step["branches"] = _as_str_object_dict(inputs.get("branches"))
         return
     if primitive_id == "flow.invoke":
         step["target_library"] = inputs.get("target_library")
         step["target_subflow"] = inputs.get("target_subflow")
-        step["param_bindings"] = list(inputs.get("param_bindings") or [])
+        param_bindings_any = inputs.get("param_bindings")
+        step["param_bindings"] = (
+            list(param_bindings_any) if _is_object_list(param_bindings_any) else []
+        )
         return
     if primitive_id == "flow.loop":
         step["iterable_expr"] = inputs.get("iterable_expr")
@@ -58,14 +84,14 @@ def _project_phase2_fields(step: dict[str, Any], inputs: dict[str, Any]) -> None
         step["max_iterations"] = inputs.get("max_iterations")
 
 
-def _project_step(node_any: Any) -> dict[str, Any]:
-    if not isinstance(node_any, dict):
+def _project_step(node_any: object) -> dict[str, object]:
+    if not _is_str_object_dict(node_any):
         raise FinalizeError("wizard_definition node must be an object")
     step_id = node_any.get("step_id")
     op_any = node_any.get("op")
     if not isinstance(step_id, str) or not step_id:
         raise FinalizeError("wizard_definition node step_id must be a string")
-    if not isinstance(op_any, dict):
+    if not _is_str_object_dict(op_any):
         raise FinalizeError("wizard_definition node op must be an object")
     primitive_id = op_any.get("primitive_id")
     primitive_version = op_any.get("primitive_version")
@@ -75,13 +101,13 @@ def _project_step(node_any: Any) -> dict[str, Any]:
         raise FinalizeError("wizard_definition primitive_version must be int")
     inputs_any = op_any.get("inputs")
     writes_any = op_any.get("writes")
-    inputs = dict(inputs_any) if isinstance(inputs_any, dict) else {}
+    inputs = _as_str_object_dict(inputs_any)
     try:
         ui = project_prompt_ui(primitive_id, primitive_version, inputs)
     except ValueError as exc:
         raise FinalizeError(str(exc)) from exc
 
-    step: dict[str, Any] = {
+    step: dict[str, object] = {
         "step_id": step_id,
         "phase": _step_phase(step_id),
         "title": _step_projection_title(step_id, primitive_id, ui),
@@ -89,7 +115,7 @@ def _project_step(node_any: Any) -> dict[str, Any]:
         "primitive_id": primitive_id,
         "primitive_version": primitive_version,
         "inputs": inputs,
-        "writes": list(writes_any) if isinstance(writes_any, list) else [],
+        "writes": list(writes_any) if _is_object_list(writes_any) else [],
     }
     if ui:
         step["ui"] = ui
@@ -97,12 +123,12 @@ def _project_step(node_any: Any) -> dict[str, Any]:
     return step
 
 
-def _project_edges(edges_any: Any, *, seen: set[str]) -> list[dict[str, Any]]:
-    if not isinstance(edges_any, list):
+def _project_edges(edges_any: object, *, seen: set[str]) -> list[dict[str, object]]:
+    if not _is_object_list(edges_any):
         raise FinalizeError("wizard_definition edges must be a list")
-    edges: list[dict[str, Any]] = []
+    edges: list[dict[str, object]] = []
     for edge_any in edges_any:
-        if not isinstance(edge_any, dict):
+        if not _is_str_object_dict(edge_any):
             raise FinalizeError("wizard_definition edge must be an object")
         frm = edge_any.get("from")
         to = edge_any.get("to")
@@ -110,29 +136,22 @@ def _project_edges(edges_any: Any, *, seen: set[str]) -> list[dict[str, Any]]:
             raise FinalizeError("wizard_definition edge.from must reference known step_id")
         if not isinstance(to, str) or to not in seen:
             raise FinalizeError("wizard_definition edge.to must reference known step_id")
-        edge = {"from": frm, "to": to}
+        edge: dict[str, object] = {"from": frm, "to": to}
         cond = edge_any.get("condition_expr")
         if cond is not None:
             edge["condition_expr"] = cond
         edges.append(edge)
-    return sorted(
-        edges,
-        key=lambda item: (
-            str(item.get("from") or ""),
-            str(item.get("to") or ""),
-            str((item.get("condition_expr") or {}).get("expr") or ""),
-        ),
-    )
+    return sorted(edges, key=_edge_sort_key)
 
 
-def _build_graph_projection(graph: dict[str, Any]) -> dict[str, Any]:
+def _build_graph_projection(graph: dict[str, object]) -> dict[str, object]:
     entry_step_id = graph.get("entry_step_id")
     if not isinstance(entry_step_id, str) or not entry_step_id:
         raise FinalizeError("wizard_definition entry_step_id must be a string")
     nodes_any = graph.get("nodes")
-    if not isinstance(nodes_any, list) or not nodes_any:
+    if not _is_object_list(nodes_any) or not nodes_any:
         raise FinalizeError("wizard_definition nodes must be a non-empty list")
-    steps: list[dict[str, Any]] = []
+    steps: list[dict[str, object]] = []
     seen: set[str] = set()
     for node_any in nodes_any:
         step = _project_step(node_any)
@@ -150,12 +169,12 @@ def _build_graph_projection(graph: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_flow_model_v3(*, wizard_definition: dict[str, Any]) -> dict[str, Any]:
+def build_flow_model_v3(*, wizard_definition: dict[str, object]) -> dict[str, object]:
     if wizard_definition.get("version") != 3:
         raise FinalizeError("wizard_definition must be version 3")
 
     root = _build_graph_projection(wizard_definition)
-    model: dict[str, Any] = {
+    model: dict[str, object] = {
         "flow_id": FLOW_ID,
         "flowmodel_kind": FLOWMODEL_KIND,
         "entry_step_id": root["entry_step_id"],
@@ -164,28 +183,28 @@ def build_flow_model_v3(*, wizard_definition: dict[str, Any]) -> dict[str, Any]:
     }
 
     libraries_any = wizard_definition.get("libraries")
-    if isinstance(libraries_any, dict):
-        libraries: dict[str, Any] = {}
+    if _is_str_object_dict(libraries_any):
+        libraries: dict[str, object] = {}
         for library_id, library_any in sorted(libraries_any.items()):
-            if not isinstance(library_any, dict):
+            if not _is_str_object_dict(library_any):
                 raise FinalizeError("wizard_definition library must be an object")
             graph = _build_graph_projection(library_any)
             params_any = library_any.get("params")
-            graph["params"] = list(params_any) if isinstance(params_any, list) else []
+            graph["params"] = list(params_any) if _is_object_list(params_any) else []
             returns_any = library_any.get("returns")
-            graph["returns"] = dict(returns_any) if isinstance(returns_any, dict) else {}
+            graph["returns"] = _as_str_object_dict(returns_any)
             libraries[str(library_id)] = graph
         model["libraries"] = libraries
     return model
 
 
-def step_map(effective_model: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def step_map(effective_model: dict[str, object]) -> dict[str, dict[str, object]]:
     steps_any = effective_model.get("steps")
-    if not isinstance(steps_any, list):
+    if not _is_object_list(steps_any):
         raise FinalizeError("effective_model steps must be a list")
-    out: dict[str, dict[str, Any]] = {}
+    out: dict[str, dict[str, object]] = {}
     for step_any in steps_any:
-        if not isinstance(step_any, dict):
+        if not _is_str_object_dict(step_any):
             continue
         step_id = step_any.get("step_id")
         if isinstance(step_id, str) and step_id:
@@ -193,7 +212,7 @@ def step_map(effective_model: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return out
 
 
-def get_step(effective_model: dict[str, Any], step_id: str) -> dict[str, Any]:
+def get_step(effective_model: dict[str, object], step_id: str) -> dict[str, object]:
     steps = step_map(effective_model)
     if step_id not in steps:
         raise FinalizeError("unknown step_id")

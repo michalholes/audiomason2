@@ -7,7 +7,7 @@ import signal
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TypeGuard
 
 from audiomason.core import (
     JobState,
@@ -24,20 +24,45 @@ from audiomason.core.plugin_registry import PluginRegistry
 logger = get_logger(__name__)
 
 
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _to_str_or_default(value: object, default: str) -> str:
+    return value if isinstance(value, str) and value else default
+
+
+def _to_int_or_default(value: object, default: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _as_str_list(value: object) -> list[str]:
+    if not _is_object_list(value):
+        return []
+    return [item for item in value if isinstance(item, str) and item]
+
+
 class DaemonPlugin:
     """Daemon mode - watch folders and auto-process new files."""
 
-    def __init__(self, config: dict | None = None) -> None:
+    def __init__(self, config: dict[str, object] | None = None) -> None:
         """Initialize daemon plugin.
 
         Args:
             config: Plugin configuration
         """
-        self.config = config or {}
-        self.watch_folders = self.config.get("watch_folders", [])
-        self.interval = self.config.get("interval", 30)
-        self.on_success = self.config.get("on_success", "move_to_output")
-        self.on_error = self.config.get("on_error", "move_to_error")
+        self.config = dict(config) if config is not None else {}
+        self.watch_folders = _as_str_list(self.config.get("watch_folders"))
+        self.interval = _to_int_or_default(self.config.get("interval"), 30)
+        self.on_success = _to_str_or_default(self.config.get("on_success"), "move_to_output")
+        self.on_error = _to_str_or_default(self.config.get("on_error"), "move_to_error")
 
         self.running = False
         self.processed_files: set[Path] = set()
@@ -211,7 +236,7 @@ class DaemonPlugin:
                 file_path.unlink()
                 logger.info("Deleted source file")
 
-    def _handle_signal(self, signum: int, frame: Any) -> None:
+    def _handle_signal(self, signum: int, frame: object) -> None:
         """Handle shutdown signal.
 
         Args:

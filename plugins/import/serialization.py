@@ -7,12 +7,10 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
-
 from .fingerprints import canonical_json_bytes
 
 
-def canonical_serialize(obj: Any) -> bytes:
+def canonical_serialize(obj: object) -> bytes:
     """Serialize to canonical JSON bytes.
 
     Rules are inherited from fingerprints.canonical_json_bytes().

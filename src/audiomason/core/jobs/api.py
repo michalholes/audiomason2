@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import contextlib
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any
 
 from audiomason.core.diagnostics import build_envelope
 from audiomason.core.events import get_event_bus
@@ -23,11 +23,11 @@ def _duration_ms(t0: float, t1: float) -> int:
     return 0 if ms < 0 else ms
 
 
-def _params_summary(meta: dict[str, str] | None) -> dict[str, Any]:
+def _params_summary(meta: dict[str, str] | None) -> dict[str, object]:
     meta = dict(meta or {})
     # Never emit large payloads. Summarize keys + a few selected safe values.
     keys = sorted(meta.keys())
-    sample: dict[str, Any] = {}
+    sample: dict[str, object] = {}
     for k in keys[:8]:
         v = meta.get(k)
         if v is None:
@@ -37,18 +37,23 @@ def _params_summary(meta: dict[str, str] | None) -> dict[str, Any]:
     return {"meta_keys": keys, "meta_sample": sample}
 
 
-def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
+def _emit_diag(event: str, *, operation: str, data: Mapping[str, object]) -> None:
     # Fail-safe: diagnostics must not affect runtime behavior.
     with contextlib.suppress(Exception):
-        envelope = build_envelope(event=event, component="jobs", operation=operation, data=data)
+        envelope = build_envelope(
+            event=event,
+            component="jobs",
+            operation=operation,
+            data=dict(data),
+        )
         get_event_bus().publish(event, envelope)
 
 
-def _emit_op_start(operation: str, data: dict[str, Any]) -> None:
+def _emit_op_start(operation: str, data: Mapping[str, object]) -> None:
     _emit_diag("operation.start", operation=operation, data=data)
 
 
-def _emit_op_end(operation: str, data: dict[str, Any]) -> None:
+def _emit_op_end(operation: str, data: Mapping[str, object]) -> None:
     _emit_diag("operation.end", operation=operation, data=data)
 
 

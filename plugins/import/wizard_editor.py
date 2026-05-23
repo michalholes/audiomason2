@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Iterable
-from typing import Any
+from typing import Protocol, TextIO, TypeGuard, cast
 
 from .editor import EditorResult
 from .engine import ImportWizardEngine
@@ -28,6 +28,18 @@ from .wizard_editor_storage import (
     ensure_wizard_definition_active_exists,
     save_wizard_definition,
 )
+
+
+class _ValidateFn(Protocol):
+    def __call__(self, obj: object) -> dict[str, object]: ...
+
+
+class _SaveFn(Protocol):
+    def __call__(self, obj: object) -> None: ...
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
 
 
 def show_wizard_definition(engine: ImportWizardEngine) -> EditorResult:
@@ -72,20 +84,25 @@ def save_wizard_definition_validated(engine: ImportWizardEngine) -> EditorResult
 def edit_wizard_definition_interactive(engine: ImportWizardEngine) -> EditorResult:
     fs = engine.get_file_service()
     current = ensure_wizard_definition_active_exists(fs)
+
+    def _save(obj: object) -> None:
+        save_wizard_definition(fs, obj)
+
     return _edit_interactive(
         title="wizard_definition",
         current=current,
         validate_fn=_validate_for_edit,
-        save_fn=lambda obj: save_wizard_definition(fs, obj),
+        save_fn=_save,
     )
 
 
-def _validate_for_edit(obj: Any) -> dict[str, Any]:
+def _validate_for_edit(obj: object) -> dict[str, object]:
     try:
         validate_wizard_definition_structure(obj)
-        wd_canon = canonicalize_wizard_definition(obj)
-        if not isinstance(wd_canon, dict):
+        wd_canon_any = canonicalize_wizard_definition(obj)
+        if not _is_str_object_dict(wd_canon_any):
             raise ValueError("wizard_definition must be an object")
+        wd_canon = wd_canon_any
         if wd_canon.get("version") != 3:
             raise ValueError("wizard_definition editor authority must be version 3")
         return {"ok": True}
@@ -100,18 +117,19 @@ def _validate_for_edit(obj: Any) -> dict[str, Any]:
 def _edit_interactive(
     *,
     title: str,
-    current: Any,
-    validate_fn: Any,
-    save_fn: Any,
+    current: object,
+    validate_fn: _ValidateFn,
+    save_fn: _SaveFn,
 ) -> EditorResult:
+    stdin = cast(TextIO, sys.stdin)
     sys.stdout.write(_banner_lines(title))
     sys.stdout.write(json.dumps(current, indent=2, sort_keys=True, ensure_ascii=True) + "\n")
     sys.stdout.write("\nPaste replacement JSON. End with a single line containing only '.'\n")
     sys.stdout.flush()
 
-    text = "\n".join(_read_until_dot(sys.stdin))
+    text = "\n".join(_read_until_dot(stdin))
     try:
-        new_obj = json.loads(text)
+        new_obj = cast(object, json.loads(text))
     except Exception as e:
         return EditorResult(
             ok=False,
@@ -124,12 +142,14 @@ def _edit_interactive(
         )
 
     validation = validate_fn(new_obj)
+    if not _is_str_object_dict(validation):
+        return EditorResult(ok=False, data={"ok": False, "error": "invalid validation response"})
     if not bool(validation.get("ok")):
         return EditorResult(ok=False, data=validation)
 
     sys.stdout.write("Validation OK. Save changes? Type 'yes' to confirm: ")
     sys.stdout.flush()
-    answer = sys.stdin.readline().strip().lower()
+    answer = stdin.readline().strip().lower()
     if answer != "yes":
         return EditorResult(
             ok=False,
@@ -144,7 +164,7 @@ def _banner_lines(title: str) -> str:
     return f"=== Import Wizard editor: {title} ===\nCurrent JSON follows.\n\n"
 
 
-def _read_until_dot(stream: Any) -> Iterable[str]:
+def _read_until_dot(stream: TextIO) -> Iterable[str]:
     for line in stream:
         line = line.rstrip("\n")
         if line == ".":

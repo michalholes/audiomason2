@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Protocol, cast
 
 from fastapi import FastAPI, HTTPException, Request
 
-from audiomason.core.jobs.model import JobType
+from audiomason.core.jobs.model import Job, JobType
 from audiomason.core.orchestration import Orchestrator
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
@@ -13,13 +13,25 @@ from plugins.file_io.service.types import RootName
 from ..util.web_observability import web_operation
 
 
-def _get_resolver(request: Request) -> Any:
-    resolver = getattr(request.app.state, "config_resolver", None)
-    return resolver
+class _StateView(Protocol):
+    config_resolver: object
+    file_service: object
+
+
+def _get_resolver(request: Request) -> object:
+    state = cast(_StateView, request.state)
+    try:
+        return state.config_resolver
+    except Exception:
+        return None
 
 
 def _get_file_service(request: Request) -> FileService:
-    fs = getattr(request.app.state, "file_service", None)
+    state = cast(_StateView, request.state)
+    try:
+        fs = state.file_service
+    except Exception:
+        fs = None
     if isinstance(fs, FileService):
         return fs
     resolver = _get_resolver(request)
@@ -27,7 +39,7 @@ def _get_file_service(request: Request) -> FileService:
 
     cr = resolver if isinstance(resolver, ConfigResolver) else ConfigResolver()
     fs = FileService.from_resolver(cr)
-    request.app.state.file_service = fs
+    state.file_service = fs
     return fs
 
 
@@ -49,22 +61,19 @@ def _norm_rel_path(p: str) -> str:
     return "/".join(parts) if parts else "."
 
 
-def _serialize_job(job: Any) -> dict[str, Any]:
-    # Job is audiomason.core.jobs.model.Job
+def _serialize_job(job: Job) -> dict[str, object]:
     return job.to_dict()
 
 
 def mount_jobs(app: FastAPI) -> None:
     orch = Orchestrator()
 
-    @app.get("/api/jobs")
-    def list_jobs(request: Request) -> dict[str, Any]:
+    def list_jobs(request: Request) -> dict[str, object]:
         with web_operation(request, name="jobs.list", ctx={}):
             jobs = [_serialize_job(j) for j in orch.list_jobs()]
             return {"items": jobs}
 
-    @app.get("/api/jobs/{job_id}")
-    def get_job(request: Request, job_id: str) -> dict[str, Any]:
+    def get_job(request: Request, job_id: str) -> dict[str, object]:
         with web_operation(request, name="jobs.get", ctx={"job_id": job_id}):
             try:
                 job = orch.get_job(job_id)
@@ -72,8 +81,7 @@ def mount_jobs(app: FastAPI) -> None:
                 raise HTTPException(status_code=404, detail=str(e)) from e
             return {"item": _serialize_job(job)}
 
-    @app.post("/api/jobs/{job_id}/cancel")
-    def cancel_job(request: Request, job_id: str) -> dict[str, Any]:
+    def cancel_job(request: Request, job_id: str) -> dict[str, object]:
         with web_operation(request, name="jobs.cancel", ctx={"job_id": job_id}):
             try:
                 orch.cancel(job_id)
@@ -82,10 +90,9 @@ def mount_jobs(app: FastAPI) -> None:
                 raise HTTPException(status_code=404, detail=str(e)) from e
             return {"item": _serialize_job(job)}
 
-    @app.get("/api/jobs/{job_id}/log")
     def read_job_log(
         request: Request, job_id: str, offset: int = 0, limit_bytes: int = 64 * 1024
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         with web_operation(
             request,
             name="jobs.log",
@@ -97,8 +104,7 @@ def mount_jobs(app: FastAPI) -> None:
                 raise HTTPException(status_code=404, detail=str(e)) from e
             return {"text": text, "next_offset": next_offset}
 
-    @app.post("/api/jobs/process")
-    def create_process_job(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    def create_process_job(request: Request, payload: dict[str, object]) -> dict[str, object]:
         pipeline_path = payload.get("pipeline_path")
         sources = payload.get("sources")
         if not isinstance(pipeline_path, str) or not pipeline_path:
@@ -122,3 +128,9 @@ def mount_jobs(app: FastAPI) -> None:
                 },
             )
         return {"job_id": job.job_id, "item": _serialize_job(job)}
+
+    app.add_api_route("/api/jobs", list_jobs, methods=["GET"])
+    app.add_api_route("/api/jobs/{job_id}", get_job, methods=["GET"])
+    app.add_api_route("/api/jobs/{job_id}/cancel", cancel_job, methods=["POST"])
+    app.add_api_route("/api/jobs/{job_id}/log", read_job_log, methods=["GET"])
+    app.add_api_route("/api/jobs/process", create_process_job, methods=["POST"])

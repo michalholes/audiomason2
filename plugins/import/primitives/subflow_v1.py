@@ -5,10 +5,8 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
 
-
-def _object_schema() -> dict[str, Any]:
+def _object_schema() -> dict[str, object]:
     return {
         "type": "object",
         "properties": {},
@@ -17,7 +15,7 @@ def _object_schema() -> dict[str, Any]:
     }
 
 
-REGISTRY_ENTRIES: list[dict[str, Any]] = [
+REGISTRY_ENTRIES: list[dict[str, object]] = [
     {
         "primitive_id": "flow.invoke",
         "version": 1,

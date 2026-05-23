@@ -11,10 +11,12 @@ Features:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import sys
 import uuid
+from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import Protocol, cast
 
 from audiomason.core import (
     ConfigResolver,
@@ -33,6 +35,7 @@ from audiomason.core import (
 from audiomason.core.config_service import ConfigService
 from audiomason.core.errors import PluginError
 from audiomason.core.jobs.model import JobState
+from audiomason.core.loader import PluginManifest
 from audiomason.core.logging import apply_logging_policy, get_logger, set_log_file
 from audiomason.core.orchestration import Orchestrator
 from audiomason.core.orchestration_models import ProcessRequest
@@ -60,6 +63,84 @@ CORE_COMMANDS: set[str] = {
 }
 
 
+class _CLICommandsPlugin(Protocol):
+    def get_cli_commands(self) -> dict[str, Callable[[list[str]], object]]: ...
+
+
+class _WebPlugin(Protocol):
+    config_resolver: ConfigResolver
+    plugin_loader: PluginLoader
+    verbosity: int
+
+    async def run(self) -> object: ...
+
+
+class _DaemonPlugin(Protocol):
+    verbosity: int
+
+    async def run(self) -> object: ...
+
+
+class _TUIPlugin(Protocol):
+    async def run(self) -> object: ...
+
+
+class _TUIPluginFactory(Protocol):
+    def __call__(self, config: dict[str, object]) -> _TUIPlugin: ...
+
+
+def _dict_str_object(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        return {}
+    out: dict[str, object] = {}
+    for key, item in value.items():
+        if isinstance(key, str):
+            out[key] = item
+    return out
+
+
+def _to_str_or_none(value: object) -> str | None:
+    if isinstance(value, str):
+        text = value.strip()
+        if text:
+            return text
+    return None
+
+
+def _to_int_or_none(value: object) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return int(text)
+        except ValueError:
+            return None
+    return None
+
+
+def _to_bool_or_default(value: object, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    return default
+
+
+def _path_name(path: Path) -> str:
+    return path.name
+
+
+def _manifest_name(item: tuple[Path, PluginManifest]) -> str:
+    return item[1].name
+
+
+def _as_awaitable(value: object) -> Awaitable[object] | None:
+    if inspect.isawaitable(value):
+        return cast(Awaitable[object], value)
+    return None
+
+
 def preload_supported_web_plugins(*, loader: PluginLoader, plugins_dir: Path) -> None:
     """Preload plugin surfaces required by the supported web launch path."""
     try:
@@ -78,14 +159,15 @@ def preload_supported_web_plugins(*, loader: PluginLoader, plugins_dir: Path) ->
 class CLIPlugin:
     """Enhanced CLI plugin."""
 
-    def __init__(self, config: dict | None = None) -> None:
+    def __init__(self, config: dict[str, object] | None = None) -> None:
         """Initialize CLI plugin.
 
         Args:
             config: Plugin configuration
         """
-        self.config = config or {}
+        self.config = dict(config) if config is not None else {}
         self.verbosity = VerbosityLevel.NORMAL
+        self.cli_args: dict[str, object] = {}
         # Original argv snapshot used for CLI parsing (set in run())
         self._original_argv: list[str] = []
         # Mapping: command_name -> (plugin_dir, plugin_name)
@@ -93,24 +175,22 @@ class CLIPlugin:
         # Session-level failure isolation: plugin_name -> error summary.
         self._failed_plugins: dict[str, str] = {}
 
-    def _parse_cli_args(self, *, emit_debug: bool = True) -> dict[str, Any]:
+    def _parse_cli_args(self, *, emit_debug: bool = True) -> dict[str, object]:
         """Parse all CLI arguments into a dictionary for ConfigResolver.
 
         Returns:
             Dictionary of CLI arguments with nested structure for dotted keys
         """
-        cli_args: dict[str, Any] = {}
+        cli_args: dict[str, object] = {}
 
-        def _ensure_dict(root: dict[str, Any], key: str) -> dict[str, Any]:
-            val = root.get(key)
-            if isinstance(val, dict):
-                return cast(dict[str, Any], val)
-            new: dict[str, Any] = {}
-            root[key] = new
-            return new
+        def _ensure_dict(root: dict[str, object], key: str) -> dict[str, object]:
+            child = _dict_str_object(root.get(key))
+            root[key] = child
+            return child
 
         # Use original argv (before verbosity extraction)
-        args = getattr(self, "_original_argv", sys.argv)[1:]  # Skip program name
+        args_snapshot = self._original_argv if self._original_argv else sys.argv
+        args = args_snapshot[1:]  # Skip program name
         i = 0
 
         while i < len(args):
@@ -223,9 +303,9 @@ class CLIPlugin:
         if plugin_dirs is None:
             discovered = loader.discover()
         else:
-            discovered = sorted(list(plugin_dirs), key=lambda p: p.name)
+            discovered = sorted(plugin_dirs, key=_path_name)
 
-        manifests_and_dirs: list[tuple[Path, Any]] = []
+        manifests_and_dirs: list[tuple[Path, PluginManifest]] = []
         for pdir in discovered:
             manifest = loader.load_manifest_only(pdir)
 
@@ -234,7 +314,7 @@ class CLIPlugin:
             if "ICLICommands" in manifest.interfaces:
                 manifests_and_dirs.append((pdir, manifest))
 
-        manifests_and_dirs.sort(key=lambda x: x[1].name)
+        manifests_and_dirs.sort(key=_manifest_name)
 
         stubs: dict[str, tuple[Path, str]] = {}
         for pdir, manifest in manifests_and_dirs:
@@ -424,7 +504,8 @@ class CLIPlugin:
         loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
 
         try:
-            plugin = loader.load_plugin(plugin_dir, validate=False)
+            plugin_obj = loader.load_plugin(plugin_dir, validate=False)
+            plugin = cast(_CLICommandsPlugin, plugin_obj)
             commands = plugin.get_cli_commands()
             if command not in commands:
                 raise PluginError(
@@ -434,8 +515,9 @@ class CLIPlugin:
 
             handler = commands[command]
             result = handler(argv)
-            if asyncio.iscoroutine(result):
-                await result
+            awaitable_result = _as_awaitable(result)
+            if awaitable_result is not None:
+                await awaitable_result
             return 0
         except Exception as e:
             summary = str(e) or e.__class__.__name__
@@ -517,7 +599,7 @@ class CLIPlugin:
             except Exception as e:  # pragma: no cover
                 self._verbose(f"  {plugin_name}: {e}")
 
-        pipeline_name = self.cli_args.get("pipeline", "standard")
+        pipeline_name = _to_str_or_none(self.cli_args.get("pipeline")) or "standard"
         pipeline_path = Path(__file__).parent.parent.parent / "pipelines" / f"{pipeline_name}.yaml"
         if not pipeline_path.exists():
             self._error(f"Pipeline not found: {pipeline_path}")
@@ -590,7 +672,7 @@ class CLIPlugin:
         self,
         files: list[Path],
         preflight_results: dict[Path, PreflightResult],
-        cli_args: dict[str, Any],
+        cli_args: dict[str, object],
     ) -> list[ProcessingContext]:
         """Collect user input.
 
@@ -602,7 +684,7 @@ class CLIPlugin:
         Returns:
             List of contexts with metadata
         """
-        contexts = []
+        contexts: list[ProcessingContext] = []
 
         # Smart grouping by author
         groups = detect_file_groups(files)
@@ -610,12 +692,20 @@ class CLIPlugin:
         self._verbose(f"Detected {len(groups)} author group(s)")
 
         # Ask for author per group
-        author_map = {}
+        author_map: dict[Path, str] = {}
+        author_override = _to_str_or_none(cli_args.get("author"))
+        title_override = _to_str_or_none(cli_args.get("title"))
+        year_override = _to_int_or_none(cli_args.get("year"))
+        cover_override = (_to_str_or_none(cli_args.get("cover")) or "").lower()
+        cover_url_override = _to_str_or_none(cli_args.get("cover_url"))
+        bitrate_option = _to_str_or_none(cli_args.get("bitrate")) or "128k"
+        loudnorm_option = _to_bool_or_default(cli_args.get("loudnorm"), False)
+        split_chapters_option = _to_bool_or_default(cli_args.get("split_chapters"), False)
 
         for author_guess, group_files in groups.items():
             # Check if author provided via CLI
-            if cli_args.get("author"):
-                author = cli_args["author"]
+            if author_override is not None:
+                author = author_override
             else:
                 # Prompt for author
                 default = author_guess if author_guess != "unknown" else None
@@ -652,8 +742,8 @@ class CLIPlugin:
             ctx.author = author_map.get(file, "Unknown")
 
             # Title
-            if cli_args.get("title"):
-                ctx.title = cli_args["title"]
+            if title_override is not None:
+                ctx.title = title_override
             else:
                 default = preflight.guessed_title
                 prompt_text = f"\U0001f4d6 Title for {file.name}"
@@ -671,29 +761,27 @@ class CLIPlugin:
                     return []
 
             # Year
-            if cli_args.get("year"):
-                ctx.year = cli_args["year"]
+            if year_override is not None:
+                ctx.year = year_override
             elif preflight.guessed_year:
                 ctx.year = preflight.guessed_year
 
             # Cover choice
-            if cli_args.get("cover"):
-                cover_str = cli_args["cover"].lower()
+            if cover_override:
                 ctx.cover_choice = {
                     "embedded": CoverChoice.EMBEDDED,
                     "file": CoverChoice.FILE,
                     "url": CoverChoice.URL,
                     "skip": CoverChoice.SKIP,
-                }.get(cover_str, CoverChoice.SKIP)
+                }.get(cover_override, CoverChoice.SKIP)
 
-                if ctx.cover_choice == CoverChoice.URL and cli_args.get("cover_url"):
-                    ctx.cover_url = cli_args["cover_url"]
+                if ctx.cover_choice == CoverChoice.URL and cover_url_override is not None:
+                    ctx.cover_url = cover_url_override
 
             # Processing options
-            # ProcessingContext is a model object; these fields are attached dynamically.
-            ctx.bitrate = cli_args.get("bitrate", "128k")  # type: ignore[attr-defined]
-            ctx.loudnorm = cli_args.get("loudnorm", False)
-            ctx.split_chapters = cli_args.get("split_chapters", False)
+            ctx.target_bitrate = bitrate_option
+            ctx.loudnorm = loudnorm_option
+            ctx.split_chapters = split_chapters_option
 
             contexts.append(ctx)
 
@@ -703,7 +791,7 @@ class CLIPlugin:
 
         return contexts
 
-    def _parse_args(self, args: list[str]) -> tuple[list[Path], dict[str, Any]]:
+    def _parse_args(self, args: list[str]) -> tuple[list[Path], dict[str, object]]:
         """Parse command-line arguments.
 
         Args:
@@ -713,7 +801,7 @@ class CLIPlugin:
             (files, options) tuple
         """
         files = []
-        options: dict[str, Any] = {}
+        options: dict[str, object] = {}
         i = 0
 
         while i < len(args):
@@ -858,7 +946,7 @@ class CLIPlugin:
         candidate_names = ["web_interface", "web_server"]
         plugin_dirs = sorted(
             [d for d in plugins_dir.iterdir() if d.is_dir() and (d / "plugin.yaml").exists()],
-            key=lambda p: p.name,
+            key=_path_name,
         )
 
         selected_dir: Path | None = None
@@ -926,6 +1014,7 @@ class CLIPlugin:
         reason = "normal exit"
         try:
             # Pass ConfigResolver and PluginLoader
+            web_plugin = cast(_WebPlugin, web_plugin)
             web_plugin.config_resolver = config_resolver
             web_plugin.plugin_loader = loader
             web_plugin.verbosity = self.verbosity
@@ -972,7 +1061,8 @@ class CLIPlugin:
             return
 
         try:
-            daemon_plugin = loader.load_plugin(daemon_plugin_dir, validate=False)
+            daemon_plugin_obj = loader.load_plugin(daemon_plugin_dir, validate=False)
+            daemon_plugin = cast(_DaemonPlugin, daemon_plugin_obj)
             # Pass verbosity to daemon
             daemon_plugin.verbosity = self.verbosity
             await daemon_plugin.run()
@@ -1004,10 +1094,12 @@ class CLIPlugin:
             print("Available checkpoints:")
             print()
             for cp in checkpoints:
+                progress_raw = cp.get("progress", 0.0)
+                progress = float(progress_raw) if isinstance(progress_raw, int | float) else 0.0
                 print(f"  {cp['id']}")
                 print(f"    Title: {cp['title']}")
                 print(f"    Author: {cp['author']}")
-                print(f"    Progress: {cp['progress'] * 100:.0f}%")
+                print(f"    Progress: {progress * 100:.0f}%")
                 print(f"    State: {cp['state']}")
                 print()
 
@@ -1036,10 +1128,11 @@ class CLIPlugin:
 
             # Import and run
             sys.path.insert(0, str(tui_dir))
-            from plugin import TUIPlugin  # type: ignore[import-not-found]
+            from plugin import TUIPlugin as TUIPluginRaw  # type: ignore[import-not-found]
 
             # Pass verbosity level to TUI
-            tui = TUIPlugin(config={"verbosity": self.verbosity})
+            tui_plugin_factory = cast(_TUIPluginFactory, TUIPluginRaw)
+            tui = tui_plugin_factory(config={"verbosity": self.verbosity})
             await tui.run()
 
         except ImportError as e:

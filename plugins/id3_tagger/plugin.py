@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Protocol, runtime_checkable
 
 from audiomason.core import ProcessingContext
 from audiomason.core.errors import AudioMasonError
@@ -37,6 +38,21 @@ _RESERVED_TAG_KEYS = {
 }
 
 
+def _dict_str_object(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        return {}
+    result: dict[str, object] = {}
+    for key, item in value.items():
+        if isinstance(key, str):
+            result[key] = item
+    return result
+
+
+@runtime_checkable
+class _SupportsTrackStart(Protocol):
+    track_start: object
+
+
 class ID3TaggerPlugin:
     """ID3 tagger plugin.
 
@@ -44,13 +60,13 @@ class ID3TaggerPlugin:
     Supports deterministic wipe-before-write semantics for import runtime.
     """
 
-    def __init__(self, config: dict | None = None) -> None:
+    def __init__(self, config: dict[str, object] | None = None) -> None:
         """Initialize plugin.
 
         Args:
             config: Plugin configuration
         """
-        self.config = config or {}
+        self.config = dict(config) if config is not None else {}
 
     async def process(self, context: ProcessingContext) -> ProcessingContext:
         """Write ID3 tags to converted MP3 files.
@@ -69,10 +85,11 @@ class ID3TaggerPlugin:
         if not tags:
             return context
 
-        tag_payload: dict[str, Any] = dict(tags)
-        track_start = getattr(context, "track_start", None)
-        if track_start is not None:
-            tag_payload["track_start"] = track_start
+        tag_payload: dict[str, object] = dict(tags)
+        if isinstance(context, _SupportsTrackStart):
+            track_start = self._parse_track_start(context.track_start)
+            if track_start is not None:
+                tag_payload["track_start"] = track_start
 
         tagged_count = 0
         for file_index, mp3_file in enumerate(context.converted_files):
@@ -88,7 +105,7 @@ class ID3TaggerPlugin:
         """Build canonical ID3 tags from ProcessingContext."""
         values: dict[str, str] = {}
 
-        def add(key: str, value: Any) -> None:
+        def add(key: str, value: object) -> None:
             text = str(value).strip() if value is not None else ""
             if text:
                 values[key] = text
@@ -111,7 +128,7 @@ class ID3TaggerPlugin:
         self,
         mp3_file: Path,
         output_file: Path,
-        tags: dict[str, Any],
+        tags: Mapping[str, object],
         *,
         wipe_before_write: bool = True,
         preserve_cover: bool = True,
@@ -142,7 +159,7 @@ class ID3TaggerPlugin:
     async def write_tags(
         self,
         mp3_file: Path,
-        tags: dict[str, Any],
+        tags: Mapping[str, object],
         *,
         wipe_before_write: bool = True,
         preserve_cover: bool = True,
@@ -195,22 +212,20 @@ class ID3TaggerPlugin:
 
     def build_capability_tags(
         self,
-        capability: dict[str, Any],
+        capability: Mapping[str, object],
         *,
         file_index: int = 0,
     ) -> dict[str, str]:
         """Resolve a metadata.tags capability into canonical ID3 tags."""
-        values_any = capability.get("values")
-        values = dict(values_any) if isinstance(values_any, dict) else {}
+        values = _dict_str_object(capability.get("values"))
         if "track_start" in capability and "track_start" not in values:
             values["track_start"] = capability.get("track_start")
-        field_map_any = capability.get("field_map")
-        field_map = dict(field_map_any) if isinstance(field_map_any, dict) else {}
+        field_map = _dict_str_object(capability.get("field_map"))
         return self._build_mapped_tags(values, field_map=field_map, file_index=file_index)
 
     def _normalize_tag_payload(
         self,
-        payload: dict[str, Any],
+        payload: Mapping[str, object],
         *,
         file_index: int = 0,
     ) -> dict[str, str]:
@@ -220,9 +235,9 @@ class ID3TaggerPlugin:
 
     def _build_mapped_tags(
         self,
-        values: dict[str, Any],
+        values: Mapping[str, object],
         *,
-        field_map: dict[str, Any] | None = None,
+        field_map: Mapping[str, object] | None = None,
         file_index: int = 0,
     ) -> dict[str, str]:
         cleaned: dict[str, str] = {}
@@ -231,7 +246,7 @@ class ID3TaggerPlugin:
             if text:
                 cleaned[str(key)] = text
 
-        raw_field_map = field_map or {}
+        raw_field_map: Mapping[str, object] = field_map or {}
         mapped_sources = {
             str(source).strip() for source in raw_field_map.values() if str(source).strip()
         }
@@ -265,7 +280,7 @@ class ID3TaggerPlugin:
             tags[key] = value
         return self._ordered_tags(tags)
 
-    def _parse_track_start(self, value: Any) -> int | None:
+    def _parse_track_start(self, value: object) -> int | None:
         if value is None:
             return None
         try:

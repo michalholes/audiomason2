@@ -7,14 +7,12 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
-
 from plugins.file_io.service.types import RootName
 
 from .errors import validation_error
 
 
-def validate_root_name(root: str) -> str | dict[str, Any]:
+def validate_root_name(root: str) -> str | dict[str, object]:
     root_s = str(root or "").strip()
     if not root_s:
         return validation_error(message="Missing root", path="$.root", reason="missing_root")
@@ -30,7 +28,7 @@ def validate_root_name(root: str) -> str | dict[str, Any]:
     return root_s
 
 
-def validate_relative_path(relative_path: str) -> str | dict[str, Any]:
+def validate_relative_path(relative_path: str) -> str | dict[str, object]:
     rel_s = str(relative_path or "").strip().replace("\\", "/")
     if not rel_s or rel_s == ".":
         rel_s = ""
@@ -57,7 +55,7 @@ def validate_relative_path(relative_path: str) -> str | dict[str, Any]:
     return "/".join(segs)
 
 
-def validate_root_and_path(root: str, relative_path: str) -> tuple[str, str] | dict[str, Any]:
+def validate_root_and_path(root: str, relative_path: str) -> tuple[str, str] | dict[str, object]:
     root_v = validate_root_name(root)
     if isinstance(root_v, dict):
         return root_v

@@ -57,7 +57,7 @@ class DiscoveryItem:
     relative_path: str
     kind: str
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "item_id": self.item_id,
             "root": self.root,
@@ -66,7 +66,7 @@ class DiscoveryItem:
         }
 
 
-def run_discovery(fs: FileService, *, root: str, relative_path: str) -> list[dict[str, str]]:
+def run_discovery(fs: FileService, *, root: str, relative_path: str) -> list[dict[str, object]]:
     root_enum = RootName(root)
     base_rel = _normalize_rel_path(relative_path)
 

@@ -13,7 +13,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypeGuard
 
 from .errors import FinalizeError
 from .models import CatalogModel
@@ -69,12 +69,20 @@ MANDATORY_STEP_IDS: set[str] = {
 }
 
 
-def _is_enabled(step_id: str, flow_cfg: dict[str, Any]) -> bool:
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _is_enabled(step_id: str, flow_cfg: dict[str, object]) -> bool:
     steps_any = flow_cfg.get("steps", {})
-    if not isinstance(steps_any, dict):
+    if not _is_str_object_dict(steps_any):
         return True
     cfg = steps_any.get(step_id)
-    if not isinstance(cfg, dict):
+    if not _is_str_object_dict(cfg):
         return True
     enabled = cfg.get("enabled")
     if enabled is None:
@@ -85,15 +93,15 @@ def _is_enabled(step_id: str, flow_cfg: dict[str, Any]) -> bool:
 def build_flow_model(
     *,
     catalog: CatalogModel,
-    flow_config: dict[str, Any],
+    flow_config: dict[str, object],
     step_order: list[str],
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Build the runtime FlowModel dict (spec 10.4.5).
 
     Raises FinalizeError for invariant violations (mapped to INVARIANT_VIOLATION).
     """
 
-    step_defs: dict[str, dict[str, Any]] = {}
+    step_defs: dict[str, dict[str, object]] = {}
     for s in catalog.steps:
         sid = s.get("step_id")
         if isinstance(sid, str) and sid:
@@ -108,7 +116,7 @@ def build_flow_model(
         if not _is_enabled(sid, flow_config):
             raise FinalizeError(f"required step may not be disabled: {sid}")
 
-    steps: list[dict[str, Any]] = []
+    steps: list[dict[str, object]] = []
 
     def add_step(step_id: str) -> None:
         if step_id in OPTIONAL_STEP_IDS and not _is_enabled(step_id, flow_config):
@@ -116,12 +124,14 @@ def build_flow_model(
         s = step_defs[step_id]
         phase = 2 if step_id == "processing" else 1
         required = step_id in MANDATORY_STEP_IDS
-        eff_step: dict[str, Any] = {
+        fields_any = s.get("fields")
+        fields = [field for field in fields_any] if _is_object_list(fields_any) else []
+        eff_step: dict[str, object] = {
             "step_id": step_id,
             "title": str(s.get("title") or step_id),
             "phase": phase,
             "required": required,
-            "fields": list(s.get("fields") or []),
+            "fields": fields,
         }
 
         execution_any = s.get("execution")

@@ -6,14 +6,13 @@ ASCII-only.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from .expr_tokens import ExprToken, ExprTokenError, tokenize_expr
 
 
 @dataclass(frozen=True)
 class LiteralNode:
-    value: Any
+    value: object
 
 
 @dataclass(frozen=True)
@@ -25,28 +24,28 @@ class PathNode:
 @dataclass(frozen=True)
 class UnaryOpNode:
     op: str
-    operand: Any
+    operand: ExprAst
 
 
 @dataclass(frozen=True)
 class BinaryOpNode:
     op: str
-    left: Any
-    right: Any
+    left: ExprAst
+    right: ExprAst
 
 
 @dataclass(frozen=True)
 class CallNode:
     name: str
-    args: tuple[Any, ...]
+    args: tuple[ExprAst, ...]
 
 
 @dataclass(frozen=True)
 class IndexNode:
     """Postfix index operation: expr[n] or expr[key]."""
 
-    target: Any
-    index: Any  # int (list index) or str (dict key) or ExprAst (dynamic)
+    target: ExprAst
+    index: ExprAst
 
 
 ExprAst = LiteralNode | PathNode | UnaryOpNode | BinaryOpNode | CallNode | IndexNode
@@ -57,7 +56,7 @@ class ExprParseError:
     code: str
     path: str
     reason: str
-    meta: dict[str, Any]
+    meta: dict[str, object]
 
 
 def _error(
@@ -65,7 +64,7 @@ def _error(
     code: str,
     path: str,
     reason: str,
-    meta: dict[str, Any] | None = None,
+    meta: dict[str, object] | None = None,
 ) -> ExprParseError:
     return ExprParseError(
         code=code,
@@ -107,7 +106,7 @@ class _Parser:
         self._idx += 1
         return token
 
-    def _match(self, kind: str, value: Any | None = None) -> ExprToken | None:
+    def _match(self, kind: str, value: object | None = None) -> ExprToken | None:
         token = self._peek()
         if token.kind != kind:
             return None
@@ -150,16 +149,23 @@ class _Parser:
         if isinstance(left, ExprParseError):
             return left
         token = self._peek()
-        if token.kind == "OP" and token.value in {
-            "==",
-            "!=",
-            "<",
-            "<=",
-            ">",
-            ">=",
-            "in",
-        }:
-            op = self._advance().value
+        token_value = token.value
+        if (
+            token.kind == "OP"
+            and isinstance(token_value, str)
+            and token_value
+            in {
+                "==",
+                "!=",
+                "<",
+                "<=",
+                ">",
+                ">=",
+                "in",
+            }
+        ):
+            self._advance()
+            op = token_value
             right = self._parse_add_sub()
             if isinstance(right, ExprParseError):
                 return right
@@ -172,8 +178,10 @@ class _Parser:
             return left
         while True:
             token = self._peek()
-            if token.kind == "OP" and token.value in {"+", "-"}:
-                op = self._advance().value
+            token_value = token.value
+            if token.kind == "OP" and isinstance(token_value, str) and token_value in {"+", "-"}:
+                self._advance()
+                op = token_value
                 right = self._parse_mul_div()
                 if isinstance(right, ExprParseError):
                     return right
@@ -188,8 +196,14 @@ class _Parser:
             return left
         while True:
             token = self._peek()
-            if token.kind == "OP" and token.value in {"*", "/", "//", "%"}:
-                op = self._advance().value
+            token_value = token.value
+            if (
+                token.kind == "OP"
+                and isinstance(token_value, str)
+                and token_value in {"*", "/", "//", "%"}
+            ):
+                self._advance()
+                op = token_value
                 right = self._parse_unary_minus()
                 if isinstance(right, ExprParseError):
                     return right
@@ -214,9 +228,13 @@ class _Parser:
         while self._match("LBRACKET") is not None:
             idx_token = self._peek()
             if idx_token.kind == "NUMBER" and isinstance(idx_token.value, int):
-                index_node: ExprAst = LiteralNode(value=self._advance().value)
-            elif idx_token.kind == "STRING":
-                index_node = LiteralNode(value=self._advance().value)
+                index_value: ExprAst = LiteralNode(value=idx_token.value)
+                self._advance()
+                index_node = index_value
+            elif idx_token.kind == "STRING" and isinstance(idx_token.value, str):
+                index_value = LiteralNode(value=idx_token.value)
+                self._advance()
+                index_node = index_value
             else:
                 # Dynamic index expression
                 dyn = self._parse_or()
@@ -352,7 +370,9 @@ class _Parser:
                 if item.kind == "STRING":
                     segments.append(str(self._advance().value))
                 elif item.kind == "NUMBER" and isinstance(item.value, int):
-                    segments.append(int(self._advance().value))
+                    number_value = item.value
+                    self._advance()
+                    segments.append(number_value)
                 else:
                     # Dynamic index expression -- stop PathNode here, let
                     # _parse_postfix wrap the result in an IndexNode.

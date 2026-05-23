@@ -12,25 +12,36 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypeGuard, cast
-
-import yaml
+from typing import Protocol, TypeGuard, cast
 
 from audiomason.core.context import ProcessingContext
 from audiomason.core.diagnostics import build_envelope
 from audiomason.core.errors import PipelineError
 from audiomason.core.events import get_event_bus
 from audiomason.core.logging import get_logger
+from audiomason.core.serde import yaml_safe_load_stream
 
 
-def _is_str_any_dict(value: Any) -> TypeGuard[dict[str, Any]]:
+def _is_str_any_dict(value: object) -> TypeGuard[dict[str, object]]:
     return isinstance(value, dict)
 
 
-def _require_str(value: Any, *, field: str) -> str:
+def _require_str(value: object, *, field: str) -> str:
     if not isinstance(value, str):
         raise PipelineError(f"Invalid pipeline step field '{field}': expected string")
     return value
+
+
+class _PluginLoaderProtocol(Protocol):
+    def get_plugin(self, name: str) -> object: ...
+
+
+class _ProcessorPlugin(Protocol):
+    async def process(self, context: ProcessingContext) -> ProcessingContext: ...
+
+
+class _EnricherPlugin(Protocol):
+    async def enrich(self, context: ProcessingContext) -> ProcessingContext: ...
 
 
 @dataclass
@@ -76,7 +87,11 @@ class PipelineExecutor:
               parallel: true
     """
 
-    def __init__(self, plugin_loader: Any, log_fn: Callable[[str], None] | None = None) -> None:
+    def __init__(
+        self,
+        plugin_loader: _PluginLoaderProtocol,
+        log_fn: Callable[[str], None] | None = None,
+    ) -> None:
         """Initialize pipeline executor.
 
         Args:
@@ -91,7 +106,7 @@ class PipelineExecutor:
         if self._log_fn is not None:
             self._log_fn(msg)
 
-    def _emit_diag(self, event: str, *, operation: str, data: dict[str, Any]) -> None:
+    def _emit_diag(self, event: str, *, operation: str, data: dict[str, object]) -> None:
         """Emit a structured diagnostic event via the authoritative EventBus."""
         with contextlib.suppress(Exception):
             envelope = build_envelope(
@@ -196,7 +211,7 @@ class PipelineExecutor:
 
         try:
             with open(yaml_path) as f:
-                raw_data = yaml.safe_load(f)
+                raw_data = yaml_safe_load_stream(f)
 
             if not _is_str_any_dict(raw_data):
                 raise PipelineError("Invalid pipeline YAML: root must be a mapping")
@@ -385,14 +400,20 @@ class PipelineExecutor:
 
             # Execute based on interface
             if step.interface == "IProcessor":
-                context = await plugin.process(context)
+                if not hasattr(plugin, "process"):
+                    raise PipelineError(f"Plugin '{step.plugin}' missing process()")
+                processor = cast(_ProcessorPlugin, plugin)
+                context = await processor.process(context)
             elif step.interface == "IProvider":
                 # Providers return data, not context
                 # For now, just call fetch and ignore result
                 # Real implementation would store result in context
                 pass
             elif step.interface == "IEnricher":
-                context = await plugin.enrich(context)
+                if not hasattr(plugin, "enrich"):
+                    raise PipelineError(f"Plugin '{step.plugin}' missing enrich()")
+                enricher = cast(_EnricherPlugin, plugin)
+                context = await enricher.enrich(context)
             else:
                 raise PipelineError(f"Unknown interface: {step.interface}")
 

@@ -5,10 +5,8 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
 
-
-def _object_schema() -> dict[str, Any]:
+def _object_schema() -> dict[str, object]:
     return {
         "type": "object",
         "properties": {},
@@ -17,7 +15,7 @@ def _object_schema() -> dict[str, Any]:
     }
 
 
-REGISTRY_ENTRIES: list[dict[str, Any]] = [
+REGISTRY_ENTRIES: list[dict[str, object]] = [
     {
         "primitive_id": "io.list",
         "version": 1,
@@ -48,7 +46,7 @@ REGISTRY_ENTRIES: list[dict[str, Any]] = [
 ]
 
 
-def _validate_ref(value: Any) -> str:
+def _validate_ref(value: object) -> str:
     if not isinstance(value, str):
         raise ValueError("resolver-friendly ref must be str")
     if value.startswith("/") or value.startswith("\\"):
@@ -58,7 +56,9 @@ def _validate_ref(value: Any) -> str:
     return value
 
 
-def execute(primitive_id: str, primitive_version: int, inputs: dict[str, Any]) -> dict[str, Any]:
+def execute(
+    primitive_id: str, primitive_version: int, inputs: dict[str, object]
+) -> dict[str, object]:
     if primitive_version != 1:
         raise ValueError("unsupported primitive version")
     ref = _validate_ref(inputs.get("ref", "")) if "ref" in inputs else ""

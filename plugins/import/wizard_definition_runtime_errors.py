@@ -5,8 +5,6 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
-
 from .field_schema_validation import FieldSchemaValidationError
 
 _ACTIVE_WIZARD_PATH = "wizards/import/definitions/wizard_definition.json"
@@ -22,7 +20,7 @@ def invalid_authored_wizard_definition_error(
     reason: str = "invalid_authored_wizard_definition",
 ) -> FieldSchemaValidationError:
     path = "$"
-    meta: dict[str, Any] = {
+    meta: dict[str, object] = {
         "artifact_path": _ACTIVE_WIZARD_PATH,
         "hint": _ACTIVE_WIZARD_HINT,
         "source_error_type": exc.__class__.__name__,

@@ -6,7 +6,9 @@ ASCII-only.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import TypeGuard, cast
+
+from plugins.file_io.service import FileService
 
 from .fingerprints import sha256_hex
 from .phase1_cover_flow import build_phase1_cover_projection
@@ -14,41 +16,56 @@ from .phase1_metadata_flow import build_phase1_metadata_projection
 from .phase1_policy_flow import build_phase1_policy_projection
 
 
-def _answer_dict(state: dict[str, Any], key: str) -> dict[str, Any]:
-    answers_any = state.get("answers")
-    answers = dict(answers_any) if isinstance(answers_any, dict) else {}
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _as_str_list(value: object) -> list[str]:
+    if not _is_object_list(value):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _item_sort_key(item: dict[str, str]) -> tuple[str, str]:
+    return (item.get("label", ""), item.get("item_id", ""))
+
+
+def _answer_dict(state: dict[str, object], key: str) -> dict[str, object]:
+    answers = _as_str_object_dict(state.get("answers"))
     value = answers.get(key)
-    return dict(value) if isinstance(value, dict) else {}
+    return _as_str_object_dict(value)
 
 
 def _build_runtime_projection(
     *,
-    state: dict[str, Any],
-    metadata_projection: dict[str, Any],
-    cover_projection: dict[str, Any],
-    policy_projection: dict[str, Any],
-    phase2_inputs: dict[str, Any],
-) -> dict[str, Any]:
-    conflicts_any = state.get("conflicts")
-    conflicts = dict(conflicts_any) if isinstance(conflicts_any, dict) else {}
+    state: dict[str, object],
+    metadata_projection: dict[str, object],
+    cover_projection: dict[str, object],
+    policy_projection: dict[str, object],
+    phase2_inputs: dict[str, object],
+) -> dict[str, object]:
+    conflicts = _as_str_object_dict(state.get("conflicts"))
     has_conflicts = bool(conflicts.get("present")) or bool(conflicts.get("items"))
-    conflict_policy = dict(phase2_inputs.get("conflict_policy") or {})
+    conflict_policy = _as_str_object_dict(phase2_inputs.get("conflict_policy"))
     conflict_mode = str(conflict_policy.get("mode") or "ask")
 
-    final_summary_confirm = {"confirm_start": False}
+    final_summary_confirm: dict[str, object] = {"confirm_start": False}
     final_summary_confirm.update(_answer_dict(state, "final_summary_confirm"))
 
-    computed_any = state.get("computed")
-    computed = dict(computed_any) if isinstance(computed_any, dict) else {}
+    computed = _as_str_object_dict(state.get("computed"))
     summary_any = computed.get("plan_summary")
-    summary = dict(summary_any) if isinstance(summary_any, dict) else {}
+    summary = _as_str_object_dict(summary_any)
 
     selected_paths_any = cover_projection.get("selected_source_relative_paths")
-    selected_paths = (
-        [item for item in selected_paths_any if isinstance(item, str)]
-        if isinstance(selected_paths_any, list)
-        else []
-    )
+    selected_paths = _as_str_list(selected_paths_any)
 
     return {
         "plan_preview_batch": {
@@ -57,17 +74,23 @@ def _build_runtime_projection(
             "has_conflicts": has_conflicts,
         },
         "effective_author_title": deepcopy(
-            dict(metadata_projection.get("effective_author_title") or {})
+            _as_str_object_dict(metadata_projection.get("effective_author_title"))
         ),
-        "filename_policy": deepcopy(dict(metadata_projection.get("filename_policy") or {})),
-        "covers_policy": deepcopy(dict(phase2_inputs.get("covers_policy") or {})),
-        "skip_processed_books": deepcopy(dict(phase2_inputs.get("skip_processed_books") or {})),
-        "id3_policy": deepcopy(dict(phase2_inputs.get("id3_policy") or {})),
-        "audio_processing": deepcopy(dict(phase2_inputs.get("audio_processing") or {})),
-        "publish_policy": deepcopy(dict(phase2_inputs.get("publish_policy") or {})),
-        "delete_source_policy": deepcopy(dict(phase2_inputs.get("delete_source_policy") or {})),
+        "filename_policy": deepcopy(
+            _as_str_object_dict(metadata_projection.get("filename_policy"))
+        ),
+        "covers_policy": deepcopy(_as_str_object_dict(phase2_inputs.get("covers_policy"))),
+        "skip_processed_books": deepcopy(
+            _as_str_object_dict(phase2_inputs.get("skip_processed_books"))
+        ),
+        "id3_policy": deepcopy(_as_str_object_dict(phase2_inputs.get("id3_policy"))),
+        "audio_processing": deepcopy(_as_str_object_dict(phase2_inputs.get("audio_processing"))),
+        "publish_policy": deepcopy(_as_str_object_dict(phase2_inputs.get("publish_policy"))),
+        "delete_source_policy": deepcopy(
+            _as_str_object_dict(phase2_inputs.get("delete_source_policy"))
+        ),
         "conflict_policy": deepcopy(conflict_policy),
-        "parallelism": deepcopy(dict(policy_projection.get("parallelism") or {})),
+        "parallelism": deepcopy(_as_str_object_dict(policy_projection.get("parallelism"))),
         "final_summary_confirm": final_summary_confirm,
         "resolve_conflicts_batch": {
             "confirm": False,
@@ -122,17 +145,17 @@ def _scope_parent_tail(scope_path: str) -> str:
 
 def _collect_scoped_entries(
     *,
-    discovery: list[dict[str, Any]],
-    state: dict[str, Any],
+    discovery: list[dict[str, object]],
+    state: dict[str, object],
 ) -> tuple[str, list[str], list[str]]:
     source_any = state.get("source")
-    source = dict(source_any) if isinstance(source_any, dict) else {}
+    source = dict(source_any) if _is_str_object_dict(source_any) else {}
     source_prefix = _normalize_rel_path(str(source.get("relative_path") or ""))
 
     dirs: list[str] = []
     files: list[str] = []
     for item in discovery:
-        if not isinstance(item, dict):
+        if not _is_str_object_dict(item):
             continue
         rel_any = item.get("relative_path")
         if not isinstance(rel_any, str):
@@ -235,8 +258,8 @@ def _pairs_for_book_scope(source_prefix: str) -> set[tuple[str, str, str]]:
 
 def _discovery_pairs(
     *,
-    discovery: list[dict[str, Any]],
-    state: dict[str, Any],
+    discovery: list[dict[str, object]],
+    state: dict[str, object],
 ) -> tuple[list[tuple[str, str, str]], str]:
     source_prefix, dirs, files = _collect_scoped_entries(discovery=discovery, state=state)
     scope_kind = _scope_kind(source_prefix=source_prefix, dirs=dirs, files=files)
@@ -255,8 +278,8 @@ def _discovery_pairs(
 
 def _book_pairs(
     *,
-    discovery: list[dict[str, Any]],
-    state: dict[str, Any],
+    discovery: list[dict[str, object]],
+    state: dict[str, object],
 ) -> tuple[
     dict[str, list[str]],
     dict[str, dict[str, str]],
@@ -285,8 +308,8 @@ def _book_pairs(
             "source_relative_path": source_relative_path,
         }
 
-    author_items = sorted(authors.values(), key=lambda item: (item["label"], item["item_id"]))
-    book_items = sorted(books.values(), key=lambda item: (item["label"], item["item_id"]))
+    author_items = sorted(authors.values(), key=_item_sort_key)
+    book_items = sorted(books.values(), key=_item_sort_key)
     author_ids = [item["item_id"] for item in author_items]
     book_ids = [item["item_id"] for item in book_items]
 
@@ -304,9 +327,9 @@ def _book_pairs(
 
 def build_phase1_source_projection(
     *,
-    discovery: list[dict[str, Any]],
-    state: dict[str, Any],
-) -> dict[str, Any]:
+    discovery: list[dict[str, object]],
+    state: dict[str, object],
+) -> dict[str, object]:
     author_to_books, book_meta, author_ids, book_ids, scope_kind = _book_pairs(
         discovery=discovery,
         state=state,
@@ -321,7 +344,7 @@ def build_phase1_source_projection(
             for item_id in selected_author_ids_any
             if isinstance(item_id, str) and item_id in set(author_ids)
         ]
-        if isinstance(selected_author_ids_any, list)
+        if _is_object_list(selected_author_ids_any)
         else []
     )
     if not selected_author_ids:
@@ -341,7 +364,7 @@ def build_phase1_source_projection(
             for item_id in selected_book_ids_any
             if isinstance(item_id, str) and item_id in set(filtered_book_ids)
         ]
-        if isinstance(selected_book_ids_any, list)
+        if _is_object_list(selected_book_ids_any)
         else []
     )
     if not selected_book_ids:
@@ -390,24 +413,24 @@ def build_phase1_source_projection(
     }
 
 
-def phase1_session_authority_applies(*, effective_model: dict[str, Any]) -> bool:
+def phase1_session_authority_applies(*, effective_model: dict[str, object]) -> bool:
     steps_any = effective_model.get("steps")
-    if not isinstance(steps_any, list):
+    if not _is_object_list(steps_any):
         return False
     step_ids = {
         str(step.get("step_id") or "")
         for step in steps_any
-        if isinstance(step, dict) and isinstance(step.get("step_id"), str)
+        if _is_str_object_dict(step) and isinstance(step.get("step_id"), str)
     }
     return {"select_authors", "select_books"}.issubset(step_ids)
 
 
 def build_phase1_projection(
     *,
-    discovery: list[dict[str, Any]],
-    state: dict[str, Any],
-    fs: Any | None = None,
-) -> dict[str, Any]:
+    discovery: list[dict[str, object]],
+    state: dict[str, object],
+    fs: object | None = None,
+) -> dict[str, object]:
     source_projection = build_phase1_source_projection(discovery=discovery, state=state)
     metadata_projection = build_phase1_metadata_projection(
         source_projection=source_projection,
@@ -417,31 +440,25 @@ def build_phase1_projection(
         discovery=discovery,
         source_projection=source_projection,
         state=state,
-        fs=fs,
+        fs=cast(FileService | None, fs),
     )
     policy_projection = build_phase1_policy_projection(
         state=state,
         source_projection=source_projection,
     )
     authority_by_book_any = metadata_projection.get("authority_by_book")
-    authority_by_book = (
-        dict(authority_by_book_any) if isinstance(authority_by_book_any, dict) else {}
-    )
-    selected_ids_any = source_projection.get("select_books", {}).get("selected_ids")
-    selected_ids = (
-        [item for item in selected_ids_any if isinstance(item, str)]
-        if isinstance(selected_ids_any, list)
-        else []
-    )
+    authority_by_book = _as_str_object_dict(authority_by_book_any)
+    select_books = _as_str_object_dict(source_projection.get("select_books"))
+    selected_ids = _as_str_list(select_books.get("selected_ids"))
     source_book_meta_any = source_projection.get("book_meta")
-    source_book_meta = dict(source_book_meta_any) if isinstance(source_book_meta_any, dict) else {}
+    source_book_meta = _as_str_object_dict(source_book_meta_any)
     cover_by_source_any = cover_projection.get("by_source_relative_path")
-    cover_by_source = dict(cover_by_source_any) if isinstance(cover_by_source_any, dict) else {}
-    covers_by_book: dict[str, dict[str, Any]] = {}
-    authority_book_meta: dict[str, dict[str, Any]] = {}
+    cover_by_source = _as_str_object_dict(cover_by_source_any)
+    covers_by_book: dict[str, dict[str, object]] = {}
+    authority_book_meta: dict[str, dict[str, object]] = {}
     for book_id in selected_ids:
-        source_book = dict(source_book_meta.get(book_id) or {})
-        authority_book = dict(authority_by_book.get(book_id) or {})
+        source_book = _as_str_object_dict(source_book_meta.get(book_id))
+        authority_book = _as_str_object_dict(authority_by_book.get(book_id))
         authority_book_meta[book_id] = {
             **source_book,
             **authority_book,
@@ -452,70 +469,91 @@ def build_phase1_projection(
             or ""
         )
         cover_choice_any = cover_by_source.get(source_relative_path)
+        default_cover_choice: dict[str, object] = {"kind": "skip"}
         cover_choice = (
-            dict(cover_choice_any) if isinstance(cover_choice_any, dict) else {"kind": "skip"}
+            dict(cover_choice_any)
+            if _is_str_object_dict(cover_choice_any)
+            else default_cover_choice
         )
         covers_by_book[book_id] = cover_choice
+
+    candidates_any = cover_projection.get("candidates")
+    candidates = (
+        [dict(item) for item in candidates_any if _is_str_object_dict(item)]
+        if _is_object_list(candidates_any)
+        else []
+    )
+
+    sources_any = cover_projection.get("sources")
+    sources: list[dict[str, object]] = []
+    if _is_object_list(sources_any):
+        for item in sources_any:
+            if not _is_str_object_dict(item):
+                continue
+            item_candidates_any = item.get("candidates")
+            item_candidates = (
+                [
+                    dict(candidate)
+                    for candidate in item_candidates_any
+                    if _is_str_object_dict(candidate)
+                ]
+                if _is_object_list(item_candidates_any)
+                else []
+            )
+            sources.append(
+                {
+                    "source_relative_path": str(item.get("source_relative_path") or ""),
+                    "candidates": item_candidates,
+                }
+            )
 
     phase2_inputs = {
         "covers_policy": {
             "mode": str(cover_projection.get("mode") or "skip"),
             "url": str(cover_projection.get("url") or ""),
-            "choice": dict(cover_projection.get("choice") or {}),
-            "by_book": {key: dict(value) for key, value in covers_by_book.items()},
-            "by_source_relative_path": {key: dict(value) for key, value in cover_by_source.items()},
-            "candidates": [
-                dict(item)
-                for item in cover_projection.get("candidates", [])
-                if isinstance(item, dict)
-            ],
-            "sources": [
-                {
-                    "source_relative_path": str(item.get("source_relative_path") or ""),
-                    "candidates": [
-                        dict(candidate)
-                        for candidate in item.get("candidates", [])
-                        if isinstance(candidate, dict)
-                    ],
-                }
-                for item in cover_projection.get("sources", [])
-                if isinstance(item, dict)
-            ],
-            "selected_source_relative_paths": [
-                str(item)
-                for item in cover_projection.get("selected_source_relative_paths", [])
-                if isinstance(item, str)
-            ],
+            "choice": _as_str_object_dict(cover_projection.get("choice")),
+            "by_book": {key: _as_str_object_dict(value) for key, value in covers_by_book.items()},
+            "by_source_relative_path": {
+                key: _as_str_object_dict(value) for key, value in cover_by_source.items()
+            },
+            "candidates": candidates,
+            "sources": sources,
+            "selected_source_relative_paths": _as_str_list(
+                cover_projection.get("selected_source_relative_paths")
+            ),
             "has_single_candidate": bool(cover_projection.get("has_single_candidate", False)),
         },
         "id3_policy": {
-            "field_map": dict(metadata_projection.get("field_map") or {}),
-            "values": dict(metadata_projection.get("values") or {}),
+            "field_map": _as_str_object_dict(metadata_projection.get("field_map")),
+            "values": _as_str_object_dict(metadata_projection.get("values")),
         },
-        "audio_processing": dict(policy_projection.get("audio_processing") or {}),
-        "publish_policy": dict(policy_projection.get("publish_policy") or {}),
-        "delete_source_policy": dict(policy_projection.get("delete_source_policy") or {}),
-        "skip_processed_books": dict(policy_projection.get("skip_processed_books_policy") or {}),
-        "conflict_policy": dict(policy_projection.get("conflict_policy") or {}),
+        "audio_processing": _as_str_object_dict(policy_projection.get("audio_processing")),
+        "publish_policy": _as_str_object_dict(policy_projection.get("publish_policy")),
+        "delete_source_policy": _as_str_object_dict(policy_projection.get("delete_source_policy")),
+        "skip_processed_books": _as_str_object_dict(
+            policy_projection.get("skip_processed_books_policy")
+        ),
+        "conflict_policy": _as_str_object_dict(policy_projection.get("conflict_policy")),
     }
-    conflicts_any = state.get("conflicts")
-    conflicts = dict(conflicts_any) if isinstance(conflicts_any, dict) else {}
+    conflicts = _as_str_object_dict(state.get("conflicts"))
     phase1_projection = {
         **source_projection,
         "metadata": metadata_projection,
         "cover": cover_projection,
         "policy": policy_projection,
         "conflicts_present": bool(conflicts.get("present")) or bool(conflicts.get("items")),
-        "effective_author_title": dict(metadata_projection.get("effective_author_title") or {}),
-        "filename_policy": dict(metadata_projection.get("filename_policy") or {}),
-        "parallelism": dict(policy_projection.get("parallelism") or {}),
+        "effective_author_title": _as_str_object_dict(
+            metadata_projection.get("effective_author_title")
+        ),
+        "filename_policy": _as_str_object_dict(metadata_projection.get("filename_policy")),
+        "parallelism": _as_str_object_dict(policy_projection.get("parallelism")),
         "authority_book_meta": authority_book_meta,
         "normalized_author": str(metadata_projection.get("normalize_author") or ""),
         "normalized_book_title": str(metadata_projection.get("normalize_book_title") or ""),
         "clean_inbox": str(policy_projection.get("clean_inbox") or "ask"),
         "skip_processed_books": bool(policy_projection.get("skip_processed_books", True)),
-        "root_audio_baseline": dict(policy_projection.get("root_audio_baseline") or {}),
-        "two_pass_order": list(policy_projection.get("two_pass_order") or []),
+        "root_audio_baseline": _as_str_object_dict(policy_projection.get("root_audio_baseline")),
+        "two_pass_order": _as_str_list(policy_projection.get("two_pass_order")),
         "phase2_inputs": phase2_inputs,
     }
     phase1_projection["runtime"] = _build_runtime_projection(

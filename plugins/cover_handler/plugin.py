@@ -15,9 +15,9 @@ import hashlib
 import mimetypes
 import shutil
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import Protocol, TypeGuard, runtime_checkable
 from urllib.parse import urlparse
 
 from mutagen.id3 import ID3
@@ -43,6 +43,66 @@ _FILE_COVER_NAMES = (
 
 _GENERIC_COVER_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp")
 _EMBEDDED_SUFFIXES = {".mp3", ".m4a", ".m4b"}
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _to_int_or_default(value: object, default: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _to_bytes_or_none(value: object) -> bytes | None:
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, bytearray):
+        return bytes(value)
+    if isinstance(value, memoryview):
+        return value.tobytes()
+    return None
+
+
+@runtime_checkable
+class _SupportsGetAll(Protocol):
+    def getall(self, key: str) -> list[object]: ...
+
+
+@runtime_checkable
+class _SupportsDataAttr(Protocol):
+    data: object
+
+
+@runtime_checkable
+class _SupportsGet(Protocol):
+    def get(self, key: str, default: object | None = None) -> object: ...
+
+
+@runtime_checkable
+class _FileServiceRootDirPath(Protocol):
+    def _root_dir_path(self, root_name: object) -> Path: ...
+
+
+@runtime_checkable
+class _FileServiceRootDir(Protocol):
+    def root_dir(self, root_name: object) -> Path: ...
+
+
+@runtime_checkable
+class _FileServiceResolveLocalPath(Protocol):
+    def _resolve_local_path(self, root_name: object, rel_path: str) -> Path: ...
+
+
+@runtime_checkable
+class _FileServiceResolveAbsPath(Protocol):
+    def resolve_abs_path(self, root_name: object, rel_path: str) -> Path: ...
 
 
 def _cache_token(value: str) -> str:
@@ -82,13 +142,22 @@ def _has_embedded_artwork(audio_file: Path) -> bool:
     suffix = audio_file.suffix.lower()
     try:
         if suffix == ".mp3":
-            mp3_tags = ID3(str(audio_file))
+            mp3_tags: object = ID3(str(audio_file))
+            if not isinstance(mp3_tags, _SupportsGetAll):
+                return False
             apic_frames = mp3_tags.getall("APIC")
-            return any(bool(getattr(frame, "data", b"")) for frame in apic_frames)
+            return any(
+                bool(_to_bytes_or_none(frame.data))
+                for frame in apic_frames
+                if isinstance(frame, _SupportsDataAttr)
+            )
         if suffix in {".m4a", ".m4b"}:
-            mp4_tags: Any = MP4(str(audio_file)).tags
-            covers = mp4_tags.get("covr") if mp4_tags is not None else None
-            return any(bool(bytes(item)) for item in (covers or []))
+            mp4_tags: object = MP4(str(audio_file)).tags
+            if not isinstance(mp4_tags, _SupportsGet):
+                return False
+            covers_any = mp4_tags.get("covr")
+            covers = covers_any if _is_object_list(covers_any) else []
+            return any(bool(_to_bytes_or_none(item)) for item in covers)
     except Exception:
         return False
     return False
@@ -118,37 +187,33 @@ def _path_to_relative(*, root_dir: Path, abs_path: Path) -> str:
     return abs_path.resolve().relative_to(root_dir.resolve()).as_posix()
 
 
-def _file_service_root_dir(file_service: Any, root_name: Any) -> Path:
-    getter = getattr(file_service, "_root_dir_path", None)
-    if callable(getter):
-        return cast(Callable[[Any], Path], getter)(root_name)
-    fallback = getattr(file_service, "root_dir", None)
-    if callable(fallback):
-        return cast(Callable[[Any], Path], fallback)(root_name)
+def _file_service_root_dir(file_service: object, root_name: object) -> Path:
+    if isinstance(file_service, _FileServiceRootDirPath):
+        return file_service._root_dir_path(root_name)
+    if isinstance(file_service, _FileServiceRootDir):
+        return file_service.root_dir(root_name)
     raise AttributeError("file_service has no root directory accessor")
 
 
-def _file_service_resolve_path(file_service: Any, root_name: Any, rel_path: str) -> Path:
-    getter = getattr(file_service, "_resolve_local_path", None)
-    if callable(getter):
-        return cast(Callable[[Any, str], Path], getter)(root_name, rel_path)
-    fallback = getattr(file_service, "resolve_abs_path", None)
-    if callable(fallback):
-        return cast(Callable[[Any, str], Path], fallback)(root_name, rel_path)
+def _file_service_resolve_path(file_service: object, root_name: object, rel_path: str) -> Path:
+    if isinstance(file_service, _FileServiceResolveLocalPath):
+        return file_service._resolve_local_path(root_name, rel_path)
+    if isinstance(file_service, _FileServiceResolveAbsPath):
+        return file_service.resolve_abs_path(root_name, rel_path)
     raise AttributeError("file_service has no path resolver")
 
 
 class CoverHandlerPlugin:
     """Cover handler plugin."""
 
-    def __init__(self, config: dict | None = None) -> None:
+    def __init__(self, config: dict[str, object] | None = None) -> None:
         """Initialize plugin.
 
         Args:
             config: Plugin configuration
         """
-        self.config = config or {}
-        self.cover_size = self.config.get("cover_size", 1400)
+        self.config = dict(config) if config is not None else {}
+        self.cover_size = _to_int_or_default(self.config.get("cover_size"), 1400)
 
     async def process(self, context: ProcessingContext) -> ProcessingContext:
         """Handle cover based on user choice.
@@ -278,7 +343,7 @@ class CoverHandlerPlugin:
     def discover_cover_candidates_for_ref(
         self,
         *,
-        file_service: Any,
+        file_service: object,
         source_root: str,
         source_relative_path: str,
         group_root: str | None = None,
@@ -330,8 +395,8 @@ class CoverHandlerPlugin:
     async def apply_cover_candidate_for_ref(
         self,
         *,
-        file_service: Any,
-        candidate: dict[str, Any],
+        file_service: object,
+        candidate: dict[str, object],
         output_root: str,
         output_relative_dir: str,
     ) -> dict[str, str] | None:
@@ -464,7 +529,7 @@ class CoverHandlerPlugin:
 
     async def _apply_cover_candidate_from_paths(
         self,
-        candidate: dict[str, Any],
+        candidate: Mapping[str, object],
         *,
         output_dir: Path | None = None,
     ) -> Path | None:
@@ -478,7 +543,7 @@ class CoverHandlerPlugin:
                 return source_path
             output_dir.mkdir(parents=True, exist_ok=True)
             copied_path = output_dir / source_path.name
-            await asyncio.to_thread(shutil.copy2, source_path, copied_path)
+            shutil.copy2(source_path, copied_path)
             return copied_path
 
         if mode == "extract_embedded":

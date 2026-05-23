@@ -2,20 +2,24 @@
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any, TypeGuard, cast
+from typing import TypeGuard, cast
 
 from audiomason.core.errors import PluginError, PluginValidationError
+from audiomason.core.serde import json_loads_object
 
 _ALLOWED_EXECUTION_MODES = {"inline", "job"}
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
-def _is_str_any_dict(value: Any) -> TypeGuard[dict[str, Any]]:
+def _is_str_any_dict(value: object) -> TypeGuard[dict[str, object]]:
     return isinstance(value, dict)
+
+
+def _operation_id(definition: RegisteredWizardCallable) -> str:
+    return definition.operation_id
 
 
 @dataclass(frozen=True)
@@ -30,7 +34,7 @@ class RegisteredWizardCallable:
     execution_mode: str
 
 
-def _ensure_ascii_text(value: Any, *, field: str, manifest_path: Path) -> str:
+def _ensure_ascii_text(value: object, *, field: str, manifest_path: Path) -> str:
     if not isinstance(value, str) or not value:
         raise PluginValidationError(
             f"Invalid callable manifest field '{field}' in {manifest_path}: "
@@ -58,12 +62,12 @@ def _validate_manifest_pointer(pointer: str, *, plugin_dir: Path) -> Path:
     return plugin_dir / Path(pointer_text)
 
 
-def _load_manifest_json(manifest_path: Path) -> dict[str, Any]:
+def _load_manifest_json(manifest_path: Path) -> dict[str, object]:
     if not manifest_path.exists():
         raise PluginValidationError(f"Wizard callable manifest not found: {manifest_path}")
     try:
-        data = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        data = json_loads_object(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
         raise PluginValidationError(
             f"Failed to load wizard callable manifest from {manifest_path}: {exc}"
         ) from exc
@@ -154,22 +158,22 @@ def load_wizard_callable_definitions(
             )
         )
 
-    return tuple(sorted(definitions, key=lambda item: item.operation_id))
+    return tuple(sorted(definitions, key=_operation_id))
 
 
 def resolve_registered_wizard_callable(
     *,
-    plugin_obj: Any,
+    plugin_obj: object,
     callable_def: RegisteredWizardCallable,
-) -> Any:
+) -> object:
     """Resolve a published callable from a plugin instance via the registry contract."""
-    method = getattr(plugin_obj, callable_def.method_name, None)
-    if not callable(method):
+    method_obj: object = getattr(plugin_obj, callable_def.method_name, None)
+    if not callable(method_obj):
         raise PluginError(
             f"Published wizard callable '{callable_def.operation_id}' is missing method "
             f"'{callable_def.method_name}' on plugin '{callable_def.plugin_id}'"
         )
-    return method
+    return method_obj
 
 
 __all__ = [

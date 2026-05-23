@@ -8,10 +8,78 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import TypeGuard, cast
 
 from audiomason.core.context import ProcessingContext
 from audiomason.core.errors import FileError
+from audiomason.core.serde import json_loads_object
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict)
+
+
+def _read_json_dict(path: Path) -> dict[str, object]:
+    loaded = json_loads_object(path.read_text(encoding="utf-8"))
+    if not _is_str_object_dict(loaded):
+        raise FileError(f"Invalid checkpoint format: {path}")
+    return loaded
+
+
+def _as_str(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _as_bool(value: object, *, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value != 0
+    return default
+
+
+def _as_float(value: object, *, default: float = 0.0) -> float:
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _as_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _as_str_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items = cast(list[object], value)
+    return [str(item) for item in items]
+
+
+def _as_timings(value: object) -> dict[str, float]:
+    if not isinstance(value, dict):
+        return {}
+    source = cast(dict[object, object], value)
+    out: dict[str, float] = {}
+    for key, item in source.items():
+        if isinstance(item, int | float):
+            out[str(key)] = float(item)
+    return out
 
 
 class CheckpointManager:
@@ -91,7 +159,7 @@ class CheckpointManager:
             raise FileError(f"Failed to save checkpoint: {e}") from e
 
     def save_job_failure_checkpoint(
-        self, job_id: str, *, kind: str, error: str, meta: dict[str, Any]
+        self, job_id: str, *, kind: str, error: str, meta: dict[str, object]
     ) -> Path:
         """Save a minimal failure checkpoint for a job.
 
@@ -136,62 +204,74 @@ class CheckpointManager:
             raise FileError(f"Checkpoint not found: {context_id}")
 
         try:
-            with open(checkpoint_file) as f:
-                data = json.load(f)
+            data = _read_json_dict(checkpoint_file)
 
             # Reconstruct context
             from audiomason.core.context import CoverChoice, State
 
+            source = _as_str(data.get("source"))
+            state_raw = _as_str(data.get("state"))
+            if source is None or state_raw is None:
+                raise FileError(f"Invalid checkpoint payload: {checkpoint_file}")
+
             context = ProcessingContext(
-                id=data["id"],
-                source=Path(data["source"]),
+                id=str(data.get("id", context_id)),
+                source=Path(source),
             )
 
             # Restore state
-            context.state = State(data["state"])
-            context.current_step = data.get("current_step")
-            context.progress = data.get("progress", 0.0)
-            context.completed_steps = data.get("completed_steps", [])
+            context.state = State(state_raw)
+            context.current_step = _as_str(data.get("current_step"))
+            context.progress = _as_float(data.get("progress", 0.0), default=0.0)
+            context.completed_steps = _as_str_list(data.get("completed_steps", []))
 
             # Restore metadata
-            context.author = data.get("author")
-            context.title = data.get("title")
-            context.year = data.get("year")
-            context.narrator = data.get("narrator")
-            context.series = data.get("series")
-            context.series_number = data.get("series_number")
-            context.genre = data.get("genre")
-            context.language = data.get("language")
-            context.isbn = data.get("isbn")
+            context.author = _as_str(data.get("author"))
+            context.title = _as_str(data.get("title"))
+            context.year = _as_int(data.get("year"))
+            context.narrator = _as_str(data.get("narrator"))
+            context.series = _as_str(data.get("series"))
+            context.series_number = _as_int(data.get("series_number"))
+            context.genre = _as_str(data.get("genre"))
+            context.language = _as_str(data.get("language"))
+            context.isbn = _as_str(data.get("isbn"))
 
             # Restore cover
-            if data.get("cover_choice"):
-                context.cover_choice = CoverChoice(data["cover_choice"])
-            context.cover_url = data.get("cover_url")
+            cover_choice_raw = _as_str(data.get("cover_choice"))
+            if cover_choice_raw:
+                context.cover_choice = CoverChoice(cover_choice_raw)
+            context.cover_url = _as_str(data.get("cover_url"))
 
             # Restore options
-            context.split_chapters = data.get("split_chapters", False)
-            context.loudnorm = data.get("loudnorm", False)
-            context.target_bitrate = data.get("target_bitrate", "128k")
+            context.split_chapters = _as_bool(data.get("split_chapters"), default=False)
+            context.loudnorm = _as_bool(data.get("loudnorm"), default=False)
+            context.target_bitrate = _as_str(data.get("target_bitrate")) or "128k"
 
             # Restore paths
-            if data.get("stage_dir"):
-                context.stage_dir = Path(data["stage_dir"])
-            if data.get("output_path"):
-                context.output_path = Path(data["output_path"])
+            stage_dir_raw = _as_str(data.get("stage_dir"))
+            if stage_dir_raw:
+                context.stage_dir = Path(stage_dir_raw)
+            output_path_raw = _as_str(data.get("output_path"))
+            if output_path_raw:
+                context.output_path = Path(output_path_raw)
 
             # Restore files
-            context.converted_files = [Path(f) for f in data.get("converted_files", [])]
-            if data.get("cover_path"):
-                context.cover_path = Path(data["cover_path"])
+            context.converted_files = [
+                Path(item) for item in _as_str_list(data.get("converted_files", []))
+            ]
+            cover_path_raw = _as_str(data.get("cover_path"))
+            if cover_path_raw:
+                context.cover_path = Path(cover_path_raw)
 
             # Restore timing
-            context.timings = data.get("timings", {})
-            context.start_time = data.get("start_time")
-            context.end_time = data.get("end_time")
+            context.timings = _as_timings(data.get("timings", {}))
+            start_time_raw = data.get("start_time")
+            end_time_raw = data.get("end_time")
+            context.start_time = _as_float(start_time_raw) if start_time_raw is not None else None
+            context.end_time = _as_float(end_time_raw) if end_time_raw is not None else None
 
             # Restore warnings
-            context.warnings = data.get("warnings", [])
+            context.warnings = _as_str_list(data.get("warnings", []))
 
             context.checkpoint_path = checkpoint_file
 
@@ -200,26 +280,26 @@ class CheckpointManager:
         except Exception as e:
             raise FileError(f"Failed to load checkpoint: {e}") from e
 
-    def list_checkpoints(self) -> list[dict[str, Any]]:
+    def list_checkpoints(self) -> list[dict[str, object]]:
         """List all available checkpoints.
 
         Returns:
             List of checkpoint info dicts
         """
-        checkpoints: list[dict[str, Any]] = []
+        checkpoints: list[dict[str, object]] = []
 
         for checkpoint_file in self.checkpoint_dir.glob("*.json"):
             try:
-                with open(checkpoint_file) as f:
-                    data = json.load(f)
+                data = _read_json_dict(checkpoint_file)
+                checkpoint_id = _as_str(data.get("id")) or ""
 
                 checkpoints.append(
                     {
-                        "id": data["id"],
-                        "title": data.get("title", "Unknown"),
-                        "author": data.get("author", "Unknown"),
-                        "state": data.get("state", "unknown"),
-                        "progress": data.get("progress", 0.0),
+                        "id": checkpoint_id,
+                        "title": _as_str(data.get("title")) or "Unknown",
+                        "author": _as_str(data.get("author")) or "Unknown",
+                        "state": _as_str(data.get("state")) or "unknown",
+                        "progress": _as_float(data.get("progress", 0.0), default=0.0),
                         "file": checkpoint_file,
                     }
                 )

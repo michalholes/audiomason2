@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Protocol, TypeGuard, cast, runtime_checkable
 
 from .cli_launcher_facade import (
     begin_phase2,
@@ -35,19 +35,57 @@ class RendererConfig:
     nav_ui: str
 
 
-def _json_dump(obj: Any) -> str:
+@runtime_checkable
+class _ConfigResolver(Protocol):
+    def resolve(self, key: str) -> tuple[object, object]: ...
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _to_int_or_default(value: object, default: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _field_list(value: object) -> list[dict[str, object]]:
+    if not _is_object_list(value):
+        return []
+    return [dict(item) for item in value if _is_str_object_dict(item)]
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _json_dump(obj: object) -> str:
     return json.dumps(obj, ensure_ascii=True, sort_keys=True)
 
 
-def _cfg_get(resolver: Any, key: str, default: Any) -> Any:
+def _cfg_get(resolver: object, key: str, default: object) -> object:
+    if not isinstance(resolver, _ConfigResolver):
+        return default
     try:
-        value, _source = resolver.resolve(key)
-        return value
+        resolved = resolver.resolve(key)
     except Exception:
         return default
+    if isinstance(resolved, tuple) and resolved:
+        return resolved[0]
+    return default
 
 
-def load_renderer_config(resolver: Any) -> RendererConfig:
+def load_renderer_config(resolver: object) -> RendererConfig:
     launcher_mode = str(_cfg_get(resolver, "plugins.import.cli.launcher_mode", "interactive"))
     default_root = str(_cfg_get(resolver, "plugins.import.cli.default_root", "inbox"))
     default_path = str(_cfg_get(resolver, "plugins.import.cli.default_path", ""))
@@ -58,10 +96,7 @@ def load_renderer_config(resolver: Any) -> RendererConfig:
         _cfg_get(resolver, "plugins.import.cli.render.show_internal_ids", False)
     )
     max_list_items_any = _cfg_get(resolver, "plugins.import.cli.render.max_list_items", 200)
-    try:
-        max_list_items = int(max_list_items_any)
-    except Exception:
-        max_list_items = 200
+    max_list_items = _to_int_or_default(max_list_items_any, 200)
 
     if max_list_items < 1:
         max_list_items = 1
@@ -91,8 +126,8 @@ def load_renderer_config(resolver: Any) -> RendererConfig:
 def run_launcher(
     *,
     engine: ImportWizardEngine,
-    resolver: Any,
-    cli_overrides: dict[str, Any],
+    resolver: object,
+    cli_overrides: dict[str, object],
     input_fn: Callable[[str], str] = input,
     print_fn: Callable[[str], None] = print,
 ) -> int:
@@ -119,12 +154,19 @@ def run_launcher(
         mode="stage",
         intent=None,
     )
-    if isinstance(state, dict) and state.get("error", {}).get("code") == "SESSION_START_CONFLICT":
+    error = _is_str_object_dict(state) and _is_str_object_dict(state.get("error"))
+    error_payload = state.get("error") if error else {}
+    if _is_str_object_dict(error_payload) and error_payload.get("code") == "SESSION_START_CONFLICT":
         if cfg.noninteractive:
             print_fn(_json_dump({"state": state}))
             return 1
-        details = state.get("error", {}).get("details")
-        meta = details[0].get("meta") if isinstance(details, list) and details else {}
+        details = error_payload.get("details")
+        first_detail = details[0] if _is_object_list(details) and details else None
+        meta = (
+            _as_str_object_dict(first_detail.get("meta"))
+            if _is_str_object_dict(first_detail)
+            else {}
+        )
         session_id = str(meta.get("session_id") or "")
         intent = prompt_session_start_intent(
             session_id=session_id,
@@ -156,7 +198,7 @@ def run_launcher(
     )
 
 
-def _apply_overrides(cfg: RendererConfig, overrides: dict[str, Any]) -> RendererConfig:
+def _apply_overrides(cfg: RendererConfig, overrides: dict[str, object]) -> RendererConfig:
     launcher_mode = str(overrides.get("launcher_mode", cfg.launcher_mode))
     if launcher_mode not in {"interactive", "fixed", "disabled"}:
         launcher_mode = cfg.launcher_mode
@@ -170,10 +212,7 @@ def _apply_overrides(cfg: RendererConfig, overrides: dict[str, Any]) -> Renderer
 
     max_list_items = cfg.max_list_items
     if "max_list_items" in overrides:
-        try:
-            max_list_items = int(overrides["max_list_items"])
-        except Exception:
-            max_list_items = cfg.max_list_items
+        max_list_items = _to_int_or_default(overrides["max_list_items"], cfg.max_list_items)
 
     if max_list_items < 1:
         max_list_items = 1
@@ -192,11 +231,11 @@ def _apply_overrides(cfg: RendererConfig, overrides: dict[str, Any]) -> Renderer
     )
 
 
-def _pick_root(*_args: Any, **_kwargs: Any) -> str:  # pragma: no cover
+def _pick_root(*_args: object, **_kwargs: object) -> str:  # pragma: no cover
     raise RuntimeError("_pick_root moved to cli_launcher_facade")
 
 
-def _pick_path(*_args: Any, **_kwargs: Any) -> str:  # pragma: no cover
+def _pick_path(*_args: object, **_kwargs: object) -> str:  # pragma: no cover
     raise RuntimeError("_pick_path moved to cli_launcher_facade")
 
 
@@ -219,7 +258,7 @@ def _render_loop(
             print_fn(_json_dump({"state": state}))
             return 1
 
-        if int(state.get("phase") or 1) == 2:
+        if _to_int_or_default(state.get("phase"), 1) == 2:
             return _finalize(engine, session_id, print_fn=print_fn)
 
         step = engine.get_step_definition(session_id, cur)
@@ -256,20 +295,18 @@ def _render_loop(
             if "error" in state3:
                 print_fn(_json_dump({"state": state3}))
                 return 1
-            if int(state3.get("phase") or 1) == 2:
+            if _to_int_or_default(state3.get("phase"), 1) == 2:
                 return _finalize(engine, session_id, print_fn=print_fn)
             continue
 
         computed_only = bool(step.get("computed_only"))
         fields_any = step.get("fields")
-        fields: list[dict[str, Any]] = (
-            [f for f in fields_any if isinstance(f, dict)] if isinstance(fields_any, list) else []
-        )
+        fields = _field_list(fields_any)
 
         if computed_only or not fields:
             # No user input required; advance.
             state2 = engine.apply_action(session_id, "next")
-            if int(state2.get("phase") or 1) == 2:
+            if _to_int_or_default(state2.get("phase"), 1) == 2:
                 return _finalize(engine, session_id, print_fn=print_fn)
             continue
 
@@ -277,7 +314,7 @@ def _render_loop(
             print_fn("ERROR: noninteractive mode requires explicit wizard step payloads.")
             return 1
 
-        nav_ui = str(getattr(cfg, "nav_ui", "prompt"))
+        nav_ui = str(cfg.nav_ui or "prompt")
         allow_inline = nav_ui in {"inline", "both"}
         show_action_prompt = nav_ui in {"prompt", "both"}
 
@@ -295,7 +332,7 @@ def _render_loop(
                 return True, 1
             return False, None
 
-        payload: dict[str, Any] = {}
+        payload: dict[str, object] = {}
         back_requested = False
 
         for f in fields:
@@ -369,7 +406,7 @@ def _render_loop(
         if "error" in state3:
             print_fn(_json_dump({"state": state3}))
             return 1
-        if int(state3.get("phase") or 1) == 2:
+        if _to_int_or_default(state3.get("phase"), 1) == 2:
             return _finalize(engine, session_id, print_fn=print_fn)
 
         if show_action_prompt:
@@ -387,17 +424,17 @@ def _render_loop(
 
 def _show_select_items(
     *,
-    field: dict[str, Any],
+    field: dict[str, object],
     name: str,
     cfg: RendererConfig,
     print_fn: Callable[[str], None],
 ) -> None:
     items_any = field.get("items")
-    if not (isinstance(items_any, list) and all(isinstance(x, dict) for x in items_any)):
+    if not _is_object_list(items_any):
         print_fn(f"ERROR: field '{name}' has no selectable items")
         return
 
-    items: list[dict[str, Any]] = [dict(x) for x in items_any]
+    items = _field_list(items_any)
     if not items:
         print_fn(f"ERROR: field '{name}' has no selectable items")
         return
@@ -414,9 +451,9 @@ def _show_select_items(
         print_fn(f"  ... ({len(items) - cfg.max_list_items} more)")
 
 
-def _v3_prompt_metadata(step: dict[str, Any]) -> dict[str, Any] | None:
+def _v3_prompt_metadata(step: dict[str, object]) -> dict[str, object] | None:
     primitive_id = str(step.get("primitive_id") or "")
-    primitive_version = int(step.get("primitive_version") or 0)
+    primitive_version = _to_int_or_default(step.get("primitive_version"), 0)
     ui_any = step.get("ui")
     if primitive_version != 1 or primitive_id not in {
         "ui.prompt_text",
@@ -424,10 +461,10 @@ def _v3_prompt_metadata(step: dict[str, Any]) -> dict[str, Any] | None:
         "ui.prompt_confirm",
     }:
         return None
-    return dict(ui_any) if isinstance(ui_any, dict) else None
+    return dict(ui_any) if _is_str_object_dict(ui_any) else None
 
 
-def _prompt_seed_value(metadata: dict[str, Any]) -> Any:
+def _prompt_seed_value(metadata: dict[str, object]) -> object:
     if "prefill" in metadata:
         return metadata["prefill"]
     if "default_value" in metadata:
@@ -435,7 +472,7 @@ def _prompt_seed_value(metadata: dict[str, Any]) -> Any:
     return None
 
 
-def _stringify_prompt_value(value: Any) -> str:
+def _stringify_prompt_value(value: object) -> str:
     if value is None:
         return "null"
     if isinstance(value, bool):
@@ -445,26 +482,22 @@ def _stringify_prompt_value(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
 
 
-def _parse_prompt_value(raw: str) -> Any:
+def _parse_prompt_value(raw: str) -> object:
     if raw == "":
         return ""
     try:
-        return json.loads(raw)
+        return cast(object, json.loads(raw))
     except Exception:
         return raw
 
 
 def _display_prompt_select_items(
-    metadata: dict[str, Any],
+    metadata: dict[str, object],
     *,
     print_fn: Callable[[str], None],
 ) -> None:
     items_any = metadata.get("items")
-    items = (
-        [item for item in items_any if isinstance(item, dict)]
-        if isinstance(items_any, list)
-        else []
-    )
+    items = _field_list(items_any)
     if not items:
         return
     print_fn("Options:")
@@ -479,13 +512,13 @@ def _collect_v3_prompt_payload(
     *,
     engine: ImportWizardEngine,
     session_id: str,
-    step: dict[str, Any],
-    metadata: dict[str, Any],
+    step: dict[str, object],
+    metadata: dict[str, object],
     input_fn: Callable[[str], str],
     print_fn: Callable[[str], None],
     confirm_defaults: bool,
     allow_inline: bool,
-) -> tuple[dict[str, Any] | None, int | None]:
+) -> tuple[dict[str, object] | None, int | None]:
     primitive_id = str(step.get("primitive_id") or "")
     label = str(metadata.get("label") or "")
     prompt = str(metadata.get("prompt") or "")
@@ -512,7 +545,7 @@ def _collect_v3_prompt_payload(
     if primitive_id == "ui.prompt_select":
         _display_prompt_select_items(metadata, print_fn=print_fn)
 
-    def _handle_inline_nav(raw: str) -> tuple[dict[str, Any] | None, int | None] | None:
+    def _handle_inline_nav(raw: str) -> tuple[dict[str, object] | None, int | None] | None:
         if not allow_inline:
             return None
         expr = raw.strip().lower()

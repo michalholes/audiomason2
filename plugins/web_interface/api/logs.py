@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from typing import Any
+from typing import Protocol, cast
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -20,8 +20,16 @@ from ..util.log_stream import tail_text as logbus_tail_text
 DIAGNOSTICS_REL_PATH = "diagnostics/diagnostics.jsonl"
 
 
+class _StateView(Protocol):
+    config_resolver: object
+
+
 def _get_resolver(request: Request) -> ConfigResolver:
-    resolver = getattr(request.app.state, "config_resolver", None)
+    state = cast(_StateView, request.state)
+    try:
+        resolver = state.config_resolver
+    except Exception:
+        resolver = None
     if isinstance(resolver, ConfigResolver):
         return resolver
     return ConfigResolver()
@@ -90,8 +98,7 @@ def mount_logs(app: FastAPI) -> None:
     # without tailing files.
     install_log_tap()
 
-    @app.get("/api/logs/tail")
-    def logs_tail(request: Request, lines: int = 200) -> dict[str, Any]:
+    def logs_tail(request: Request, lines: int = 200) -> dict[str, object]:
         # Primary source: in-process EventBus tap (no tailing web logs).
         items = snapshot(since_id=0, limit=max(1, min(int(lines), 2000)))
         txt = "\n".join(payload for _eid, payload in items) + ("\n" if items else "")
@@ -107,7 +114,6 @@ def mount_logs(app: FastAPI) -> None:
 
         return {"path": "event_bus", "text": txt}
 
-    @app.get("/api/logs/stream")
     def logs_stream(request: Request, since_id: int = 0) -> StreamingResponse:
         # SSE stream from the in-process EventBus tap.
         if since_id < 0:
@@ -126,13 +132,11 @@ def mount_logs(app: FastAPI) -> None:
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
-    @app.get("/api/logbus/tail")
-    def logbus_tail(lines: int = 200) -> dict[str, Any]:
+    def logbus_tail(lines: int = 200) -> dict[str, object]:
         # In-process LogBus tap (no tailing any files).
         n = max(1, min(int(lines), 2000))
         return {"path": "log_bus", "text": logbus_tail_text(lines=n)}
 
-    @app.get("/api/logbus/stream")
     def logbus_stream(since_id: int = 0) -> StreamingResponse:
         if since_id < 0:
             since_id = 0
@@ -150,8 +154,7 @@ def mount_logs(app: FastAPI) -> None:
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
-    @app.get("/api/logs/diagnostics_jsonl_tail")
-    def logs_diagnostics_jsonl_tail(request: Request, lines: int = 200) -> dict[str, Any]:
+    def logs_diagnostics_jsonl_tail(request: Request, lines: int = 200) -> dict[str, object]:
         resolver = _get_resolver(request)
         if not is_diagnostics_enabled(resolver):
             raise HTTPException(status_code=404, detail="diagnostics not enabled")
@@ -165,7 +168,6 @@ def mount_logs(app: FastAPI) -> None:
             "text": _tail_jsonl(fs, max(1, min(int(lines), 5000))),
         }
 
-    @app.get("/api/logs/diagnostics_jsonl_stream")
     def logs_diagnostics_jsonl_stream(request: Request) -> StreamingResponse:
         resolver = _get_resolver(request)
         if not is_diagnostics_enabled(resolver):
@@ -181,11 +183,30 @@ def mount_logs(app: FastAPI) -> None:
                 txt = _tail_jsonl(fs, 200)
                 if txt != last:
                     last = txt
+                    payload_obj: dict[str, str] = {"text": txt}
                     payload = json.dumps(
-                        {"text": txt}, ensure_ascii=True, separators=(",", ":"), sort_keys=True
+                        payload_obj,
+                        ensure_ascii=True,
+                        separators=(",", ":"),
+                        sort_keys=True,
                     )
                     yield ("data: " + payload + "\n\n").encode("utf-8")
                 # Do not spin.
                 __import__("time").sleep(1.0)
 
         return StreamingResponse(gen(), media_type="text/event-stream")
+
+    app.add_api_route("/api/logs/tail", logs_tail, methods=["GET"])
+    app.add_api_route("/api/logs/stream", logs_stream, methods=["GET"])
+    app.add_api_route("/api/logbus/tail", logbus_tail, methods=["GET"])
+    app.add_api_route("/api/logbus/stream", logbus_stream, methods=["GET"])
+    app.add_api_route(
+        "/api/logs/diagnostics_jsonl_tail",
+        logs_diagnostics_jsonl_tail,
+        methods=["GET"],
+    )
+    app.add_api_route(
+        "/api/logs/diagnostics_jsonl_stream",
+        logs_diagnostics_jsonl_stream,
+        methods=["GET"],
+    )

@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import builtins
 import contextlib
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from contextvars import ContextVar
 from enum import StrEnum
+from typing import Protocol, cast
 
 
 class Phase(StrEnum):
@@ -24,7 +25,13 @@ class Phase(StrEnum):
 _CURRENT_PHASE: ContextVar[Phase] = ContextVar("audiomason_phase", default=Phase.UI_INPUT)
 
 _INPUT_HOOK_DEPTH: ContextVar[int] = ContextVar("audiomason_phase_input_hook_depth", default=0)
-_ORIGINAL_INPUT: ContextVar[Callable[..., str] | None] = ContextVar(
+
+
+class _InputCallable(Protocol):
+    def __call__(self, prompt: object = "") -> str: ...
+
+
+_ORIGINAL_INPUT: ContextVar[_InputCallable | None] = ContextVar(
     "audiomason_phase_original_input", default=None
 )
 
@@ -57,7 +64,7 @@ class PhaseGuard:
         depth = _INPUT_HOOK_DEPTH.get()
 
         if depth == 0:
-            _ORIGINAL_INPUT.set(builtins.input)
+            _ORIGINAL_INPUT.set(cast(_InputCallable, builtins.input))
 
             def _blocked_input(prompt: object = "") -> str:
                 raise PhaseContractError(f"prompt attempted during processing: {prompt}")

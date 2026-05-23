@@ -8,10 +8,28 @@ ASCII-only.
 from __future__ import annotations
 
 from pathlib import PurePosixPath
-from typing import Any
+from typing import TypeGuard
 
 from .phase1_metadata_flow import build_phase1_metadata_projection
 from .phase1_source_intake import build_phase1_source_projection
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _as_nested_str_object_dict(value: object) -> dict[str, dict[str, object]]:
+    if not _is_str_object_dict(value):
+        return {}
+    return {key: _as_str_object_dict(item) for key, item in value.items()}
+
+
+def _selected_unit_sort_key(item: dict[str, object]) -> tuple[str, str]:
+    return (str(item.get("label") or ""), str(item.get("book_id") or ""))
 
 
 def _normalize_rel_path(value: str) -> str:
@@ -34,8 +52,8 @@ class PlanSelectionError(ValueError):
     """Raised when a plan cannot be computed due to invalid selection."""
 
 
-def _canonical_target_relative_path(*, authority_meta: dict[str, Any] | None) -> str:
-    authority = dict(authority_meta) if isinstance(authority_meta, dict) else {}
+def _canonical_target_relative_path(*, authority_meta: dict[str, object] | None) -> str:
+    authority = _as_str_object_dict(authority_meta)
     author_label = _normalize_rel_path(str(authority.get("author_label") or ""))
     book_label = _normalize_rel_path(str(authority.get("book_label") or ""))
     if not author_label or not book_label:
@@ -47,7 +65,7 @@ _PHASE2_AUDIO_SUFFIXES = {".m4a", ".m4b", ".mp3", ".opus"}
 
 
 def _audio_rel_paths_for_unit(
-    discovery: list[dict[str, Any]],
+    discovery: list[dict[str, object]],
     *,
     relative_path: str,
     source_relative_path: str,
@@ -78,7 +96,7 @@ def _audio_rel_paths_for_unit(
 
 
 def _rename_outputs_for_unit(
-    discovery: list[dict[str, Any]],
+    discovery: list[dict[str, object]],
     *,
     relative_path: str,
     source_relative_path: str,
@@ -96,17 +114,15 @@ def _authority_book_meta(
     *,
     root: str,
     relative_path: str,
-    discovery: list[dict[str, Any]],
-    inputs: dict[str, Any],
+    discovery: list[dict[str, object]],
+    inputs: dict[str, object],
     selected_book_ids: list[str],
-    session_authority: dict[str, Any] | None,
-) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
-    authority_any = dict(session_authority) if isinstance(session_authority, dict) else {}
+    session_authority: dict[str, object] | None,
+) -> tuple[dict[str, dict[str, object]], dict[str, dict[str, object]]]:
+    authority_any = _as_str_object_dict(session_authority)
     authority_book_meta_any = authority_any.get("authority_book_meta")
-    authority_book_meta = (
-        dict(authority_book_meta_any) if isinstance(authority_book_meta_any, dict) else {}
-    )
-    source_book_meta: dict[str, dict[str, Any]] = {}
+    authority_book_meta = _as_nested_str_object_dict(authority_book_meta_any)
+    source_book_meta: dict[str, dict[str, object]] = {}
     if authority_book_meta:
         source_projection = build_phase1_source_projection(
             discovery=discovery,
@@ -116,7 +132,7 @@ def _authority_book_meta(
             },
         )
         source_meta_any = source_projection.get("book_meta")
-        source_book_meta = dict(source_meta_any) if isinstance(source_meta_any, dict) else {}
+        source_book_meta = _as_nested_str_object_dict(source_meta_any)
         return authority_book_meta, source_book_meta
 
     phase1_state = {
@@ -126,22 +142,22 @@ def _authority_book_meta(
     }
     source_projection = build_phase1_source_projection(discovery=discovery, state=phase1_state)
     source_meta_any = source_projection.get("book_meta")
-    source_book_meta = dict(source_meta_any) if isinstance(source_meta_any, dict) else {}
+    source_book_meta = _as_nested_str_object_dict(source_meta_any)
     metadata_projection = build_phase1_metadata_projection(
         source_projection=source_projection,
         state=phase1_state,
     )
     authority_meta_any = metadata_projection.get("authority_by_book")
-    authority_book_meta = dict(authority_meta_any) if isinstance(authority_meta_any, dict) else {}
+    authority_book_meta = _as_nested_str_object_dict(authority_meta_any)
     return authority_book_meta, source_book_meta
 
 
 def _filter_discovery_for_books(
-    discovery: list[dict[str, Any]],
-    selected_units: list[dict[str, str]],
+    discovery: list[dict[str, object]],
+    selected_units: list[dict[str, object]],
     *,
     source_relative_path: str,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     source_prefix = _normalize_rel_path(source_relative_path)
     prefixes = []
     for u in selected_units:
@@ -156,7 +172,7 @@ def _filter_discovery_for_books(
     if not prefixes:
         return []
 
-    filtered: list[dict[str, Any]] = []
+    filtered: list[dict[str, object]] = []
     for it in discovery:
         rel_any = it.get("relative_path")
         if not isinstance(rel_any, str):
@@ -175,11 +191,11 @@ def compute_plan(
     session_id: str,
     root: str,
     relative_path: str,
-    discovery: list[dict[str, Any]],
-    inputs: dict[str, Any],
+    discovery: list[dict[str, object]],
+    inputs: dict[str, object],
     selected_book_ids: list[str],
-    session_authority: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+    session_authority: dict[str, object] | None = None,
+) -> dict[str, object]:
     authority_book_meta, source_book_meta = _authority_book_meta(
         root=root,
         relative_path=relative_path,
@@ -189,7 +205,7 @@ def compute_plan(
         session_authority=session_authority,
     )
 
-    selected_units: list[dict[str, Any]] = []
+    selected_units: list[dict[str, object]] = []
     for book_id in selected_book_ids:
         if not isinstance(book_id, str):
             continue
@@ -224,7 +240,7 @@ def compute_plan(
 
     selected_units = sorted(
         selected_units,
-        key=lambda item: (str(item["label"]), str(item["book_id"])),
+        key=_selected_unit_sort_key,
     )
 
     selected_discovery = _filter_discovery_for_books(

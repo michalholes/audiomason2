@@ -7,7 +7,6 @@ import shutil
 import subprocess
 from importlib import import_module
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -46,7 +45,7 @@ ASSET_PATHS = [
 ]
 
 
-def _make_engine(tmp_path: Path) -> Any:
+def _make_engine(tmp_path: Path) -> object:
     roots = {
         name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
     }
@@ -193,7 +192,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ASSET_BASE = REPO_ROOT / "plugins" / "import" / "ui" / "web" / "assets"
 
 
-def _run_flow_json_modal_picker_scenario(body: str) -> dict[str, Any]:
+def _run_flow_json_modal_picker_scenario(body: str) -> dict[str, object]:
     node = shutil.which("node")
     if not node:
         pytest.skip("node not installed")

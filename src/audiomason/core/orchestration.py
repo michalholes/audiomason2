@@ -11,13 +11,12 @@ This module is UI-agnostic: CLI and the future web interface can both call it.
 from __future__ import annotations
 
 import asyncio
-import json
 import threading
 import time
 from collections.abc import Coroutine
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.context import ProcessingContext
@@ -33,11 +32,17 @@ from audiomason.core.logging import (
     set_log_sink,
     set_verbosity,
 )
-from audiomason.core.orchestration_models import ProcessContractRequest, ProcessRequest
+from audiomason.core.orchestration_models import (
+    PluginLoaderProtocol,
+    ProcessContractEntryPoint,
+    ProcessContractRequest,
+    ProcessRequest,
+)
 from audiomason.core.phase import PhaseContractError, PhaseGuard
 from audiomason.core.pipeline import PipelineExecutor
 from audiomason.core.process_contract_runtime import get_process_contract_runtime
 from audiomason.core.process_job_contracts import resolve_process_job_contract
+from audiomason.core.serde import json_dumps_text, json_loads_object
 
 
 def _utcnow_iso() -> str:
@@ -57,7 +62,7 @@ OP_CTX = "context_lifecycle"
 OP_EXECUTE_PIPELINE = "execute_pipeline"
 
 
-def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
+def _emit_diag(event: str, *, operation: str, data: dict[str, object]) -> None:
     """Emit a structured runtime diagnostic event via the authoritative entrypoint.
 
     This must never crash or block processing.
@@ -74,7 +79,7 @@ def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
         _LOGGER.warning(f"diagnostic emission failed: {type(e).__name__}: {e}")
 
 
-def emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
+def emit_diag(event: str, *, operation: str, data: dict[str, object]) -> None:
     _emit_diag(event, operation=operation, data=data)
 
 
@@ -114,7 +119,15 @@ def _duration_ms(start: float, end: float) -> int:
     return int((end - start) * 1000)
 
 
-def _run_coro_sync(coro: Coroutine[Any, Any, Any]) -> None:
+def _decode_sources_json(payload: str) -> list[str]:
+    loaded = json_loads_object(payload)
+    if not isinstance(loaded, list):
+        return []
+    loaded_items = cast(list[object], loaded)
+    return [str(item) for item in loaded_items]
+
+
+def _run_coro_sync(coro: Coroutine[object, object, object]) -> None:
     """Run a coroutine to completion in a dedicated event loop.
 
     This is used only when no running event loop exists (e.g., CLI code paths).
@@ -148,7 +161,7 @@ class Orchestrator:
             JobType.PROCESS,
             meta={
                 "pipeline_path": str(request.pipeline_path),
-                "sources_json": json.dumps(
+                "sources_json": json_dumps_text(
                     [str(ctx.source) for ctx in request.contexts],
                     ensure_ascii=True,
                     separators=(",", ":"),
@@ -184,7 +197,13 @@ class Orchestrator:
 
         return job.job_id
 
-    def run_job(self, job_id: str, *, plugin_loader: Any, verbosity: int = 1) -> None:
+    def run_job(
+        self,
+        job_id: str,
+        *,
+        plugin_loader: PluginLoaderProtocol,
+        verbosity: int = 1,
+    ) -> None:
         """Run an existing PENDING job."""
         job = self._jobs.get_job(job_id)
         if job.state != JobState.PENDING:
@@ -193,8 +212,6 @@ class Orchestrator:
         if job.type == JobType.PROCESS:
             contract = resolve_process_job_contract(job.meta)
             if contract is not None:
-                if plugin_loader is None:
-                    raise RuntimeError("plugin_loader is required for process contract jobs")
                 request = self._build_process_contract_request(
                     job,
                     plugin_loader=plugin_loader,
@@ -212,15 +229,8 @@ class Orchestrator:
             if not isinstance(pipeline_path, str) or not pipeline_path:
                 raise RuntimeError("missing pipeline_path")
             try:
-                loaded_sources = json.loads(sources_json)
+                sources = _decode_sources_json(sources_json)
             except Exception:
-                loaded_sources = []
-
-            sources: list[str]
-            if isinstance(loaded_sources, list):
-                loaded_list = cast(list[object], loaded_sources)
-                sources = [str(item) for item in loaded_list]
-            else:
                 sources = []
 
             contexts: list[ProcessingContext] = []
@@ -294,7 +304,7 @@ class Orchestrator:
         self,
         job: Job,
         *,
-        plugin_loader: Any,
+        plugin_loader: PluginLoaderProtocol,
         verbosity: int,
     ) -> ProcessContractRequest:
         contract = resolve_process_job_contract(job.meta)
@@ -338,7 +348,7 @@ class Orchestrator:
         )
 
     def start_process_runtime(
-        self, *, plugin_loader: Any | None = None, verbosity: int = 1
+        self, *, plugin_loader: PluginLoaderProtocol | None = None, verbosity: int = 1
     ) -> None:
         if plugin_loader is not None:
             for job in self._jobs.list_jobs():
@@ -389,7 +399,16 @@ class Orchestrator:
 
             with PhaseGuard.processing():
                 plugin = request.plugin_loader.get_plugin(request.plugin_name)
-                handler = getattr(plugin, request.entrypoint_name)
+                handler_obj: object = getattr(
+                    plugin,
+                    request.entrypoint_name,
+                    None,
+                )
+                if not callable(handler_obj):
+                    raise RuntimeError(
+                        f"missing process contract entrypoint: {request.entrypoint_name}"
+                    )
+                handler = cast(ProcessContractEntryPoint, handler_obj)
                 _emit_diag(
                     "diag.boundary.start",
                     operation=OP_EXECUTE_PIPELINE,
@@ -406,7 +425,7 @@ class Orchestrator:
                         plugin_loader=request.plugin_loader,
                     )
                     if asyncio.iscoroutine(result):
-                        await result
+                        await cast(Coroutine[object, object, object], result)
                 except Exception as e:
                     _emit_diag(
                         "diag.boundary.fail",

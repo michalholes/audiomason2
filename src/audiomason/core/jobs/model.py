@@ -2,11 +2,38 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import cast
 
 
 def _new_meta() -> dict[str, str]:
     return {}
+
+
+def _as_optional_str(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _as_progress(value: object) -> float:
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def _as_meta_dict(value: object) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    source = cast(dict[object, object], value)
+    out: dict[str, str] = {}
+    for key, item in source.items():
+        out[str(key)] = str(item)
+    return out
 
 
 class JobType(StrEnum):
@@ -60,7 +87,7 @@ class Job:
             raise ValueError("progress must be within [0.0, 1.0]")
         self.progress = value
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "job_id": self.job_id,
             "type": self.type.value,
@@ -75,16 +102,16 @@ class Job:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Job:
+    def from_dict(cls, data: dict[str, object]) -> Job:
         return cls(
             job_id=str(data["job_id"]),
             type=JobType(str(data["type"])),
             state=JobState(str(data.get("state", JobState.PENDING.value))),
-            progress=float(data.get("progress", 0.0)),
-            created_at=data.get("created_at"),
-            started_at=data.get("started_at"),
-            finished_at=data.get("finished_at"),
+            progress=_as_progress(data.get("progress", 0.0)),
+            created_at=_as_optional_str(data.get("created_at")),
+            started_at=_as_optional_str(data.get("started_at")),
+            finished_at=_as_optional_str(data.get("finished_at")),
             cancel_requested=bool(data.get("cancel_requested", False)),
-            error=data.get("error"),
-            meta=dict(data.get("meta", {})),
+            error=_as_optional_str(data.get("error")),
+            meta=_as_meta_dict(data.get("meta", {})),
         )

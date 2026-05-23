@@ -8,15 +8,104 @@ from __future__ import annotations
 import shutil
 from collections.abc import Awaitable
 from pathlib import Path
-from typing import Any, cast
+from typing import Protocol, TypeGuard, cast, runtime_checkable
 
 from plugins.file_io.import_runtime import normalize_relative_path, publish_staged
+from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
 from .cover_boundary import apply_cover_candidate as apply_cover_candidate_ref
 from .engine_util import _emit_required
 from .file_io_boundary import materialize_local_path
 from .storage import read_json
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _as_dict_list(value: object) -> list[dict[str, object]]:
+    if not _is_object_list(value):
+        return []
+    return [dict(item) for item in value if _is_str_object_dict(item)]
+
+
+def _as_str_list(value: object) -> list[str]:
+    if not _is_object_list(value):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _to_int_or_default(value: object, default: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+class _PluginLoader(Protocol):
+    def get_plugin(self, name: str) -> object: ...
+
+
+class _SupportsFileService(Protocol):
+    def get_file_service(self) -> FileService: ...
+
+
+class _AudioProcessorPlugin(Protocol):
+    bitrate: str
+    loudnorm: bool
+    split_chapters: bool
+
+    def plan_import_conversion(
+        self,
+        source_file: Path,
+        output_dir: Path,
+        *,
+        chapters: list[dict[str, object]] | None,
+    ) -> object: ...
+
+    def _execute_plan(self, plan: object) -> object: ...
+
+
+@runtime_checkable
+class _AudioProcessorDetectChapters(Protocol):
+    def _detect_chapters(
+        self,
+        source_file: Path,
+    ) -> list[dict[str, object]] | Awaitable[list[dict[str, object]] | None] | None: ...
+
+
+class _CoverHandlerPlugin(Protocol):
+    async def download_cover(self, url: str, *, output_dir: Path) -> Path: ...
+
+    async def convert_to_jpeg(self, cover_path: Path) -> Path: ...
+
+    async def embed_covers_batch(self, mp3_files: list[Path], cover_path: Path) -> None: ...
+
+
+class _Id3TaggerPlugin(Protocol):
+    async def write_tags(
+        self,
+        mp3_file: Path,
+        tag_payload: dict[str, object],
+        *,
+        wipe_before_write: bool,
+        preserve_cover: bool,
+        file_index: int,
+    ) -> None: ...
+
 
 _AUDIO_SUFFIXES = {".m4a", ".m4b", ".mp3", ".opus"}
 _CHAPTER_SUFFIXES = {".m4a", ".m4b"}
@@ -57,11 +146,9 @@ def _iter_work_files(work_path: Path) -> list[Path]:
     return [path for path in sorted(work_path.rglob("*")) if path.is_file()]
 
 
-def _rename_authority(action: dict[str, Any]) -> dict[str, Any]:
-    authority_any = action.get("authority")
-    authority = dict(authority_any) if isinstance(authority_any, dict) else {}
-    rename_any = authority.get("rename")
-    rename = dict(rename_any) if isinstance(rename_any, dict) else {}
+def _rename_authority(action: dict[str, object]) -> dict[str, object]:
+    authority = _as_str_object_dict(action.get("authority"))
+    rename = _as_str_object_dict(authority.get("rename"))
     mode = str(rename.get("mode") or "")
     if mode == "keep_generated":
         extension = str(rename.get("extension") or "").strip().lower()
@@ -70,7 +157,7 @@ def _rename_authority(action: dict[str, Any]) -> dict[str, Any]:
         return {"mode": mode, "extension": extension}
     if mode == "explicit_relative_paths":
         outputs_any = rename.get("outputs")
-        outputs_raw = outputs_any if isinstance(outputs_any, list) else []
+        outputs_raw = outputs_any if _is_object_list(outputs_any) else []
         outputs: list[str] = []
         for item in outputs_raw:
             if not isinstance(item, str):
@@ -84,7 +171,7 @@ def _rename_authority(action: dict[str, Any]) -> dict[str, Any]:
     raise ValueError("action authority.rename is required")
 
 
-def _apply_rename_authority(*, work_path: Path, action: dict[str, Any]) -> None:
+def _apply_rename_authority(*, work_path: Path, action: dict[str, object]) -> None:
     rename = _rename_authority(action)
     produced = _iter_work_files(work_path)
     if not produced:
@@ -103,7 +190,7 @@ def _apply_rename_authority(*, work_path: Path, action: dict[str, Any]) -> None:
             )
         return
 
-    outputs = list(rename["outputs"])
+    outputs = _as_str_list(rename.get("outputs"))
     if len(produced) != len(outputs):
         raise ValueError(
             f"explicit_relative_paths count mismatch: expected {len(outputs)}, got {len(produced)}"
@@ -129,13 +216,10 @@ def _iter_mp3_outputs(work_path: Path) -> list[Path]:
     return [path for path in sorted(work_path.rglob("*.mp3")) if path.is_file()]
 
 
-def _metadata_authority_values(action: dict[str, Any]) -> dict[str, str]:
-    authority_any = action.get("authority")
-    authority = dict(authority_any) if isinstance(authority_any, dict) else {}
-    meta_any = authority.get("metadata_tags")
-    meta = dict(meta_any) if isinstance(meta_any, dict) else {}
-    values_any = meta.get("values")
-    values = dict(values_any) if isinstance(values_any, dict) else {}
+def _metadata_authority_values(action: dict[str, object]) -> dict[str, str]:
+    authority = _as_str_object_dict(action.get("authority"))
+    meta = _as_str_object_dict(authority.get("metadata_tags"))
+    values = _as_str_object_dict(meta.get("values"))
     return {
         str(key): str(value)
         for key, value in values.items()
@@ -143,21 +227,24 @@ def _metadata_authority_values(action: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def _ordered_capabilities(action: dict[str, Any]) -> list[dict[str, Any]]:
+def _ordered_capabilities(action: dict[str, object]) -> list[dict[str, object]]:
     caps_any = action.get("capabilities")
-    if not isinstance(caps_any, list):
+    if not _is_object_list(caps_any):
         return []
-    caps = [dict(cap) for cap in caps_any if isinstance(cap, dict)]
+    caps = [dict(cap) for cap in caps_any if _is_str_object_dict(cap)]
     authority_values = _metadata_authority_values(action)
     for cap in caps:
         if str(cap.get("kind") or "") != "metadata.tags":
             continue
-        values_any = cap.get("values")
-        values = dict(values_any) if isinstance(values_any, dict) else {}
+        values = _as_str_object_dict(cap.get("values"))
         if values or not authority_values:
             continue
         cap["values"] = dict(authority_values)
-    return sorted(caps, key=lambda item: (int(item.get("order") or 0), str(item.get("kind") or "")))
+
+    def _capability_sort_key(item: dict[str, object]) -> tuple[int, str]:
+        return (_to_int_or_default(item.get("order"), 0), str(item.get("kind") or ""))
+
+    return sorted(caps, key=_capability_sort_key)
 
 
 def _resolve_work_relative_path(job_id: str, action_index: int, target_rel: str) -> str:
@@ -176,20 +263,18 @@ def _first_audio_source(source_path: Path) -> Path | None:
 
 async def _run_audio_import(
     *,
-    plugin_loader: Any,
+    plugin_loader: _PluginLoader,
     source_path: Path,
     work_path: Path,
-    capability: dict[str, Any],
+    capability: dict[str, object],
 ) -> None:
-    plugin = plugin_loader.get_plugin("audio_processor")
-    options_any = capability.get("options")
-    options = dict(options_any) if isinstance(options_any, dict) else {}
+    plugin_raw = plugin_loader.get_plugin("audio_processor")
+    plugin = cast(_AudioProcessorPlugin, plugin_raw)
+    options = _as_str_object_dict(capability.get("options"))
 
-    original_values = {
-        "bitrate": getattr(plugin, "bitrate", None),
-        "loudnorm": getattr(plugin, "loudnorm", None),
-        "split_chapters": getattr(plugin, "split_chapters", None),
-    }
+    original_bitrate = plugin.bitrate
+    original_loudnorm = plugin.loudnorm
+    original_split_chapters = plugin.split_chapters
     if "bitrate" in options:
         plugin.bitrate = str(options["bitrate"])
     if "loudnorm" in options:
@@ -205,47 +290,46 @@ async def _run_audio_import(
             )
             output_dir = work_path / relative_parent
             output_dir.mkdir(parents=True, exist_ok=True)
-            chapters: list[dict[str, Any]] | None = None
-            if bool(getattr(plugin, "split_chapters", False)) and (
-                source_file.suffix.lower() in _CHAPTER_SUFFIXES
+            chapters: list[dict[str, object]] | None = None
+            if (
+                plugin.split_chapters
+                and source_file.suffix.lower() in _CHAPTER_SUFFIXES
+                and isinstance(plugin_raw, _AudioProcessorDetectChapters)
             ):
-                detect = getattr(plugin, "_detect_chapters", None)
-                if callable(detect):
-                    detected = detect(source_file)
-                    if isinstance(detected, Awaitable):
-                        chapters = cast(list[dict[str, Any]] | None, await detected)
+                detected = plugin_raw._detect_chapters(source_file)
+                if isinstance(detected, Awaitable):
+                    detected_resolved = await detected
+                    chapters = _as_dict_list(detected_resolved)
+                elif _is_object_list(detected):
+                    chapters = _as_dict_list(detected)
             plan = plugin.plan_import_conversion(source_file, output_dir, chapters=chapters)
-            execute_plan = getattr(plugin, "_execute_plan", None)
-            if not callable(execute_plan):
-                raise RuntimeError("audio_processor missing _execute_plan")
-            execute_result = execute_plan(plan)
+            execute_result = plugin._execute_plan(plan)
             if isinstance(execute_result, Awaitable):
                 await execute_result
     finally:
-        for key, value in original_values.items():
-            if value is not None:
-                setattr(plugin, key, value)
+        plugin.bitrate = original_bitrate
+        plugin.loudnorm = original_loudnorm
+        plugin.split_chapters = original_split_chapters
 
 
 async def _run_cover_embed(
     *,
-    fs: Any,
-    plugin_loader: Any,
+    fs: FileService,
+    plugin_loader: _PluginLoader,
     source_root: RootName,
     source_relative_path: str,
     work_rel: str,
     work_path: Path,
-    capability: dict[str, Any],
+    capability: dict[str, object],
 ) -> None:
-    plugin = plugin_loader.get_plugin("cover_handler")
+    plugin = cast(_CoverHandlerPlugin, plugin_loader.get_plugin("cover_handler"))
     mode = str(capability.get("mode") or "skip")
     if mode == "skip":
         return
 
     cover_path: Path | None = None
     if mode in {"file", "embedded", "copy", "extract_embedded", "download"}:
-        candidate_any = capability.get("candidate")
-        candidate = dict(candidate_any) if isinstance(candidate_any, dict) else {}
+        candidate = _as_str_object_dict(capability.get("candidate"))
         if candidate:
             if "source_root" not in candidate:
                 candidate["source_root"] = source_root.value
@@ -293,13 +377,12 @@ async def _run_cover_embed(
 
 async def _run_metadata_tags(
     *,
-    plugin_loader: Any,
+    plugin_loader: _PluginLoader,
     work_path: Path,
-    capability: dict[str, Any],
+    capability: dict[str, object],
 ) -> None:
-    plugin = plugin_loader.get_plugin("id3_tagger")
-    values_any = capability.get("values")
-    values = dict(values_any) if isinstance(values_any, dict) else {}
+    plugin = cast(_Id3TaggerPlugin, plugin_loader.get_plugin("id3_tagger"))
+    values = _as_str_object_dict(capability.get("values"))
     track_start = capability.get("track_start")
     if not values and track_start is None:
         return
@@ -318,9 +401,9 @@ async def _run_metadata_tags(
 
 async def _run_publish_write(
     *,
-    fs: Any,
+    fs: FileService,
     work_rel: str,
-    capability: dict[str, Any],
+    capability: dict[str, object],
 ) -> None:
     root = RootName(str(capability.get("root") or RootName.STAGE.value))
     rel = normalize_relative_path(str(capability.get("relative_path") or ""))
@@ -336,17 +419,17 @@ async def _run_publish_write(
     )
 
 
-async def _run_source_delete(*, source_path: Path, capability: dict[str, Any]) -> None:
+async def _run_source_delete(*, source_path: Path, capability: dict[str, object]) -> None:
     if bool(capability.get("enabled", False)):
         _remove_path(source_path)
 
 
 async def run_phase2_job_requests(
     *,
-    engine: Any,
+    engine: _SupportsFileService,
     job_id: str,
-    job_meta: dict[str, Any],
-    plugin_loader: Any,
+    job_meta: dict[str, object],
+    plugin_loader: _PluginLoader,
 ) -> None:
     fs = engine.get_file_service()
     job_requests_path = str(job_meta.get("job_requests_path") or "")
@@ -355,13 +438,11 @@ async def run_phase2_job_requests(
 
     root, rel_path = _parse_job_requests_path(job_requests_path)
     job_requests_any = read_json(fs, root, rel_path)
-    if not isinstance(job_requests_any, dict):
+    if not _is_str_object_dict(job_requests_any):
         raise ValueError("job_requests.json is invalid")
 
-    actions_any = job_requests_any.get("actions")
-    actions = actions_any if isinstance(actions_any, list) else []
-    diagnostics_any = job_requests_any.get("diagnostics_context")
-    diagnostics_context = dict(diagnostics_any) if isinstance(diagnostics_any, dict) else {}
+    actions = _as_dict_list(job_requests_any.get("actions"))
+    diagnostics_context = _as_str_object_dict(job_requests_any.get("diagnostics_context"))
 
     _emit_required(
         "phase2.runner.start",
@@ -373,15 +454,12 @@ async def run_phase2_job_requests(
         },
     )
 
-    for action_index, action_any in enumerate(actions, start=1):
-        if not isinstance(action_any, dict):
-            continue
-        action = dict(action_any)
+    for action_index, action in enumerate(actions, start=1):
         if str(action.get("type") or "") != "import.book":
             continue
         source_any = action.get("source")
         target_any = action.get("target")
-        if not isinstance(source_any, dict) or not isinstance(target_any, dict):
+        if not _is_str_object_dict(source_any) or not _is_str_object_dict(target_any):
             raise ValueError("action source/target must be objects")
         source_root = RootName(str(source_any.get("root") or ""))
         source_rel = normalize_relative_path(str(source_any.get("relative_path") or ""))

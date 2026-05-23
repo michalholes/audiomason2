@@ -1,32 +1,39 @@
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Mapping
 
-import yaml
 from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel
 
 from audiomason.core.config_service import ConfigService
 from audiomason.core.errors import ConfigError
+from audiomason.core.serde import yaml_safe_load_text
 
 from ..util.web_observability import web_operation
 
 
-class SetConfigValue(BaseModel):
-    key_path: str
-    value: Any
+def _dict_str_object(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        return {}
+    out: dict[str, object] = {}
+    for key, item in value.items():
+        if isinstance(key, str):
+            out[key] = item
+    return out
 
 
-class UnsetConfigValue(BaseModel):
-    key_path: str
-
-
-def _parse_effective_snapshot(yaml_text: str) -> dict[str, Any]:
+def _parse_effective_snapshot(yaml_text: str) -> dict[str, object]:
     try:
-        data = yaml.safe_load(yaml_text)
+        data = yaml_safe_load_text(yaml_text)
     except Exception:
         return {}
-    return data if isinstance(data, dict) else {}
+    return _dict_str_object(data)
+
+
+def _parse_key_path(body: dict[str, object]) -> str:
+    key_path = body.get("key_path")
+    if not isinstance(key_path, str) or not key_path.strip():
+        raise HTTPException(status_code=400, detail="key_path is required")
+    return key_path
 
 
 def _ascii_detail(text: str) -> str:
@@ -43,29 +50,33 @@ def mount_am_config(app: FastAPI) -> None:
 
     svc = ConfigService()
 
-    @app.get("/api/am/config")
-    def get_am_config(request: Request) -> dict[str, Any]:
+    def get_am_config(request: Request) -> dict[str, object]:
         with web_operation(request, name="am.config.get", ctx={}):
             snapshot_yaml = svc.get_effective_config_snapshot()
-            out: dict[str, Any] = {
+            out: dict[str, object] = {
                 "config": svc.get_config(),
                 "effective_snapshot": _parse_effective_snapshot(snapshot_yaml),
                 "effective_snapshot_yaml": snapshot_yaml,
             }
             return out
 
-    @app.post("/api/am/config/set")
-    def set_am_config_value(body: SetConfigValue) -> dict[str, Any]:
+    def set_am_config_value(body: dict[str, object]) -> dict[str, object]:
+        key_path = _parse_key_path(body)
+        value = body.get("value")
         try:
-            svc.set_value(body.key_path, body.value)
+            svc.set_value(key_path, value)
         except ConfigError as e:
             raise HTTPException(status_code=400, detail=_ascii_detail(str(e))) from e
         return {"ok": True}
 
-    @app.post("/api/am/config/unset")
-    def unset_am_config_value(body: UnsetConfigValue) -> dict[str, Any]:
+    def unset_am_config_value(body: dict[str, object]) -> dict[str, object]:
+        key_path = _parse_key_path(body)
         try:
-            svc.unset_value(body.key_path)
+            svc.unset_value(key_path)
         except ConfigError as e:
             raise HTTPException(status_code=400, detail=_ascii_detail(str(e))) from e
         return {"ok": True}
+
+    app.add_api_route("/api/am/config", get_am_config, methods=["GET"])
+    app.add_api_route("/api/am/config/set", set_am_config_value, methods=["POST"])
+    app.add_api_route("/api/am/config/unset", unset_am_config_value, methods=["POST"])

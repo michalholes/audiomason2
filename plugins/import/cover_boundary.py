@@ -7,10 +7,8 @@ ASCII-only.
 
 from __future__ import annotations
 
-from functools import lru_cache
-from importlib import import_module
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Protocol, cast
 
 from audiomason.core.config_service import ConfigService
 from audiomason.core.errors import PluginError, PluginNotFoundError
@@ -20,6 +18,8 @@ from audiomason.core.plugin_callable_authority import (
     resolve_registered_wizard_callable,
 )
 from audiomason.core.plugin_registry import PluginRegistry
+from plugins.file_io.service import FileService
+from plugins.file_io.service.types import RootName
 
 from .file_io_boundary import (
     join_source_relative_path,
@@ -37,7 +37,7 @@ class _DiscoverCoverCallable(Protocol):
     def __call__(
         self,
         *,
-        file_service: Any,
+        file_service: FileService,
         source_root: str,
         source_relative_path: str,
         group_root: str | None = None,
@@ -49,29 +49,38 @@ class _ApplyCoverCallable(Protocol):
     async def __call__(
         self,
         *,
-        file_service: Any,
-        candidate: dict[str, Any],
+        file_service: FileService,
+        candidate: dict[str, object],
         output_root: str,
         output_relative_dir: str,
     ) -> dict[str, str] | None: ...
 
 
+class _LegacyDiscoverMethod(Protocol):
+    def __call__(self, source_dir: Path, **kwargs: object) -> object: ...
+
+
+class _LegacyApplyMethod(Protocol):
+    async def __call__(self, candidate: dict[str, object], *, output_dir: Path) -> Path | None: ...
+
+
 def _builtin_plugins_dir() -> Path:
-    plugins_pkg = import_module("plugins")
-    pkg_file = getattr(plugins_pkg, "__file__", None)
-    if not isinstance(pkg_file, str) or not pkg_file:
-        raise RuntimeError("plugins package path unavailable")
-    return Path(pkg_file).resolve().parent
+    return Path(__file__).resolve().parents[1]
 
 
-@lru_cache(maxsize=1)
+_CALLABLE_AUTHORITY: tuple[PluginRegistry, PluginLoader] | None = None
+
+
 def _callable_authority() -> tuple[PluginRegistry, PluginLoader]:
-    registry = PluginRegistry(ConfigService())
-    loader = PluginLoader(
-        builtin_plugins_dir=_builtin_plugins_dir(),
-        registry=registry,
-    )
-    return registry, loader
+    global _CALLABLE_AUTHORITY
+    if _CALLABLE_AUTHORITY is None:
+        registry = PluginRegistry(ConfigService())
+        loader = PluginLoader(
+            builtin_plugins_dir=_builtin_plugins_dir(),
+            registry=registry,
+        )
+        _CALLABLE_AUTHORITY = (registry, loader)
+    return _CALLABLE_AUTHORITY
 
 
 _LEGACY_METHOD_ALIASES = {
@@ -86,20 +95,20 @@ def _legacy_cover_callable(
     callable_def: RegisteredWizardCallable,
 ) -> object | None:
     for method_name in _LEGACY_METHOD_ALIASES.get(callable_def.operation_id, ()):
-        method = getattr(plugin_obj, method_name, None)
+        method = cast(object, getattr(plugin_obj, method_name, None))
         if not callable(method):
             continue
         if callable_def.operation_id == "cover.discover_candidates_for_ref":
-            discover_method = method
+            discover_method = cast(_LegacyDiscoverMethod, method)
 
             def _discover_for_ref(
                 *,
-                file_service: Any,
+                file_service: FileService,
                 source_root: str,
                 source_relative_path: str,
                 group_root: str | None = None,
                 stage_root: str | None = None,
-                _discover_method: Any = discover_method,
+                _discover_method: _LegacyDiscoverMethod = discover_method,
             ) -> list[dict[str, str]]:
                 del stage_root
                 root_name = normalize_root_name(source_root)
@@ -112,14 +121,16 @@ def _legacy_cover_callable(
                     source_dir = source_dir.parent
                 if not source_dir.exists() or not source_dir.is_dir():
                     return []
-                kwargs: dict[str, Any] = {"audio_file": first_audio_source(source_dir)}
+                kwargs: dict[str, object] = {"audio_file": first_audio_source(source_dir)}
                 if group_root is not None:
                     kwargs["group_root"] = group_root
                 try:
-                    candidates = _discover_method(source_dir, **kwargs)
+                    candidates_any = _discover_method(source_dir, **kwargs)
                 except TypeError:
                     kwargs.pop("group_root", None)
-                    candidates = _discover_method(source_dir, **kwargs)
+                    candidates_any = _discover_method(source_dir, **kwargs)
+                if not isinstance(candidates_any, list):
+                    return []
                 return [
                     canonicalize_path_candidate(
                         candidate=dict(candidate),
@@ -127,21 +138,21 @@ def _legacy_cover_callable(
                         source_dir=source_dir,
                         source_relative_path=source_relative_path,
                     )
-                    for candidate in candidates
+                    for candidate in candidates_any
                     if isinstance(candidate, dict)
                 ]
 
             return _discover_for_ref
         if callable_def.operation_id == "cover.apply_candidate_for_ref":
-            apply_method = method
+            apply_method = cast(_LegacyApplyMethod, method)
 
             async def _apply_for_ref(
                 *,
-                file_service: Any,
-                candidate: dict[str, Any],
+                file_service: FileService,
+                candidate: dict[str, object],
                 output_root: str,
                 output_relative_dir: str,
-                _apply_method: Any = apply_method,
+                _apply_method: _LegacyApplyMethod = apply_method,
             ) -> dict[str, str] | None:
                 output_root_name = normalize_root_name(output_root)
                 output_dir = materialize_local_path(
@@ -238,8 +249,8 @@ def _published_wizard_callable(
 
 def discover_cover_candidates(
     *,
-    fs: Any,
-    source_root: Any,
+    fs: FileService,
+    source_root: str | RootName,
     source_prefix: str,
     source_relative_path: str,
     group_root: str | None = None,
@@ -277,9 +288,9 @@ def discover_cover_candidates(
 
 async def apply_cover_candidate(
     *,
-    fs: Any,
-    candidate: dict[str, Any],
-    output_root: Any,
+    fs: FileService,
+    candidate: dict[str, object],
+    output_root: str | RootName,
     output_relative_dir: str,
     plugin: object | None = None,
 ) -> dict[str, str] | None:

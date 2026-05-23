@@ -5,7 +5,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypeGuard
 
 from . import (
     call_v1,
@@ -21,7 +21,30 @@ from . import (
     ui_v1,
 )
 
-_REGISTRY_ENTRIES: list[dict[str, Any]] = sorted(
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in value)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _as_str_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _registry_sort_key(item: dict[str, object]) -> tuple[str, int]:
+    version_any = item.get("version")
+    version = version_any if isinstance(version_any, int) else 0
+    return (str(item.get("primitive_id") or ""), version)
+
+
+_REGISTRY_ENTRIES: list[dict[str, object]] = sorted(
     [
         *ui_v1.REGISTRY_ENTRIES,
         *call_v1.REGISTRY_ENTRIES,
@@ -35,7 +58,7 @@ _REGISTRY_ENTRIES: list[dict[str, Any]] = sorted(
         *subflow_v1.REGISTRY_ENTRIES,
         *loop_v1.REGISTRY_ENTRIES,
     ],
-    key=lambda item: (str(item.get("primitive_id") or ""), int(item.get("version") or 0)),
+    key=_registry_sort_key,
 )
 
 
@@ -74,7 +97,7 @@ JOB_SUBMIT_ID = "job.submit"
 CTRL_STOP_ID = "ctrl.stop"
 
 
-def baseline_registry_entries() -> list[dict[str, Any]]:
+def baseline_registry_entries() -> list[dict[str, object]]:
     return [dict(item) for item in _REGISTRY_ENTRIES]
 
 
@@ -89,8 +112,8 @@ def is_non_interactive(primitive_id: str, primitive_version: int) -> bool:
 def validate_submit_payload(
     primitive_id: str,
     primitive_version: int,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
+    payload: dict[str, object],
+) -> dict[str, object]:
     return ui_v1.validate_submit_payload(primitive_id, primitive_version, payload)
 
 
@@ -100,13 +123,14 @@ def execute_non_prompt(
     step_id: str,
     primitive_id: str,
     primitive_version: int,
-    inputs: dict[str, Any],
-    state: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    jobs_any = state.get("jobs")
-    jobs = dict(jobs_any) if isinstance(jobs_any, dict) else {"emitted": [], "submitted": []}
-    emitted = list(jobs.get("emitted") or [])
-    submitted = list(jobs.get("submitted") or [])
+    inputs: dict[str, object],
+    state: dict[str, object],
+) -> tuple[dict[str, object], dict[str, object]]:
+    jobs: dict[str, object] = _as_str_object_dict(state.get("jobs"))
+    if not jobs:
+        jobs = {"emitted": list[str](), "submitted": list[str]()}
+    emitted = _as_str_list(jobs.get("emitted"))
+    submitted = _as_str_list(jobs.get("submitted"))
 
     if primitive_id == "ui.message":
         return ui_v1.execute_non_prompt(primitive_id, primitive_version, inputs), jobs

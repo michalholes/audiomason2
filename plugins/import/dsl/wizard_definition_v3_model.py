@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 from copy import deepcopy
-from typing import Any, NoReturn, TypeGuard
+from typing import NoReturn, TypeGuard
 
 from ..field_schema_validation import FieldSchemaValidationError
 from .primitive_registry_model import primitive_index
@@ -26,7 +26,7 @@ def _raise(
     *,
     path: str,
     reason: str,
-    meta: dict[str, Any] | None = None,
+    meta: dict[str, object] | None = None,
 ) -> NoReturn:
     raise FieldSchemaValidationError(
         message=message,
@@ -57,7 +57,7 @@ def _validate_name(value: str, *, path: str) -> None:
     _validate_step_id(value, path=path)
 
 
-def _assert_exact_keys(obj: dict[str, Any], *, allowed: set[str], path: str) -> None:
+def _assert_exact_keys(obj: dict[str, object], *, allowed: set[str], path: str) -> None:
     unknown = sorted(set(obj.keys()) - allowed)
     if unknown:
         _raise(
@@ -68,15 +68,56 @@ def _assert_exact_keys(obj: dict[str, Any], *, allowed: set[str], path: str) -> 
         )
 
 
-def _is_expr_ref(value: Any) -> TypeGuard[dict[str, str]]:
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _as_str_list(value: object) -> list[str]:
+    if not _is_object_list(value):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _as_dict_list(value: object) -> list[dict[str, object]]:
+    if not _is_object_list(value):
+        return []
+    return [dict(item) for item in value if _is_str_object_dict(item)]
+
+
+def _write_sort_key(item: dict[str, object]) -> str:
+    return str(item.get("to_path") or "")
+
+
+def _name_sort_key(item: dict[str, object]) -> str:
+    return str(item.get("name") or "")
+
+
+def _edge_sort_key(item: dict[str, object]) -> tuple[str, str, str]:
+    condition = _as_str_object_dict(item.get("condition_expr"))
     return (
-        isinstance(value, dict)
+        str(item.get("from") or ""),
+        str(item.get("to") or ""),
+        str(condition.get("expr") or ""),
+    )
+
+
+def _is_expr_ref(value: object) -> TypeGuard[dict[str, str]]:
+    return (
+        _is_str_object_dict(value)
         and set(value.keys()) == {"expr"}
         and isinstance(value.get("expr"), str)
     )
 
 
-def _validate_expr_ref(value: Any, *, path: str) -> None:
+def _validate_expr_ref(value: object, *, path: str) -> None:
     if not _is_expr_ref(value):
         _raise(
             'ExprRef must be encoded as an object {"expr": "<string>"}',
@@ -89,18 +130,18 @@ def _validate_expr_ref(value: Any, *, path: str) -> None:
     _ascii_only(expr, path=f"{path}.expr")
 
 
-def _validate_json_like(value: Any, *, path: str) -> None:
+def _validate_json_like(value: object, *, path: str) -> None:
     if _is_expr_ref(value):
         _validate_expr_ref(value, path=path)
         return
-    if isinstance(value, dict):
+    if _is_str_object_dict(value):
         for key, item in value.items():
             if not isinstance(key, str) or not key:
                 _raise("object keys must be non-empty strings", path=path, reason="invalid_type")
             _ascii_only(key, path=f"{path}.{key}")
             _validate_json_like(item, path=f"{path}.{key}")
         return
-    if isinstance(value, list):
+    if _is_object_list(value):
         for index, item in enumerate(value):
             _validate_json_like(item, path=f"{path}[{index}]")
         return
@@ -112,14 +153,14 @@ def _validate_json_like(value: Any, *, path: str) -> None:
     _raise("value must be JSON-compatible", path=path, reason="invalid_type")
 
 
-def _validate_params(params_any: Any, *, path: str) -> list[dict[str, Any]]:
-    if not isinstance(params_any, list):
+def _validate_params(params_any: object, *, path: str) -> list[dict[str, object]]:
+    if not _is_object_list(params_any):
         _raise("params must be a list", path=path, reason="invalid_type")
-    params: list[dict[str, Any]] = []
+    params: list[dict[str, object]] = []
     seen: set[str] = set()
     for index, param_any in enumerate(params_any):
         pfx = f"{path}[{index}]"
-        if not isinstance(param_any, dict):
+        if not _is_str_object_dict(param_any):
             _raise("param entry must be an object", path=pfx, reason="invalid_type")
         param = dict(param_any)
         _assert_exact_keys(param, allowed={"name", "required"}, path=pfx)
@@ -146,12 +187,12 @@ def _validate_params(params_any: Any, *, path: str) -> list[dict[str, Any]]:
     return params
 
 
-def _validate_macro_defs(macros_any: Any) -> dict[str, dict[str, Any]]:
+def _validate_macro_defs(macros_any: object) -> dict[str, dict[str, object]]:
     if macros_any is None:
         return {}
-    if not isinstance(macros_any, dict):
+    if not _is_str_object_dict(macros_any):
         _raise("macros must be an object", path="$.macros", reason="invalid_type")
-    macros: dict[str, dict[str, Any]] = {}
+    macros: dict[str, dict[str, object]] = {}
     for macro_id, macro_any in sorted(macros_any.items()):
         path = f"$.macros.{macro_id}"
         if not isinstance(macro_id, str) or not macro_id:
@@ -161,12 +202,12 @@ def _validate_macro_defs(macros_any: Any) -> dict[str, dict[str, Any]]:
                 reason="missing_or_invalid",
             )
         _validate_name(macro_id, path=f"{path}")
-        if not isinstance(macro_any, dict):
+        if not _is_str_object_dict(macro_any):
             _raise("macro definition must be an object", path=path, reason="invalid_type")
         macro = dict(macro_any)
         _assert_exact_keys(macro, allowed={"params", "template"}, path=path)
         params_any = macro.get("params")
-        if not isinstance(params_any, list):
+        if not _is_object_list(params_any):
             _raise("macro params must be a list", path=f"{path}.params", reason="invalid_type")
         params: list[str] = []
         seen: set[str] = set()
@@ -189,7 +230,7 @@ def _validate_macro_defs(macros_any: Any) -> dict[str, dict[str, Any]]:
             seen.add(name_any)
             params.append(name_any)
         template = macro.get("template")
-        if not isinstance(template, dict):
+        if not _is_str_object_dict(template):
             _raise(
                 "macro template must be an object",
                 path=f"{path}.template",
@@ -200,14 +241,14 @@ def _validate_macro_defs(macros_any: Any) -> dict[str, dict[str, Any]]:
 
 
 def _expand_value(
-    value: Any,
+    value: object,
     *,
-    macros: dict[str, dict[str, Any]],
+    macros: dict[str, dict[str, object]],
     path: str,
-    args: dict[str, Any] | None = None,
+    args: dict[str, object] | None = None,
     stack: tuple[str, ...] = (),
-) -> Any:
-    if isinstance(value, dict):
+) -> object:
+    if _is_str_object_dict(value):
         keys = set(value.keys())
         if keys == {"param_ref"}:
             name = value.get("param_ref")
@@ -244,7 +285,7 @@ def _expand_value(
                     meta={"cycle": list(stack + (macro_id,))},
                 )
             args_any = value.get("args")
-            if not isinstance(args_any, dict):
+            if not _is_str_object_dict(args_any):
                 _raise("macro args must be an object", path=f"{path}.args", reason="invalid_type")
             resolved_args = {
                 key: _expand_value(
@@ -256,7 +297,7 @@ def _expand_value(
                 )
                 for key, item in args_any.items()
             }
-            expected = list(macros[macro_id]["params"])
+            expected = _as_str_list(macros[macro_id].get("params"))
             missing = [name for name in expected if name not in resolved_args]
             unknown = sorted(set(resolved_args) - set(expected))
             if missing:
@@ -290,7 +331,7 @@ def _expand_value(
             )
             for key, item in value.items()
         }
-    if isinstance(value, list):
+    if _is_object_list(value):
         return [
             _expand_value(item, macros=macros, path=f"{path}[{index}]", args=args, stack=stack)
             for index, item in enumerate(value)
@@ -298,12 +339,14 @@ def _expand_value(
     return deepcopy(value)
 
 
-def _expand_program(wd: dict[str, Any], macros: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def _expand_program(
+    wd: dict[str, object], macros: dict[str, dict[str, object]]
+) -> dict[str, object]:
     out = deepcopy(wd)
     out["nodes"] = _expand_value(out.get("nodes"), macros=macros, path="$.nodes")
     out["edges"] = _expand_value(out.get("edges"), macros=macros, path="$.edges")
     libraries_any = out.get("libraries")
-    if isinstance(libraries_any, dict):
+    if _is_str_object_dict(libraries_any):
         out["libraries"] = {
             key: {
                 **dict(lib_any),
@@ -319,13 +362,13 @@ def _expand_program(wd: dict[str, Any], macros: dict[str, dict[str, Any]]) -> di
                 ),
             }
             for key, lib_any in libraries_any.items()
-            if isinstance(lib_any, dict)
+            if _is_str_object_dict(lib_any)
         }
     return out
 
 
 def _resolve_library_id(
-    libraries: dict[str, dict[str, Any]],
+    libraries: dict[str, dict[str, object]],
     *,
     target_library: str,
     target_subflow: str,
@@ -350,18 +393,18 @@ def _resolve_library_id(
 
 
 def _validate_bindings(
-    bindings_any: Any,
+    bindings_any: object,
     *,
-    params: list[dict[str, Any]],
+    params: list[dict[str, object]],
     path: str,
-) -> list[dict[str, Any]]:
-    if not isinstance(bindings_any, list):
+) -> list[dict[str, object]]:
+    if not _is_object_list(bindings_any):
         _raise("param_bindings must be a list", path=path, reason="invalid_type")
-    bindings: list[dict[str, Any]] = []
+    bindings: list[dict[str, object]] = []
     seen: set[str] = set()
     for index, binding_any in enumerate(bindings_any):
         pfx = f"{path}[{index}]"
-        if not isinstance(binding_any, dict):
+        if not _is_str_object_dict(binding_any):
             _raise("param binding must be an object", path=pfx, reason="invalid_type")
         binding = dict(binding_any)
         _assert_exact_keys(binding, allowed={"name", "value"}, path=pfx)
@@ -399,9 +442,9 @@ def _validate_bindings(
 
 
 def _validate_flow_invoke_inputs(
-    inputs: dict[str, Any],
+    inputs: dict[str, object],
     *,
-    libraries: dict[str, dict[str, Any]],
+    libraries: dict[str, dict[str, object]],
     path: str,
 ) -> None:
     _assert_exact_keys(
@@ -431,14 +474,14 @@ def _validate_flow_invoke_inputs(
         target_subflow=target_subflow,
         path=f"{path}.target_subflow",
     )
-    params = list(libraries[library_id].get("params") or [])
+    params = _as_dict_list(libraries[library_id].get("params"))
     _validate_bindings(inputs.get("param_bindings"), params=params, path=f"{path}.param_bindings")
 
 
 def _validate_fork_join_inputs(
-    inputs: dict[str, Any],
+    inputs: dict[str, object],
     *,
-    libraries: dict[str, dict[str, Any]],
+    libraries: dict[str, dict[str, object]],
     path: str,
 ) -> None:
     _assert_exact_keys(
@@ -448,19 +491,20 @@ def _validate_fork_join_inputs(
     )
     branch_order = inputs.get("branch_order")
     branches_any = inputs.get("branches")
-    if not isinstance(branch_order, list) or not branch_order:
+    if not _is_object_list(branch_order) or not branch_order:
         _raise(
             "branch_order must be a non-empty list",
             path=f"{path}.branch_order",
             reason="invalid_type",
         )
-    if not isinstance(branches_any, dict) or not branches_any:
+    if not _is_str_object_dict(branches_any) or not branches_any:
         _raise(
             "branches must be a non-empty object",
             path=f"{path}.branches",
             reason="invalid_type",
         )
     seen: set[str] = set()
+    branch_ids: list[str] = []
     for index, branch_id_any in enumerate(branch_order):
         pfx = f"{path}.branch_order[{index}]"
         if not isinstance(branch_id_any, str) or not branch_id_any:
@@ -469,6 +513,7 @@ def _validate_fork_join_inputs(
         if branch_id_any in seen:
             _raise("branch_order must be unique", path=pfx, reason="duplicate")
         seen.add(branch_id_any)
+        branch_ids.append(branch_id_any)
     if sorted(seen) != sorted(str(key) for key in branches_any):
         _raise(
             "branches keys must match branch_order exactly",
@@ -484,15 +529,15 @@ def _validate_fork_join_inputs(
                 reason="missing_or_invalid",
             )
         _ascii_only(value, path=f"{path}.{key}")
-    for branch_id in branch_order:
+    for branch_id in branch_ids:
         spec_any = branches_any.get(branch_id)
         bfx = f"{path}.branches.{branch_id}"
-        if not isinstance(spec_any, dict):
+        if not _is_str_object_dict(spec_any):
             _raise("branch spec must be an object", path=bfx, reason="invalid_type")
         _validate_flow_invoke_inputs(dict(spec_any), libraries=libraries, path=bfx)
 
 
-def _validate_loop_inputs(inputs: dict[str, Any], *, path: str) -> None:
+def _validate_loop_inputs(inputs: dict[str, object], *, path: str) -> None:
     _assert_exact_keys(
         inputs,
         allowed={
@@ -542,7 +587,7 @@ def _validate_loop_inputs(inputs: dict[str, Any], *, path: str) -> None:
         )
     _validate_name(target_library, path=f"{path}.target_library")
     _validate_name(target_subflow, path=f"{path}.target_subflow")
-    if not isinstance(param_bindings, list):
+    if not _is_object_list(param_bindings):
         _raise(
             "param_bindings must be a list when loop subflow invocation is configured",
             path=f"{path}.param_bindings",
@@ -550,7 +595,7 @@ def _validate_loop_inputs(inputs: dict[str, Any], *, path: str) -> None:
         )
     for index, binding_any in enumerate(param_bindings):
         bfx = f"{path}.param_bindings[{index}]"
-        if not isinstance(binding_any, dict):
+        if not _is_str_object_dict(binding_any):
             _raise("binding must be an object", path=bfx, reason="invalid_type")
         binding = dict(binding_any)
         _assert_exact_keys(binding, allowed={"name", "value"}, path=bfx)
@@ -565,7 +610,7 @@ def _validate_loop_inputs(inputs: dict[str, Any], *, path: str) -> None:
         _validate_json_like(binding.get("value"), path=f"{bfx}.value")
 
 
-def _validate_call_invoke_inputs(inputs: dict[str, Any], *, path: str) -> None:
+def _validate_call_invoke_inputs(inputs: dict[str, object], *, path: str) -> None:
     _assert_exact_keys(
         inputs,
         allowed={"operation_id", "execution_mode", "error_mode", "args"},
@@ -598,12 +643,12 @@ def _validate_call_invoke_inputs(inputs: dict[str, Any], *, path: str) -> None:
             meta={"allowed": ["raise", "capture"]},
         )
     args_any = inputs.get("args")
-    if not isinstance(args_any, dict):
+    if not _is_str_object_dict(args_any):
         _raise("args must be an object", path=f"{path}.args", reason="invalid_type")
 
 
-def _validate_write(write_any: Any, *, step_id: str, path: str) -> None:
-    if not isinstance(write_any, dict):
+def _validate_write(write_any: object, *, step_id: str, path: str) -> None:
+    if not _is_str_object_dict(write_any):
         _raise("writes entry must be an object", path=path, reason="invalid_type")
     write = dict(write_any)
     _assert_exact_keys(write, allowed={"to_path", "value"}, path=path)
@@ -637,10 +682,10 @@ def _validate_write(write_any: Any, *, step_id: str, path: str) -> None:
 
 
 def _validate_graph(
-    body: dict[str, Any],
+    body: dict[str, object],
     *,
     path: str,
-    libraries: dict[str, dict[str, Any]],
+    libraries: dict[str, dict[str, object]],
 ) -> None:
     entry = body.get("entry_step_id")
     if not isinstance(entry, str) or not entry:
@@ -651,16 +696,16 @@ def _validate_graph(
         )
     _validate_step_id(entry, path=f"{path}.entry_step_id")
     nodes_any = body.get("nodes")
-    if not isinstance(nodes_any, list):
+    if not _is_object_list(nodes_any):
         _raise("nodes must be a list", path=f"{path}.nodes", reason="invalid_type")
     edges_any = body.get("edges")
-    if not isinstance(edges_any, list):
+    if not _is_object_list(edges_any):
         _raise("edges must be a list", path=f"{path}.edges", reason="invalid_type")
     seen: set[str] = set()
     step_ids: list[str] = []
     for index, node_any in enumerate(nodes_any):
         nfx = f"{path}.nodes[{index}]"
-        if not isinstance(node_any, dict):
+        if not _is_str_object_dict(node_any):
             _raise("node must be an object", path=nfx, reason="invalid_type")
         node = dict(node_any)
         _assert_exact_keys(node, allowed={"step_id", "op"}, path=nfx)
@@ -677,7 +722,7 @@ def _validate_graph(
         seen.add(step_id)
         step_ids.append(step_id)
         op_any = node.get("op")
-        if not isinstance(op_any, dict):
+        if not _is_str_object_dict(op_any):
             _raise("op must be an object", path=f"{nfx}.op", reason="invalid_type")
         op = dict(op_any)
         _assert_exact_keys(
@@ -701,7 +746,7 @@ def _validate_graph(
                 reason="invalid_type",
             )
         inputs_any = op.get("inputs")
-        if not isinstance(inputs_any, dict):
+        if not _is_str_object_dict(inputs_any):
             _raise("inputs must be an object", path=f"{nfx}.op.inputs", reason="invalid_type")
         for key, value in inputs_any.items():
             if not isinstance(key, str) or not key:
@@ -721,7 +766,7 @@ def _validate_graph(
         elif primitive_id == "call.invoke" and primitive_version == 1:
             _validate_call_invoke_inputs(inputs_any, path=f"{nfx}.op.inputs")
         writes_any = op.get("writes")
-        if not isinstance(writes_any, list):
+        if not _is_object_list(writes_any):
             _raise("writes must be a list", path=f"{nfx}.op.writes", reason="invalid_type")
         for w_index, write_any in enumerate(writes_any):
             _validate_write(write_any, step_id=step_id, path=f"{nfx}.op.writes[{w_index}]")
@@ -734,7 +779,7 @@ def _validate_graph(
         )
     for index, edge_any in enumerate(edges_any):
         efx = f"{path}.edges[{index}]"
-        if not isinstance(edge_any, dict):
+        if not _is_str_object_dict(edge_any):
             _raise("edge must be an object", path=efx, reason="invalid_type")
         edge = dict(edge_any)
         _assert_exact_keys(edge, allowed={"from", "to", "condition_expr"}, path=efx)
@@ -767,13 +812,13 @@ def _validate_graph(
             _validate_expr_ref(cond, path=f"{efx}.condition_expr")
 
 
-def _validated_libraries(wd: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _validated_libraries(wd: dict[str, object]) -> dict[str, dict[str, object]]:
     libraries_any = wd.get("libraries")
     if libraries_any is None:
         return {}
-    if not isinstance(libraries_any, dict):
+    if not _is_str_object_dict(libraries_any):
         _raise("libraries must be an object", path="$.libraries", reason="invalid_type")
-    libraries: dict[str, dict[str, Any]] = {}
+    libraries: dict[str, dict[str, object]] = {}
     for library_id, library_any in sorted(libraries_any.items()):
         path = f"$.libraries.{library_id}"
         if not isinstance(library_id, str) or not library_id:
@@ -783,7 +828,7 @@ def _validated_libraries(wd: dict[str, Any]) -> dict[str, dict[str, Any]]:
                 reason="missing_or_invalid",
             )
         _validate_name(library_id, path=path)
-        if not isinstance(library_any, dict):
+        if not _is_str_object_dict(library_any):
             _raise("library definition must be an object", path=path, reason="invalid_type")
         library = dict(library_any)
         _assert_exact_keys(
@@ -794,7 +839,7 @@ def _validated_libraries(wd: dict[str, Any]) -> dict[str, dict[str, Any]]:
         library["params"] = _validate_params(library.get("params"), path=f"{path}.params")
         returns_any = library.get("returns")
         if returns_any is not None:
-            if not isinstance(returns_any, dict):
+            if not _is_str_object_dict(returns_any):
                 _raise("returns must be an object", path=f"{path}.returns", reason="invalid_type")
             for key, value in returns_any.items():
                 if not isinstance(key, str) or not key:
@@ -809,17 +854,19 @@ def _validated_libraries(wd: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return libraries
 
 
-def _library_deps(library: dict[str, Any], *, libraries: dict[str, dict[str, Any]]) -> set[str]:
+def _library_deps(
+    library: dict[str, object], *, libraries: dict[str, dict[str, object]]
+) -> set[str]:
     deps: set[str] = set()
-    for node_any in library.get("nodes") or []:
-        if not isinstance(node_any, dict):
+    for node_any in _as_dict_list(library.get("nodes")):
+        if not _is_str_object_dict(node_any):
             continue
         op_any = node_any.get("op")
-        if not isinstance(op_any, dict):
+        if not _is_str_object_dict(op_any):
             continue
         primitive_id = op_any.get("primitive_id")
         inputs_any = op_any.get("inputs")
-        if not isinstance(primitive_id, str) or not isinstance(inputs_any, dict):
+        if not isinstance(primitive_id, str) or not _is_str_object_dict(inputs_any):
             continue
         if primitive_id == "flow.invoke":
             deps.add(
@@ -831,8 +878,9 @@ def _library_deps(library: dict[str, Any], *, libraries: dict[str, dict[str, Any
                 )
             )
         if primitive_id == "parallel.fork_join":
-            for spec_any in (inputs_any.get("branches") or {}).values():
-                if not isinstance(spec_any, dict):
+            branches_doc = _as_str_object_dict(inputs_any.get("branches"))
+            for spec_any in branches_doc.values():
+                if not _is_str_object_dict(spec_any):
                     continue
                 deps.add(
                     _resolve_library_id(
@@ -845,7 +893,7 @@ def _library_deps(library: dict[str, Any], *, libraries: dict[str, dict[str, Any
     return deps
 
 
-def _validate_library_cycles(libraries: dict[str, dict[str, Any]]) -> None:
+def _validate_library_cycles(libraries: dict[str, dict[str, object]]) -> None:
     deps = {
         library_id: _library_deps(library, libraries=libraries)
         for library_id, library in libraries.items()
@@ -873,8 +921,8 @@ def _validate_library_cycles(libraries: dict[str, dict[str, Any]]) -> None:
         visit(library_id, ())
 
 
-def validate_wizard_definition_v3_structure(wd_any: Any) -> None:
-    if not isinstance(wd_any, dict):
+def validate_wizard_definition_v3_structure(wd_any: object) -> None:
+    if not _is_str_object_dict(wd_any):
         _raise("WizardDefinition v3 must be an object", path="$", reason="invalid_type")
     wd = dict(wd_any)
     _assert_exact_keys(wd, allowed=_ALLOWED_TOP_LEVEL_KEYS, path="$")
@@ -894,83 +942,75 @@ def validate_wizard_definition_v3_structure(wd_any: Any) -> None:
     _validate_library_cycles(libraries)
 
 
-def _canonicalize_graph(body: dict[str, Any]) -> dict[str, Any]:
+def _canonicalize_graph(body: dict[str, object]) -> dict[str, object]:
     out = dict(body)
     nodes_any = out.get("nodes")
-    if isinstance(nodes_any, list):
-        nodes: list[dict[str, Any]] = []
+    if _is_object_list(nodes_any):
+        nodes: list[dict[str, object]] = []
         for node_any in nodes_any:
-            if not isinstance(node_any, dict):
+            if not _is_str_object_dict(node_any):
                 continue
             node = dict(node_any)
             op_any = node.get("op")
-            if isinstance(op_any, dict):
+            if _is_str_object_dict(op_any):
                 op = dict(op_any)
                 writes_any = op.get("writes")
-                if isinstance(writes_any, list):
+                if _is_object_list(writes_any):
                     op["writes"] = sorted(
-                        [dict(item) for item in writes_any if isinstance(item, dict)],
-                        key=lambda item: str(item.get("to_path") or ""),
+                        _as_dict_list(writes_any),
+                        key=_write_sort_key,
                     )
                 inputs_any = op.get("inputs")
-                if isinstance(inputs_any, dict):
+                if _is_str_object_dict(inputs_any):
                     inputs = dict(inputs_any)
                     bindings_any = inputs.get("param_bindings")
-                    if isinstance(bindings_any, list):
+                    if _is_object_list(bindings_any):
                         inputs["param_bindings"] = sorted(
-                            [dict(item) for item in bindings_any if isinstance(item, dict)],
-                            key=lambda item: str(item.get("name") or ""),
+                            _as_dict_list(bindings_any),
+                            key=_name_sort_key,
                         )
                     branches_any = inputs.get("branches")
-                    if isinstance(branches_any, dict):
+                    if _is_str_object_dict(branches_any):
                         inputs["branches"] = {
-                            key: dict(branches_any[key])
+                            key: _as_str_object_dict(branches_any.get(key))
                             for key in sorted(branches_any)
-                            if isinstance(branches_any.get(key), dict)
+                            if _is_str_object_dict(branches_any.get(key))
                         }
                     op["inputs"] = inputs
                 node["op"] = op
             nodes.append(node)
         out["nodes"] = nodes
     edges_any = out.get("edges")
-    if isinstance(edges_any, list):
+    if _is_object_list(edges_any):
         out["edges"] = sorted(
-            [dict(item) for item in edges_any if isinstance(item, dict)],
-            key=lambda item: (
-                str(item.get("from") or ""),
-                str(item.get("to") or ""),
-                str((item.get("condition_expr") or {}).get("expr") or ""),
-            ),
+            _as_dict_list(edges_any),
+            key=_edge_sort_key,
         )
     return out
 
 
-def canonicalize_wizard_definition_v3(wd_any: Any) -> Any:
-    if not isinstance(wd_any, dict) or wd_any.get("version") != 3:
+def canonicalize_wizard_definition_v3(wd_any: object) -> object:
+    if not _is_str_object_dict(wd_any) or wd_any.get("version") != 3:
         return wd_any
     macros = _validate_macro_defs(wd_any.get("macros"))
     out = _canonicalize_graph(_expand_program(dict(wd_any), macros))
     libraries_any = out.get("libraries")
-    if isinstance(libraries_any, dict):
+    if _is_str_object_dict(libraries_any):
         out["libraries"] = {
             library_id: {
                 **_canonicalize_graph(dict(library_any)),
                 "params": sorted(
-                    [
-                        dict(param)
-                        for param in library_any.get("params") or []
-                        if isinstance(param, dict)
-                    ],
-                    key=lambda item: str(item.get("name") or ""),
+                    _as_dict_list(library_any.get("params")),
+                    key=_name_sort_key,
                 ),
             }
             for library_id, library_any in sorted(libraries_any.items())
-            if isinstance(library_any, dict)
+            if _is_str_object_dict(library_any)
         }
     if macros:
         out["macros"] = {
             macro_id: {
-                "params": sorted(list(macro["params"])),
+                "params": sorted(_as_str_list(macro.get("params"))),
                 "template": deepcopy(macro["template"]),
             }
             for macro_id, macro in sorted(macros.items())
@@ -978,35 +1018,35 @@ def canonicalize_wizard_definition_v3(wd_any: Any) -> Any:
     return out
 
 
-def _iter_program_nodes(wd: dict[str, Any]) -> list[tuple[str, int, dict[str, Any]]]:
-    out: list[tuple[str, int, dict[str, Any]]] = []
+def _iter_program_nodes(wd: dict[str, object]) -> list[tuple[str, int, dict[str, object]]]:
+    out: list[tuple[str, int, dict[str, object]]] = []
     nodes_any = wd.get("nodes")
-    if isinstance(nodes_any, list):
+    if _is_object_list(nodes_any):
         for index, node_any in enumerate(nodes_any):
-            if isinstance(node_any, dict):
+            if _is_str_object_dict(node_any):
                 out.append(("$.nodes", index, node_any))
     libraries_any = wd.get("libraries")
-    if isinstance(libraries_any, dict):
+    if _is_str_object_dict(libraries_any):
         for library_id, library_any in libraries_any.items():
-            if not isinstance(library_any, dict):
+            if not _is_str_object_dict(library_any):
                 continue
             nodes_any = library_any.get("nodes")
-            if not isinstance(nodes_any, list):
+            if not _is_object_list(nodes_any):
                 continue
             for index, node_any in enumerate(nodes_any):
-                if isinstance(node_any, dict):
+                if _is_str_object_dict(node_any):
                     out.append((f"$.libraries.{library_id}.nodes", index, node_any))
     return out
 
 
 def validate_wizard_definition_v3_against_registry(
-    wd: dict[str, Any],
-    registry: dict[str, Any],
+    wd: dict[str, object],
+    registry: dict[str, object],
 ) -> None:
     known = primitive_index(registry)
     for base_path, index, node_any in _iter_program_nodes(wd):
         op_any = node_any.get("op")
-        if not isinstance(op_any, dict):
+        if not _is_str_object_dict(op_any):
             continue
         pid = op_any.get("primitive_id")
         pver = op_any.get("primitive_version")

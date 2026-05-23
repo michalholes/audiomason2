@@ -10,8 +10,9 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, TypeGuard
 
+from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
 from .fingerprints import fingerprint_json
@@ -21,15 +22,21 @@ if TYPE_CHECKING:  # pragma: no cover
     from .engine import ImportWizardEngine
 
 
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in value)
+
+
 def write_preview_artifact(
     *,
-    fs: Any,
+    fs: FileService,
     session_id: str,
     step_id: str,
-    payload: dict[str, Any],
+    payload: dict[str, object],
     discovery_fingerprint: str,
     effective_config_fingerprint: str,
-) -> dict[str, str]:
+) -> dict[str, object]:
     """Write a preview artifact and return a small response envelope."""
 
     preview_id = fingerprint_json(
@@ -42,7 +49,7 @@ def write_preview_artifact(
         }
     )
 
-    doc: dict[str, Any] = {
+    doc: dict[str, object] = {
         "version": 1,
         "preview_id": preview_id,
         "session_id": session_id,
@@ -60,8 +67,8 @@ def preview_action_impl(
     engine: ImportWizardEngine,
     session_id: str,
     step_id: str,
-    payload: Any,
-) -> dict[str, Any]:
+    payload: object,
+) -> dict[str, object]:
     """Implementation for ImportWizardEngine.preview_action.
 
     Uses the engine's existing payload validation and must not mutate the session.
@@ -70,7 +77,9 @@ def preview_action_impl(
     from .errors import StepSubmissionError, invariant_violation
 
     state = engine._load_state(session_id)
-    if int(state.get("phase") or 1) == 2:
+    phase_any = state.get("phase")
+    phase = phase_any if isinstance(phase_any, int) else 1
+    if phase == 2:
         return invariant_violation(
             message="session is locked (phase 2)",
             path="$.phase",
@@ -88,7 +97,7 @@ def preview_action_impl(
     if not isinstance(steps_any, list):
         raise StepSubmissionError("effective model missing steps")
 
-    steps = [s for s in steps_any if isinstance(s, dict)]
+    steps = [s for s in steps_any if _is_str_object_dict(s)]
     step_ids = {str(s.get("step_id")) for s in steps if isinstance(s.get("step_id"), str)}
     if step_id not in step_ids:
         raise StepSubmissionError("unknown step_id")
@@ -97,7 +106,7 @@ def preview_action_impl(
     if step_id != current:
         raise StepSubmissionError("step_id must match current_step_id")
 
-    schema: dict[str, Any] | None = None
+    schema: dict[str, object] | None = None
     for s in steps:
         if s.get("step_id") == step_id:
             schema = s

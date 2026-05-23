@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from importlib import import_module
 from pathlib import Path
-from typing import Any
 
 from audiomason.core.config import ConfigResolver
 
@@ -15,7 +14,7 @@ atomic_write_json = import_module("plugins.import.storage").atomic_write_json
 read_json = import_module("plugins.import.storage").read_json
 
 
-def _make_engine(tmp_path: Path) -> Any:
+def _make_engine(tmp_path: Path) -> object:
     roots = {
         "inbox": tmp_path / "inbox",
         "stage": tmp_path / "stage",

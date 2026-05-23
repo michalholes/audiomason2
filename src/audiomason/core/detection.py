@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
 
 
 def guess_author_from_path(path: Path) -> str | None:
@@ -74,7 +73,9 @@ def guess_title_from_path(path: Path) -> str | None:
     # Pattern: "Title (Year)"
     match = re.match(r"^(.+?)\s*\(\d{4}\)", filename)
     if match:
-        return match.group(1).strip()
+        group = match.group(1)
+        if isinstance(group, str):
+            return group.strip()
 
     # Just use filename
     return filename if filename else None
@@ -101,7 +102,7 @@ def detect_file_groups(files: list[Path]) -> dict[str, list[Path]]:
     return dict(groups)
 
 
-def extract_existing_metadata(path: Path) -> dict[str, Any]:
+def extract_existing_metadata(path: Path) -> dict[str, object]:
     """Read any existing metadata from file.
 
     This would use mutagen or similar to read ID3/M4A tags.

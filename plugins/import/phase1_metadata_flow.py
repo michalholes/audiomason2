@@ -8,13 +8,47 @@ from __future__ import annotations
 import re
 import unicodedata
 from copy import deepcopy
-from functools import lru_cache
-from typing import Any
+from typing import TypeGuard
 
 from .metadata_boundary import validate_author_title
 
-DEFAULT_FILENAME_POLICY = {"mode": "keep", "template": "{author}/{title}"}
-DEFAULT_FIELD_MAP = {
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _as_nested_str_object_dict(value: object) -> dict[str, dict[str, object]]:
+    if not _is_str_object_dict(value):
+        return {}
+    return {key: _as_str_object_dict(item) for key, item in value.items()}
+
+
+def _as_str_list(value: object) -> list[str]:
+    if not _is_object_list(value):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _as_str_str_dict(value: object) -> dict[str, str]:
+    if not _is_str_object_dict(value):
+        return {}
+    out: dict[str, str] = {}
+    for key, raw in value.items():
+        if isinstance(raw, str) and raw:
+            out[key] = raw
+    return out
+
+
+DEFAULT_FILENAME_POLICY: dict[str, object] = {"mode": "keep", "template": "{author}/{title}"}
+DEFAULT_FIELD_MAP: dict[str, str] = {
     "title": "title",
     "artist": "artist",
     "album": "album",
@@ -45,7 +79,7 @@ def _strip_trailing_tags(text: str) -> str:
         previous = updated
 
 
-def _normalize_source_author_label(value: Any) -> str:
+def _normalize_source_author_label(value: object) -> str:
     text = _cleanup_whitespace(str(value or ""))
     text = _strip_trailing_tags(text)
     if "," in text:
@@ -56,7 +90,7 @@ def _normalize_source_author_label(value: Any) -> str:
     return text
 
 
-def _normalize_source_title_label(*, author: str, value: Any) -> str:
+def _normalize_source_title_label(*, author: str, value: object) -> str:
     raw = _cleanup_whitespace(str(value or ""))
     raw = _DURATION_SUFFIX_RE.sub("", raw).strip()
     raw = _strip_trailing_tags(raw)
@@ -71,26 +105,40 @@ def _normalize_source_title_label(*, author: str, value: Any) -> str:
     return _cleanup_whitespace(folded)
 
 
-def _answer_dict(state: dict[str, Any], key: str) -> dict[str, Any]:
-    answers_any = state.get("answers")
-    answers = dict(answers_any) if isinstance(answers_any, dict) else {}
+def _answer_dict(state: dict[str, object], key: str) -> dict[str, object]:
+    answers = _as_str_object_dict(state.get("answers"))
     value = answers.get(key)
-    return dict(value) if isinstance(value, dict) else {}
+    return _as_str_object_dict(value)
 
 
-def _normalize_root_audio_value(*, value: Any, fallback: str) -> str:
+def _normalize_root_audio_value(*, value: object, fallback: str) -> str:
     text = str(value or "").strip()
     if text in _ROOT_SENTINELS:
         return fallback
     return text or fallback
 
 
-@lru_cache(maxsize=128)
-def _openlibrary_validate(author: str, title: str) -> tuple[dict[str, Any], dict[str, Any]]:
-    return validate_author_title(author, title)
+_VALIDATION_CACHE: dict[tuple[str, str], tuple[dict[str, object], dict[str, object]]] = {}
 
 
-def _validated_author_title(*, author: str, title: str) -> tuple[dict[str, Any], str, str]:
+class _OpenLibraryValidateCallable:
+    def cache_clear(self) -> None:
+        _VALIDATION_CACHE.clear()
+
+    def __call__(self, author: str, title: str) -> tuple[dict[str, object], dict[str, object]]:
+        key = (author, title)
+        cached = _VALIDATION_CACHE.get(key)
+        if cached is not None:
+            return dict(cached[0]), dict(cached[1])
+        author_validation, book_validation = validate_author_title(author, title)
+        _VALIDATION_CACHE[key] = (dict(author_validation), dict(book_validation))
+        return dict(author_validation), dict(book_validation)
+
+
+_openlibrary_validate = _OpenLibraryValidateCallable()
+
+
+def _validated_author_title(*, author: str, title: str) -> tuple[dict[str, object], str, str]:
     author_validation, book_validation = _openlibrary_validate(author, title)
 
     canonical_author = str(author_validation.get("canonical") or author)
@@ -101,10 +149,10 @@ def _validated_author_title(*, author: str, title: str) -> tuple[dict[str, Any],
     canonical_title = title
     canonical_book = book_validation.get("canonical")
     suggestion_book = book_validation.get("suggestion")
-    if isinstance(canonical_book, dict):
+    if _is_str_object_dict(canonical_book):
         canonical_author = str(canonical_book.get("author") or canonical_author)
         canonical_title = str(canonical_book.get("title") or canonical_title)
-    elif isinstance(suggestion_book, dict):
+    elif _is_str_object_dict(suggestion_book):
         canonical_author = str(suggestion_book.get("author") or canonical_author)
         canonical_title = str(suggestion_book.get("title") or canonical_title)
 
@@ -128,26 +176,24 @@ def _validated_author_title(*, author: str, title: str) -> tuple[dict[str, Any],
     )
 
 
-def _sanitize_validation_payload(result_any: Any) -> dict[str, Any] | None:
-    if not isinstance(result_any, dict):
+def _sanitize_validation_payload(result_any: object) -> dict[str, object] | None:
+    if not _is_str_object_dict(result_any):
         return None
-    author_any = result_any.get("author")
-    book_any = result_any.get("book")
     return {
         "provider": str(result_any.get("provider") or "metadata_openlibrary"),
-        "author": dict(author_any) if isinstance(author_any, dict) else {},
-        "book": dict(book_any) if isinstance(book_any, dict) else {},
+        "author": _as_str_object_dict(result_any.get("author")),
+        "book": _as_str_object_dict(result_any.get("book")),
     }
 
 
 def _canonicalize_validation_payload(
     *,
-    validation: dict[str, Any],
+    validation: dict[str, object],
     fallback_author: str,
     fallback_title: str,
-) -> tuple[dict[str, Any], str, str]:
+) -> tuple[dict[str, object], str, str]:
     canonical_author = str(fallback_author)
-    author_payload = dict(validation.get("author") or {})
+    author_payload = _as_str_object_dict(validation.get("author"))
     canonical_author_value = author_payload.get("canonical")
     suggestion_author = author_payload.get("suggestion")
     if isinstance(canonical_author_value, str) and canonical_author_value.strip():
@@ -156,13 +202,13 @@ def _canonicalize_validation_payload(
         canonical_author = suggestion_author.strip()
 
     canonical_title = str(fallback_title)
-    book_payload = dict(validation.get("book") or {})
+    book_payload = _as_str_object_dict(validation.get("book"))
     canonical_book = book_payload.get("canonical")
     suggestion_book = book_payload.get("suggestion")
-    if isinstance(canonical_book, dict):
+    if _is_str_object_dict(canonical_book):
         canonical_author = str(canonical_book.get("author") or canonical_author)
         canonical_title = str(canonical_book.get("title") or canonical_title)
-    elif isinstance(suggestion_book, dict):
+    elif _is_str_object_dict(suggestion_book):
         canonical_author = str(suggestion_book.get("author") or canonical_author)
         canonical_title = str(suggestion_book.get("title") or canonical_title)
 
@@ -178,8 +224,8 @@ def _canonicalize_validation_payload(
 
 
 def _explicit_validation_from_state(
-    state: dict[str, Any],
-) -> tuple[dict[str, Any] | None, str | None, bool]:
+    state: dict[str, object],
+) -> tuple[dict[str, object] | None, str | None, bool]:
     for step_id in (
         "metadata_validate_after_title",
         "metadata_validate_after_author",
@@ -192,7 +238,7 @@ def _explicit_validation_from_state(
     return None, None, False
 
 
-def _latest_validation_answer(state: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+def _latest_validation_answer(state: dict[str, object]) -> tuple[dict[str, object], str | None]:
     for step_id in (
         "metadata_validate_after_title",
         "metadata_validate_after_author",
@@ -204,9 +250,9 @@ def _latest_validation_answer(state: dict[str, Any]) -> tuple[dict[str, Any], st
     return {}, None
 
 
-def _suggested_author(validation: dict[str, Any], fallback: str) -> str:
-    author_payload = dict(validation.get("author") or {})
-    book_payload = dict(validation.get("book") or {})
+def _suggested_author(validation: dict[str, object], fallback: str) -> str:
+    author_payload = _as_str_object_dict(validation.get("author"))
+    book_payload = _as_str_object_dict(validation.get("book"))
     for candidate in (
         author_payload.get("suggestion"),
         author_payload.get("canonical"),
@@ -217,20 +263,22 @@ def _suggested_author(validation: dict[str, Any], fallback: str) -> str:
         book_payload.get("suggestion"),
         book_payload.get("canonical"),
     ):
-        if isinstance(candidate, dict):
+        if _is_str_object_dict(candidate):
             value = candidate.get("author")
             if isinstance(value, str) and value.strip():
                 return _normalize_source_author_label(value)
     return _normalize_source_author_label(fallback)
 
 
-def _suggested_title(validation: dict[str, Any], fallback_author: str, fallback_title: str) -> str:
-    book_payload = dict(validation.get("book") or {})
+def _suggested_title(
+    validation: dict[str, object], fallback_author: str, fallback_title: str
+) -> str:
+    book_payload = _as_str_object_dict(validation.get("book"))
     for candidate in (
         book_payload.get("canonical"),
         book_payload.get("suggestion"),
     ):
-        if isinstance(candidate, dict):
+        if _is_str_object_dict(candidate):
             value = candidate.get("title")
             if isinstance(value, str) and value.strip():
                 return _normalize_source_title_label(author=fallback_author, value=value)
@@ -260,8 +308,8 @@ def _unique_examples(values: list[str], *, fallback: str) -> list[str]:
 
 def _validation_hint(
     *,
-    validation: dict[str, Any],
-    answer: dict[str, Any],
+    validation: dict[str, object],
+    answer: dict[str, object],
     normalized_author: str,
     normalized_title: str,
 ) -> tuple[str, list[str], list[str]]:
@@ -271,7 +319,7 @@ def _validation_hint(
             _prompt_examples(primary=normalized_author, fallback=normalized_author),
             _prompt_examples(primary=normalized_title, fallback=normalized_title),
         )
-    error = dict(answer.get("error") or {}) if isinstance(answer.get("error"), dict) else {}
+    error = _as_str_object_dict(answer.get("error"))
     if error:
         message = str(error.get("message") or error.get("type") or "lookup failed")
         hint = f"Metadata lookup failed: {message}"
@@ -288,8 +336,8 @@ def _validation_hint(
             _prompt_examples(primary=normalized_title, fallback=normalized_title),
         )
 
-    author_payload = dict(validation.get("author") or {})
-    book_payload = dict(validation.get("book") or {})
+    author_payload = _as_str_object_dict(validation.get("author"))
+    book_payload = _as_str_object_dict(validation.get("book"))
     author_valid = bool(author_payload.get("valid"))
     book_valid = bool(book_payload.get("valid"))
     has_suggestion = any(
@@ -322,29 +370,17 @@ def _validation_hint(
 
 def build_phase1_metadata_projection(
     *,
-    source_projection: dict[str, Any],
-    state: dict[str, Any],
-) -> dict[str, Any]:
-    book_meta_any = source_projection.get("book_meta")
-    source_book_meta = dict(book_meta_any) if isinstance(book_meta_any, dict) else {}
-    selected_any = source_projection.get("select_books")
-    selected = dict(selected_any) if isinstance(selected_any, dict) else {}
-    selected_ids_any = selected.get("selected_ids")
-    selected_ids = (
-        [item for item in selected_ids_any if isinstance(item, str)]
-        if isinstance(selected_ids_any, list)
-        else []
-    )
-    selected_paths_any = selected.get("selected_source_relative_paths")
-    selected_paths = (
-        [item for item in selected_paths_any if isinstance(item, str)]
-        if isinstance(selected_paths_any, list)
-        else []
-    )
+    source_projection: dict[str, object],
+    state: dict[str, object],
+) -> dict[str, object]:
+    source_book_meta = _as_nested_str_object_dict(source_projection.get("book_meta"))
+    selected = _as_str_object_dict(source_projection.get("select_books"))
+    selected_ids = _as_str_list(selected.get("selected_ids"))
+    selected_paths = _as_str_list(selected.get("selected_source_relative_paths"))
 
-    validated_books: dict[str, dict[str, Any]] = {}
+    validated_books: dict[str, dict[str, object]] = {}
     for book_id in selected_ids:
-        source_book = source_book_meta.get(book_id, {})
+        source_book = _as_str_object_dict(source_book_meta.get(book_id))
         normalized_source_author = _normalize_source_author_label(source_book.get("author_label"))
         source_author = _normalize_root_audio_value(
             value=normalized_source_author,
@@ -466,7 +502,9 @@ def build_phase1_metadata_projection(
                 "validation": validation,
             }
 
-    effective_book = validated_books.get(selected_ids[0], {}) if selected_ids else {}
+    effective_book = (
+        _as_str_object_dict(validated_books.get(selected_ids[0])) if selected_ids else {}
+    )
     normalized_author = _normalize_root_audio_value(
         value=effective_book.get("author_label"),
         fallback=_ROOT_AUDIO_AUTHOR,
@@ -479,7 +517,7 @@ def build_phase1_metadata_projection(
         "author": normalized_author,
         "title": normalized_book_title,
     }
-    validation = dict(effective_book.get("validation") or {})
+    validation = _as_str_object_dict(effective_book.get("validation"))
     latest_validation_answer, _latest_validation_step = _latest_validation_answer(state)
     (
         author_prompt_hint,
@@ -496,14 +534,14 @@ def build_phase1_metadata_projection(
         {
             str(book.get("author_label") or "").strip()
             for book in validated_books.values()
-            if isinstance(book, dict) and str(book.get("author_label") or "").strip()
+            if _is_str_object_dict(book) and str(book.get("author_label") or "").strip()
         }
     )
     unique_titles = sorted(
         {
             str(book.get("book_label") or "").strip()
             for book in validated_books.values()
-            if isinstance(book, dict) and str(book.get("book_label") or "").strip()
+            if _is_str_object_dict(book) and str(book.get("book_label") or "").strip()
         }
     )
     author_prompt_prefill = normalized_author if len(unique_authors) <= 1 else None
@@ -527,7 +565,7 @@ def build_phase1_metadata_projection(
             fallback=normalized_book_title,
         )
 
-    filename_policy = deepcopy(DEFAULT_FILENAME_POLICY)
+    filename_policy: dict[str, object] = deepcopy(DEFAULT_FILENAME_POLICY)
     filename_policy.update(
         {
             "author": normalized_author,
@@ -542,13 +580,13 @@ def build_phase1_metadata_projection(
         "album": normalized_book_title,
         "album_artist": normalized_author,
     }
-    id3_policy = {
+    id3_policy: dict[str, object] = {
         "field_map": deepcopy(DEFAULT_FIELD_MAP),
         "values": default_values,
     }
     id3_policy.update(_answer_dict(state, "id3_policy"))
-    field_map = dict(id3_policy.get("field_map") or {})
-    values = dict(id3_policy.get("values") or {})
+    field_map = _as_str_str_dict(id3_policy.get("field_map"))
+    values = _as_str_str_dict(id3_policy.get("values"))
 
     return {
         "source_author": source_author,

@@ -14,7 +14,6 @@ import json
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import Any
 
 from audiomason.core.config import ConfigResolver
 
@@ -26,7 +25,7 @@ class _Job:
     job_id: str
 
 
-def _make_engine(tmp_path: Path) -> tuple[Any, dict[str, Path]]:
+def _make_engine(tmp_path: Path) -> tuple[object, dict[str, Path]]:
     roots = {
         "inbox": tmp_path / "inbox",
         "stage": tmp_path / "stage",
@@ -136,7 +135,7 @@ def test_selection_expr_out_of_range_returns_validation_error(tmp_path: Path) ->
 
 
 def test_plan_is_derived_from_selected_books(tmp_path: Path) -> None:
-    def _select(expr: str) -> tuple[str, dict[str, Any]]:
+    def _select(expr: str) -> tuple[str, dict[str, object]]:
         base = tmp_path / f"case_{expr.replace(',', '_').replace(' ', '')}"
         base.mkdir(parents=True, exist_ok=True)
         engine, roots = _make_engine(base)

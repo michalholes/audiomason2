@@ -7,12 +7,23 @@ It must be deterministic and ASCII-only.
 from __future__ import annotations
 
 from collections.abc import Iterator, MutableMapping
-from typing import Any
+from typing import TypeGuard, TypeVar, overload
 
 from .defaults import DEFAULT_FLOW_CONFIG
 from .dsl.default_wizard_v3 import build_default_wizard_definition_v3
 from .errors import FinalizeError
 from .flow_runtime import CANONICAL_STEP_ORDER
+
+_TDefault = TypeVar("_TDefault")
+_MISSING = object()
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
 
 
 def _field(
@@ -20,8 +31,8 @@ def _field(
     key: str,
     type_name: str,
     required: bool = False,
-    default: Any = "",
-) -> dict[str, Any]:
+    default: object = "",
+) -> dict[str, object]:
     return {
         "key": key,
         "type": type_name,
@@ -30,7 +41,7 @@ def _field(
     }
 
 
-def _schema(fields: list[dict[str, Any]]) -> dict[str, Any]:
+def _schema(fields: list[dict[str, object]]) -> dict[str, object]:
     return {
         "version": 1,
         "fields": list(fields),
@@ -48,7 +59,9 @@ def _schema(fields: list[dict[str, Any]]) -> dict[str, Any]:
 # Keep descriptions short and deterministic.
 
 
-def _projected_defaults_template(step_id: str, *, ui_fields: dict[str, Any]) -> dict[str, Any]:
+def _projected_defaults_template(
+    step_id: str, *, ui_fields: dict[str, object]
+) -> dict[str, object]:
     defaults_template = {key: ui_fields[key] for key in _PROMPT_FIELD_ORDER if key in ui_fields}
     if defaults_template:
         return defaults_template
@@ -70,9 +83,9 @@ def _projected_defaults_template(step_id: str, *, ui_fields: dict[str, Any]) -> 
 def _projected_step_catalog_entry(
     step_id: str,
     *,
-    ui_fields: dict[str, Any],
-    flow_defaults: dict[str, Any],
-) -> dict[str, Any]:
+    ui_fields: dict[str, object],
+    flow_defaults: dict[str, object],
+) -> dict[str, object]:
     display_name = str(ui_fields.get("label") or _humanize_step_id(step_id))
     description = str(ui_fields.get("prompt") or "Derived from the active import authority.")
     defaults_template = _projected_defaults_template(step_id, ui_fields=ui_fields)
@@ -93,25 +106,25 @@ def _projected_step_catalog_entry(
     }
 
 
-class _DerivedStepCatalogView(MutableMapping[str, dict[str, Any]]):
+class _DerivedStepCatalogView(MutableMapping[str, dict[str, object]]):
     def __init__(self) -> None:
-        self._overrides: dict[str, dict[str, Any]] = {}
+        self._overrides: dict[str, dict[str, object]] = {}
 
-    def _base(self) -> dict[str, dict[str, Any]]:
+    def _base(self) -> dict[str, dict[str, object]]:
         return build_default_step_catalog_projection()
 
-    def _merged(self) -> dict[str, dict[str, Any]]:
+    def _merged(self) -> dict[str, dict[str, object]]:
         merged = self._base()
         merged.update(self._overrides)
         return merged
 
-    def __getitem__(self, key: str) -> dict[str, Any]:
+    def __getitem__(self, key: str) -> dict[str, object]:
         merged = self._merged()
         if key not in merged:
             raise KeyError(key)
         return merged[key]
 
-    def __setitem__(self, key: str, value: dict[str, Any]) -> None:
+    def __setitem__(self, key: str, value: dict[str, object]) -> None:
         self._overrides[key] = value
 
     def __delitem__(self, key: str) -> None:
@@ -126,21 +139,36 @@ class _DerivedStepCatalogView(MutableMapping[str, dict[str, Any]]):
     def __len__(self) -> int:
         return len(self._merged())
 
-    def get(self, key: str, default: Any = None) -> Any:
+    @overload
+    def get(self, key: str, default: None = None) -> dict[str, object] | None: ...
+
+    @overload
+    def get(self, key: str, default: _TDefault) -> dict[str, object] | _TDefault: ...
+
+    def get(self, key: str, default: object = None) -> object:
         return self._merged().get(key, default)
 
-    def pop(self, key: str, default: Any = None) -> Any:
+    @overload
+    def pop(self, key: str) -> dict[str, object]: ...
+
+    @overload
+    def pop(self, key: str, default: dict[str, object]) -> dict[str, object]: ...
+
+    @overload
+    def pop(self, key: str, default: _TDefault) -> dict[str, object] | _TDefault: ...
+
+    def pop(self, key: str, default: object = _MISSING) -> object:
         if key in self._overrides:
             return self._overrides.pop(key)
-        if default is not None:
+        if default is not _MISSING:
             return default
         raise KeyError(key)
 
 
-STEP_CATALOG: MutableMapping[str, dict[str, Any]] = _DerivedStepCatalogView()
+STEP_CATALOG: MutableMapping[str, dict[str, object]] = _DerivedStepCatalogView()
 
 
-def get_step_details(step_id: str) -> dict[str, Any] | None:
+def get_step_details(step_id: str) -> dict[str, object] | None:
     """Return a derived default projection entry for legacy UI callers only."""
 
     return build_default_step_catalog_projection().get(step_id)
@@ -155,11 +183,11 @@ def build_authority_known_step_ids() -> set[str]:
 def _legacy_catalog_step_ids() -> tuple[str, ...]:
     definition = build_default_wizard_definition_v3()
     nodes_any = definition.get("nodes")
-    if not isinstance(nodes_any, list):
+    if not _is_object_list(nodes_any):
         raise FinalizeError("default wizard_definition nodes must be a list")
     step_ids: list[str] = []
     for node_any in nodes_any:
-        if not isinstance(node_any, dict):
+        if not _is_str_object_dict(node_any):
             raise FinalizeError("default wizard_definition node must be an object")
         step_id = node_any.get("step_id")
         if not isinstance(step_id, str) or not step_id:
@@ -169,7 +197,7 @@ def _legacy_catalog_step_ids() -> tuple[str, ...]:
     return tuple(step_ids)
 
 
-def build_default_step_catalog_projection() -> dict[str, dict[str, Any]]:
+def build_default_step_catalog_projection() -> dict[str, dict[str, object]]:
     """Return a deterministic compatibility projection derived from authority inputs."""
 
     projected = build_step_catalog_projection(
@@ -202,7 +230,7 @@ def _humanize_step_id(step_id: str) -> str:
     return " ".join(part.capitalize() for part in step_id.split("_") if part) or step_id
 
 
-def _field_type(value: Any) -> str:
+def _field_type(value: object) -> str:
     if isinstance(value, bool):
         return "bool"
     if isinstance(value, int) and not isinstance(value, bool):
@@ -214,7 +242,7 @@ def _field_type(value: Any) -> str:
     return "json"
 
 
-def _schema_from_mapping(data: dict[str, Any]) -> dict[str, Any]:
+def _schema_from_mapping(data: dict[str, object]) -> dict[str, object]:
     fields = [
         {"key": key, "type": _field_type(value), "required": False, "default": value}
         for key, value in sorted(data.items())
@@ -222,7 +250,7 @@ def _schema_from_mapping(data: dict[str, Any]) -> dict[str, Any]:
     return _schema(fields)
 
 
-def _project_v2_step(step_id: str, step_defaults: dict[str, Any]) -> dict[str, Any]:
+def _project_v2_step(step_id: str, step_defaults: dict[str, object]) -> dict[str, object]:
     title = _humanize_step_id(step_id)
     defaults_template = dict(step_defaults)
     return {
@@ -240,10 +268,12 @@ def _project_v2_step(step_id: str, step_defaults: dict[str, Any]) -> dict[str, A
     }
 
 
-def _project_v3_step(step: dict[str, Any], step_defaults: dict[str, Any]) -> dict[str, Any]:
+def _project_v3_step(
+    step: dict[str, object], step_defaults: dict[str, object]
+) -> dict[str, object]:
     step_id = str(step.get("step_id") or "")
     ui_any = step.get("ui")
-    ui: dict[str, Any] = dict(ui_any) if isinstance(ui_any, dict) else {}
+    ui: dict[str, object] = dict(ui_any) if _is_str_object_dict(ui_any) else {}
     primitive_id = str(step.get("primitive_id") or "")
     entry = _projected_step_catalog_entry(
         step_id,
@@ -256,33 +286,33 @@ def _project_v3_step(step: dict[str, Any], step_defaults: dict[str, Any]) -> dic
 
 
 def build_step_catalog_projection(
-    *, wizard_definition: dict[str, Any], flow_config: dict[str, Any]
-) -> dict[str, dict[str, Any]]:
-    if not isinstance(wizard_definition, dict):
+    *, wizard_definition: dict[str, object], flow_config: dict[str, object]
+) -> dict[str, dict[str, object]]:
+    if not _is_str_object_dict(wizard_definition):
         raise FinalizeError("wizard_definition must be an object")
-    if not isinstance(flow_config, dict):
+    if not _is_str_object_dict(flow_config):
         raise FinalizeError("flow_config must be an object")
 
     defaults_any = flow_config.get("defaults")
-    step_defaults_map = defaults_any if isinstance(defaults_any, dict) else {}
+    step_defaults_map = defaults_any if _is_str_object_dict(defaults_any) else {}
     version = wizard_definition.get("version")
 
     if version == 3:
         from .dsl.flowmodel_v3 import build_flow_model_v3
 
         flow_model = build_flow_model_v3(wizard_definition=wizard_definition)
-        out_v3: dict[str, dict[str, Any]] = {}
+        out_v3: dict[str, dict[str, object]] = {}
         steps_any = flow_model.get("steps")
-        if not isinstance(steps_any, list):
+        if not _is_object_list(steps_any):
             raise FinalizeError("flow_model steps must be a list")
         for step_any in steps_any:
-            if not isinstance(step_any, dict):
+            if not _is_str_object_dict(step_any):
                 raise FinalizeError("flow_model step must be an object")
             step_id = str(step_any.get("step_id") or "")
             if not step_id:
                 raise FinalizeError("flow_model step_id must be a non-empty string")
             defaults_any = step_defaults_map.get(step_id)
-            step_defaults = defaults_any if isinstance(defaults_any, dict) else {}
+            step_defaults = defaults_any if _is_str_object_dict(defaults_any) else {}
             out_v3[step_id] = _project_v3_step(step_any, step_defaults)
         return out_v3
 
@@ -290,21 +320,21 @@ def build_step_catalog_projection(
         raise FinalizeError("wizard_definition must be version 2 or 3")
 
     graph = wizard_definition.get("graph")
-    if not isinstance(graph, dict):
+    if not _is_str_object_dict(graph):
         raise FinalizeError("wizard_definition graph must be an object")
     nodes = graph.get("nodes")
-    if not isinstance(nodes, list):
+    if not _is_object_list(nodes):
         raise FinalizeError("wizard_definition graph.nodes must be a list")
 
-    out: dict[str, dict[str, Any]] = {}
+    out: dict[str, dict[str, object]] = {}
     for node in nodes:
-        if not isinstance(node, dict):
+        if not _is_str_object_dict(node):
             raise FinalizeError("wizard_definition graph node must be an object")
         step_id_any = node.get("step_id")
         if not isinstance(step_id_any, str) or not step_id_any:
             raise FinalizeError("wizard_definition graph node step_id must be a string")
         defaults_any = step_defaults_map.get(step_id_any)
-        step_defaults = defaults_any if isinstance(defaults_any, dict) else {}
+        step_defaults = defaults_any if _is_str_object_dict(defaults_any) else {}
         projected = _project_v2_step(step_id_any, step_defaults)
         out[step_id_any] = projected
     return out

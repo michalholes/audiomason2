@@ -5,10 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any
 
 
-def _new_metadata() -> dict[str, Any]:
+def _new_metadata() -> dict[str, object]:
     return {}
 
 
@@ -65,7 +64,7 @@ class PreflightResult:
     has_title: bool = False
     has_author: bool = False
     has_year: bool = False
-    existing_metadata: dict[str, Any] = field(default_factory=_new_metadata)
+    existing_metadata: dict[str, object] = field(default_factory=_new_metadata)
 
     # Cover detection
     has_embedded_cover: bool = False
@@ -169,7 +168,7 @@ class ProcessingContext:
     cover_path: Path | None = None
 
     # Metadata
-    final_metadata: dict[str, Any] = field(default_factory=_new_metadata)
+    final_metadata: dict[str, object] = field(default_factory=_new_metadata)
 
     # ===========================================
     #  PROFILING

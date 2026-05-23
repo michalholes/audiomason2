@@ -19,7 +19,7 @@ os.environ.setdefault("ESCDELAY", "25")
 import curses
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.config_service import ConfigService
@@ -28,7 +28,7 @@ from audiomason.core.logging import get_logger
 from audiomason.core.orchestration import Orchestrator
 from audiomason.core.plugin_registry import PluginRegistry
 from plugins.file_io.service.service import FileService
-from plugins.file_io.service.types import RootName
+from plugins.file_io.service.types import FileEntry, RootName
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -69,7 +69,7 @@ class MenuItem:
 class MenuEngine:
     """Ncurses-based menu engine with raspi-config styling."""
 
-    def __init__(self, stdscr: Any) -> None:
+    def __init__(self, stdscr: curses.window) -> None:
         """Initialize menu engine."""
         self.stdscr = stdscr
         self.selected_index = 0
@@ -452,7 +452,7 @@ class MenuEngine:
 class TUIPlugin:
     """TUI plugin called by CLI."""
 
-    def __init__(self, config: dict[str, Any] | None = None) -> None:
+    def __init__(self, config: dict[str, object] | None = None) -> None:
         """Initialize TUI plugin."""
         self._config = config or {}
         self._verbosity = self._config.get("verbosity", 1)
@@ -495,7 +495,7 @@ class TUIPlugin:
             registry=self._plugin_registry,
         )
 
-    def _run_tui(self, stdscr: Any) -> None:
+    def _run_tui(self, stdscr: curses.window) -> None:
         """Run TUI in curses wrapper."""
         self._engine = MenuEngine(stdscr)
         main_menu = self._build_main_menu()
@@ -639,7 +639,7 @@ class TUIPlugin:
                     label = f"{status} {manifest.name}"
                     plugin_name = manifest.name
 
-                    def make_toggle(name: str, enabled: bool) -> Any:
+                    def make_toggle(name: str, enabled: bool) -> Callable[[], str | None]:
                         def toggle() -> str | None:
                             return self._toggle_plugin(name, enabled)
 
@@ -704,7 +704,7 @@ class TUIPlugin:
                     manifest = self._plugin_loader.load_manifest_only(plugin_dir)
                     plugin_name = manifest.name
 
-                    def make_configure(name: str) -> Any:
+                    def make_configure(name: str) -> Callable[[], str | None]:
                         def configure() -> str | None:
                             return self._configure_plugin(name)
 
@@ -756,7 +756,7 @@ class TUIPlugin:
                     key = item.key
                     current_value = str(item.value)
 
-                    def make_edit(k: str, v: str) -> Any:
+                    def make_edit(k: str, v: str) -> Callable[[], str | None]:
                         def edit() -> str | None:
                             return self._edit_config_value(k, v)
 
@@ -831,7 +831,7 @@ class TUIPlugin:
                 key = item.key
                 current_value = str(item.value)
 
-                def make_edit(k: str, v: str) -> Any:
+                def make_edit(k: str, v: str) -> Callable[[], str | None]:
                     def edit() -> str | None:
                         return self._edit_config_value(k, v)
 
@@ -876,7 +876,7 @@ class TUIPlugin:
                 key = item.key
                 current_value = str(item.value)
 
-                def make_edit(k: str, v: str) -> Any:
+                def make_edit(k: str, v: str) -> Callable[[], str | None]:
                     def edit() -> str | None:
                         return self._edit_config_value(k, v)
 
@@ -945,7 +945,7 @@ class TUIPlugin:
                 label = f"{item.key} = {value_str}"
                 key = item.key
 
-                def make_reset(k: str) -> Any:
+                def make_reset(k: str) -> Callable[[], str | None]:
                     def reset() -> str | None:
                         return self._reset_config_value(k)
 
@@ -1031,7 +1031,11 @@ class TUIPlugin:
             return "Services not initialized"
 
         try:
-            entries = self._file_service.list_dir(root, rel_path, recursive=False)
+            entries: list[FileEntry] = self._file_service.list_dir(
+                root,
+                rel_path,
+                recursive=False,
+            )
 
             items: list[MenuItem] = []
             # Store entry info for key handlers
@@ -1043,7 +1047,7 @@ class TUIPlugin:
                 if parent_path == ".":
                     parent_path = "."
 
-                def make_navigate_parent(r: RootName, t: str, p: str) -> Any:
+                def make_navigate_parent(r: RootName, t: str, p: str) -> Callable[[], str | None]:
                     def nav() -> str | None:
                         return self._browse_root(r, t, p)
 
@@ -1059,7 +1063,10 @@ class TUIPlugin:
                 entry_map[".."] = (parent_path, True)
 
             # Sort: directories first, then by name
-            sorted_entries = sorted(entries, key=lambda e: (not e.is_dir, e.rel_path))
+            def _entry_sort_key(entry: FileEntry) -> tuple[bool, str]:
+                return (not entry.is_dir, entry.rel_path)
+
+            sorted_entries = sorted(entries, key=_entry_sort_key)
 
             for entry in sorted_entries:
                 entry_name = Path(entry.rel_path).name
@@ -1070,7 +1077,7 @@ class TUIPlugin:
                     display_name = entry_name[:47] + "..." if len(entry_name) > 50 else entry_name
 
                     # Enter navigates directly into directory
-                    def make_navigate(r: RootName, t: str, p: str) -> Any:
+                    def make_navigate(r: RootName, t: str, p: str) -> Callable[[], str | None]:
                         def nav() -> str | None:
                             return self._browse_root(r, t, p)
 
@@ -1349,7 +1356,7 @@ class TUIPlugin:
                 label = f"[{state_str}] {job.job_id[:8]}... ({type_str})"
                 job_id = job.job_id
 
-                def make_view_log(jid: str) -> Any:
+                def make_view_log(jid: str) -> Callable[[], str | None]:
                     def view() -> str | None:
                         return self._view_job_log(jid)
 

@@ -1,16 +1,28 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from collections.abc import Mapping
 
 from fastapi import FastAPI
+
+from audiomason.core.serde import json_loads_object
 
 from ..util.paths import debug_enabled, ui_overrides_path
 from .debug_bundle import mount_debug_bundle
 
 
-def _default_nav() -> list[dict[str, Any]]:
-    nav: list[dict[str, Any]] = [
+def _dict_str_object(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        return {}
+    out: dict[str, object] = {}
+    for key, item in value.items():
+        if isinstance(key, str):
+            out[key] = item
+    return out
+
+
+def _default_nav() -> list[dict[str, object]]:
+    nav: list[dict[str, object]] = [
         {"title": "Dashboard", "route": "/", "page_id": "dashboard"},
         {"title": "Config", "route": "/config", "page_id": "config"},
         {"title": "Plugins", "route": "/plugins", "page_id": "plugins"},
@@ -28,8 +40,8 @@ def _default_nav() -> list[dict[str, Any]]:
     return nav
 
 
-def _default_pages() -> dict[str, dict[str, Any]]:
-    pages: dict[str, dict[str, Any]] = {
+def _default_pages() -> dict[str, dict[str, object]]:
+    pages: dict[str, dict[str, object]] = {
         "dashboard": {
             "id": "dashboard",
             "title": "Dashboard",
@@ -186,16 +198,21 @@ def _default_pages() -> dict[str, dict[str, Any]]:
     if debug_enabled():
         # In debug mode, surface browser-side debug information in the same place
         # as all other logs (no DevTools required).
-        logs_children = pages.get("logs", {}).get("layout", {}).get("children")
-        if isinstance(logs_children, list):
-            logs_children.insert(
-                0,
-                {
+        logs_page = pages.get("logs")
+        if logs_page is not None:
+            layout = _dict_str_object(logs_page.get("layout"))
+            logs_children = layout.get("children")
+            if isinstance(logs_children, list):
+                debug_feed_content: dict[str, str] = {"type": "ui_debug_feed"}
+                debug_card: dict[str, object] = {
                     "type": "card",
                     "title": "Browser debug (client-side)",
-                    "content": {"type": "ui_debug_feed"},
-                },
-            )
+                    "content": debug_feed_content,
+                }
+                logs_children.insert(
+                    0,
+                    debug_card,
+                )
 
     if debug_enabled():
         pages["debug_js"] = {
@@ -216,12 +233,13 @@ def _default_pages() -> dict[str, dict[str, Any]]:
     return pages
 
 
-def _load_overrides() -> dict[str, Any]:
+def _load_overrides() -> dict[str, object]:
     p = ui_overrides_path()
     if not p.exists():
         return {"pages": {}, "nav": []}
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        loaded = json_loads_object(p.read_text(encoding="utf-8"))
+        return _dict_str_object(loaded)
     except Exception:
         return {"pages": {}, "nav": []}
 
@@ -229,8 +247,7 @@ def _load_overrides() -> dict[str, Any]:
 def mount_ui_schema(app: FastAPI) -> None:
     mount_debug_bundle(app)
 
-    @app.get("/api/ui/schema")
-    def ui_schema() -> dict[str, Any]:
+    def ui_schema() -> dict[str, object]:
         """Developer-friendly schema snapshot.
 
         This is not an OpenAPI replacement. It exposes the UI nav/pages schema and
@@ -254,53 +271,57 @@ def mount_ui_schema(app: FastAPI) -> None:
             },
         }
 
-    @app.get("/api/ui/nav")
-    def ui_nav() -> dict[str, Any]:
+    def ui_nav() -> dict[str, object]:
         ov = _load_overrides()
         nav = ov.get("nav")
         if isinstance(nav, list) and nav:
             return {"items": nav}
         return {"items": _default_nav()}
 
-    @app.get("/api/ui/pages")
-    def ui_pages() -> dict[str, Any]:
+    def ui_pages() -> dict[str, object]:
         pages = _default_pages()
         ov = _load_overrides()
         pov = ov.get("pages")
-        if isinstance(pov, dict):
+        if isinstance(pov, Mapping):
             for k, v in pov.items():
-                if isinstance(v, dict):
-                    pages[k] = v
+                if isinstance(k, str) and isinstance(v, Mapping):
+                    pages[k] = _dict_str_object(v)
         return {"items": [{"id": k, "title": v.get("title", k)} for k, v in pages.items()]}
 
-    @app.get("/api/ui/page/{page_id}")
-    def ui_page(page_id: str) -> dict[str, Any]:
+    def ui_page(page_id: str) -> dict[str, object]:
         pages = _default_pages()
         ov = _load_overrides()
-        pov = ov.get("pages")
-        if isinstance(pov, dict) and page_id in pov and isinstance(pov[page_id], dict):
-            pages[page_id] = pov[page_id]
+        pov = _dict_str_object(ov.get("pages"))
+        override_page = pov.get(page_id)
+        if isinstance(override_page, Mapping):
+            pages[page_id] = _dict_str_object(override_page)
         return pages.get(page_id, pages["dashboard"])
 
-    @app.get("/api/ui/config")
-    def ui_config_get() -> dict[str, Any]:
+    def ui_config_get() -> dict[str, object]:
         p = ui_overrides_path()
-        out: dict[str, Any] = {"data": _load_overrides(), "info": ""}
+        out: dict[str, object] = {"data": _load_overrides(), "info": ""}
         if p.exists():
             out["info"] = "user"
         if debug_enabled():
             out["path"] = str(p)
         return out
 
-    @app.put("/api/ui/config")
-    def ui_config_put(body: dict[str, Any]) -> dict[str, Any]:
+    def ui_config_put(body: dict[str, object]) -> dict[str, object]:
         p = ui_overrides_path()
         p.parent.mkdir(parents=True, exist_ok=True)
         data = body.get("data")
-        if not isinstance(data, dict):
-            data = body if isinstance(body, dict) else {"pages": {}, "nav": []}
-        p.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        out: dict[str, Any] = {"ok": True, "info": "user"}
+        data_out = _dict_str_object(data)
+        if not data_out:
+            data_out = dict(body) if body else {"pages": {}, "nav": []}
+        p.write_text(json.dumps(data_out, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        out: dict[str, object] = {"ok": True, "info": "user"}
         if debug_enabled():
             out["path"] = str(p)
         return out
+
+    app.add_api_route("/api/ui/schema", ui_schema, methods=["GET"])
+    app.add_api_route("/api/ui/nav", ui_nav, methods=["GET"])
+    app.add_api_route("/api/ui/pages", ui_pages, methods=["GET"])
+    app.add_api_route("/api/ui/page/{page_id}", ui_page, methods=["GET"])
+    app.add_api_route("/api/ui/config", ui_config_get, methods=["GET"])
+    app.add_api_route("/api/ui/config", ui_config_put, methods=["PUT"])

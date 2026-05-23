@@ -6,6 +6,7 @@ This plugin also provides a reusable file service capability.
 from __future__ import annotations
 
 import shutil
+from collections.abc import Mapping
 from pathlib import Path
 
 from anyio.to_thread import run_sync
@@ -26,6 +27,28 @@ from . import import_runtime
 from .service import ArchiveService, FileService, RootName
 
 
+def _dict_str_object(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        return {}
+    result: dict[str, object] = {}
+    for key, item in value.items():
+        if isinstance(key, str):
+            result[key] = item
+    return result
+
+
+def _mkdir_parents(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def _copy2(src: Path, dst: Path) -> None:
+    shutil.copy2(src, dst)
+
+
+def _move_path(src: Path, dst: Path) -> None:
+    shutil.move(str(src), str(dst))
+
+
 class FileIOPlugin:
     """File I/O plugin.
 
@@ -39,22 +62,22 @@ class FileIOPlugin:
     - FileService capability for generalized file operations
     """
 
-    def __init__(self, config: dict | None = None) -> None:
+    def __init__(self, config: dict[str, object] | None = None) -> None:
         """Initialize plugin.
 
         Args:
             config: Optional plugin configuration. The loader does not currently
                 pass plugin config, but this is kept for backwards compatibility.
         """
-        self.config = config or {}
+        self.config = dict(config) if config is not None else {}
 
         resolver = ConfigResolver(cli_args={})
 
         default_service = FileService.from_resolver(resolver)
         roots = {name: default_service.root_dir(name) for name in RootName}
 
-        roots_override = self.config.get("roots")
-        if isinstance(roots_override, dict):
+        roots_override = _dict_str_object(self.config.get("roots"))
+        if roots_override:
             for name in RootName:
                 key = f"{name.value}_dir"
                 val = roots_override.get(key)
@@ -137,11 +160,11 @@ class FileIOPlugin:
         import uuid
 
         stage_dir = self.stage_dir / f"book_{uuid.uuid4().hex[:8]}"
-        await run_sync(lambda: stage_dir.mkdir(parents=True, exist_ok=True))
+        await run_sync(_mkdir_parents, stage_dir)
 
         # Copy source to stage
         staged_file = stage_dir / source.name
-        await run_sync(shutil.copy2, source, staged_file)
+        await run_sync(_copy2, source, staged_file)
 
         # Update context
         context.stage_dir = stage_dir
@@ -171,14 +194,14 @@ class FileIOPlugin:
         title_clean = self._sanitize_filename(title)
 
         output_dir = self.output_dir / f"{author_clean} - {title_clean}"
-        await run_sync(lambda: output_dir.mkdir(parents=True, exist_ok=True))
+        await run_sync(_mkdir_parents, output_dir)
 
         # Move files
         exported = []
         for file in context.converted_files:
             if file.exists():
                 dest = output_dir / file.name
-                await run_sync(shutil.move, str(file), str(dest))
+                await run_sync(_move_path, file, dest)
                 exported.append(dest)
 
         context.output_path = output_dir

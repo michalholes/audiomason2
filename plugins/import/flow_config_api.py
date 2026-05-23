@@ -7,7 +7,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from plugins.file_io.service.types import RootName
 
@@ -23,15 +23,15 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 def merge_flow_config_overrides(
-    base: dict[str, Any],
-    overrides: dict[str, Any],
-) -> dict[str, Any]:
+    base: dict[str, object],
+    overrides: dict[str, object],
+) -> dict[str, object]:
     if not isinstance(overrides, dict):
         raise ValueError("flow_overrides must be an object")
     if "steps" not in overrides:
         return base
     merged = dict(base)
-    steps = dict(cast(dict[str, Any], merged.get("steps") or {}))
+    steps = dict(cast(dict[str, object], merged.get("steps") or {}))
     raw_steps = overrides.get("steps")
     if not isinstance(raw_steps, dict):
         raise ValueError("flow_overrides.steps must be an object")
@@ -52,7 +52,7 @@ def merge_flow_config_overrides(
     return merged
 
 
-def get_flow_config(self: ImportWizardEngine) -> dict[str, Any]:
+def get_flow_config(self: ImportWizardEngine) -> dict[str, object]:
     """Return the current normalized FlowConfig JSON."""
 
     ensure_flow_config_exists(self._fs)
@@ -64,7 +64,7 @@ def get_flow_config(self: ImportWizardEngine) -> dict[str, Any]:
     return normalize_flow_config(flow_cfg)
 
 
-def set_flow_config(self: ImportWizardEngine, flow_config_json: Any) -> dict[str, Any]:
+def set_flow_config(self: ImportWizardEngine, flow_config_json: object) -> dict[str, object]:
     """Validate, normalize, persist, and return FlowConfig JSON."""
 
     patch_out = apply_patch_request(self, flow_config_json)
@@ -87,7 +87,7 @@ def set_flow_config(self: ImportWizardEngine, flow_config_json: Any) -> dict[str
     return normalized
 
 
-def reset_flow_config(self: ImportWizardEngine) -> dict[str, Any]:
+def reset_flow_config(self: ImportWizardEngine) -> dict[str, object]:
     """Reset FlowConfig to DEFAULT_FLOW_CONFIG and return the normalized config."""
 
     validated = self.validate_flow_config(DEFAULT_FLOW_CONFIG)

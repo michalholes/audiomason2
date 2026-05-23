@@ -10,8 +10,9 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TypeGuard
 
+from audiomason.core.config import ConfigResolver
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
@@ -71,8 +72,44 @@ from .wizard_definition_model import (
     validate_wizard_definition_structure,
 )
 
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _as_str_list(value: object) -> list[str]:
+    if not _is_object_list(value):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _as_dict_list(value: object) -> list[dict[str, object]]:
+    if not _is_object_list(value):
+        return []
+    return [dict(item) for item in value if _is_str_object_dict(item)]
+
+
+def _to_int_or_default(value: object, default: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
 # Test seam: unit tests monkeypatch plugins.import.engine.get_event_bus.
-get_event_bus: Any = None
+get_event_bus: object = None
 
 __all__ = [
     "ImportWizardEngine",
@@ -80,35 +117,35 @@ __all__ = [
 ]
 
 
-def _wizard_definition_known_step_ids(wizard_definition: dict[str, Any]) -> set[str]:
+def _wizard_definition_known_step_ids(wizard_definition: dict[str, object]) -> set[str]:
     version_any = wizard_definition.get("version")
     version = int(version_any) if isinstance(version_any, int) else 1
 
     if version == 1:
         steps_any = wizard_definition.get("steps")
-        if not isinstance(steps_any, list):
+        if not _is_object_list(steps_any):
             return set()
         return {
             str(step.get("step_id") or "")
             for step in steps_any
-            if isinstance(step, dict) and isinstance(step.get("step_id"), str)
+            if _is_str_object_dict(step) and isinstance(step.get("step_id"), str)
         }
 
     graph_any = wizard_definition.get("graph") if version == 2 else wizard_definition
-    nodes_any = graph_any.get("nodes") if isinstance(graph_any, dict) else None
-    if not isinstance(nodes_any, list):
+    nodes_any = graph_any.get("nodes") if _is_str_object_dict(graph_any) else None
+    if not _is_object_list(nodes_any):
         return set()
     return {
         str(node.get("step_id") or "")
         for node in nodes_any
-        if isinstance(node, dict) and isinstance(node.get("step_id"), str)
+        if _is_str_object_dict(node) and isinstance(node.get("step_id"), str)
     }
 
 
 class ImportWizardEngine:
     """Data-defined import wizard engine."""
 
-    def __init__(self, *, resolver: Any) -> None:
+    def __init__(self, *, resolver: ConfigResolver) -> None:
         self._resolver = resolver
         self._fs = FileService.from_resolver(self._resolver)
 
@@ -119,13 +156,13 @@ class ImportWizardEngine:
         """
         return self._fs
 
-    def get_flow_model(self) -> dict[str, Any]:
+    def get_flow_model(self) -> dict[str, object]:
         """Return FlowModel JSON for the current configuration (spec 10.5)."""
         ensure_default_models(self._fs)
         wizard_definition = load_or_bootstrap_wizard_definition(self._fs)
         flow_cfg = read_json(self._fs, RootName.WIZARDS, "import/config/flow_config.json")
         flow_cfg_norm = self._normalize_flow_config(flow_cfg)
-        if int(wizard_definition.get("version") or 0) == 3:
+        if _to_int_or_default(wizard_definition.get("version"), 0) == 3:
             return build_runtime_flow_model(wizard_definition=wizard_definition)
         return build_legacy_runtime_flow_model_from_definition(
             wizard_definition=wizard_definition,
@@ -138,8 +175,8 @@ class ImportWizardEngine:
         relative_path: str,
         *,
         mode: str = "stage",
-        flow_overrides: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        flow_overrides: dict[str, object] | None = None,
+    ) -> dict[str, object]:
         try:
             return self._create_session_impl(
                 root,
@@ -156,8 +193,8 @@ class ImportWizardEngine:
         relative_path: str,
         *,
         mode: str = "stage",
-        flow_overrides: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        flow_overrides: dict[str, object] | None = None,
+    ) -> dict[str, object]:
         return create_session_impl(
             engine=self,
             root=root,
@@ -166,29 +203,29 @@ class ImportWizardEngine:
             flow_overrides=flow_overrides,
         )
 
-    def validate_catalog(self, catalog_json: Any) -> dict[str, Any]:
+    def validate_catalog(self, catalog_json: object) -> dict[str, object]:
         return validate_catalog_impl(engine=self, catalog_json=catalog_json)
 
-    def validate_flow(self, flow_json: Any, catalog_json: Any) -> dict[str, Any]:
+    def validate_flow(self, flow_json: object, catalog_json: object) -> dict[str, object]:
         return validate_flow_impl(engine=self, flow_json=flow_json, catalog_json=catalog_json)
 
-    def validate_flow_config(self, flow_config_json: Any) -> dict[str, Any]:
+    def validate_flow_config(self, flow_config_json: object) -> dict[str, object]:
         return validate_flow_config_impl(engine=self, flow_config_json=flow_config_json)
 
-    def get_flow_config(self) -> dict[str, Any]:
+    def get_flow_config(self) -> dict[str, object]:
         return flow_config_api.get_flow_config(self)
 
-    def set_flow_config(self, flow_config_json: Any) -> dict[str, Any]:
+    def set_flow_config(self, flow_config_json: object) -> dict[str, object]:
         return flow_config_api.set_flow_config(self, flow_config_json)
 
-    def reset_flow_config(self) -> dict[str, Any]:
+    def reset_flow_config(self) -> dict[str, object]:
         return flow_config_api.reset_flow_config(self)
 
-    def preview_effective_model(self, catalog_json: Any, flow_json: Any) -> dict[str, Any]:
+    def preview_effective_model(self, catalog_json: object, flow_json: object) -> dict[str, object]:
         """Return the effective model that would be frozen for new sessions."""
-        if not isinstance(catalog_json, dict):
+        if not _is_str_object_dict(catalog_json):
             raise ValueError("catalog_json must be an object")
-        if not isinstance(flow_json, dict):
+        if not _is_str_object_dict(flow_json):
             raise ValueError("flow_json must be an object")
         catalog = CatalogModel.from_dict(catalog_json)
         flow = FlowModel.from_dict(flow_json)
@@ -213,7 +250,7 @@ class ImportWizardEngine:
         except Exception:
             return False
 
-    def get_state(self, session_id: str) -> dict[str, Any]:
+    def get_state(self, session_id: str) -> dict[str, object]:
         try:
             state = self._load_state(session_id)
             out = dict(state)
@@ -222,10 +259,12 @@ class ImportWizardEngine:
         except Exception as e:
             return _exception_envelope(e)
 
-    def get_step_definition(self, session_id: str, step_id: str) -> dict[str, Any]:
+    def get_step_definition(self, session_id: str, step_id: str) -> dict[str, object]:
         return get_step_definition_impl(engine=self, session_id=session_id, step_id=step_id)
 
-    def submit_step(self, session_id: str, step_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def submit_step(
+        self, session_id: str, step_id: str, payload: dict[str, object]
+    ) -> dict[str, object]:
         return submit_step_impl(
             engine=self, session_id=session_id, step_id=step_id, payload=payload
         )
@@ -234,8 +273,8 @@ class ImportWizardEngine:
         self,
         session_id: str,
         step_id: str,
-        payload: dict[str, Any],
-    ) -> dict[str, Any]:
+        payload: dict[str, object],
+    ) -> dict[str, object]:
         try:
             return preview_action_impl(
                 engine=self,
@@ -250,9 +289,9 @@ class ImportWizardEngine:
         self,
         *,
         session_id: str,
-        state: dict[str, Any],
+        state: dict[str, object],
         next_step_id: str,
-        flow_cfg_norm: dict[str, Any],
+        flow_cfg_norm: dict[str, object],
     ) -> str:
         """Advance past computed-only steps deterministically (spec 10.3.2/10.3.3).
 
@@ -288,10 +327,10 @@ class ImportWizardEngine:
         self,
         *,
         step_id: str,
-        schema: dict[str, Any],
-        payload: dict[str, Any],
-        state: dict[str, Any],
-    ) -> dict[str, Any]:
+        schema: dict[str, object],
+        payload: dict[str, object],
+        state: dict[str, object],
+    ) -> dict[str, object]:
         fields_any = schema.get("fields")
         fields = validate_step_fields(step_id=step_id, fields_any=fields_any)
 
@@ -310,7 +349,7 @@ class ImportWizardEngine:
         if unknown:
             raise StepSubmissionError("unknown field(s): " + ", ".join(unknown))
 
-        normalized: dict[str, Any] = {}
+        normalized: dict[str, object] = {}
         for f in fields:
             name = f.get("name")
             ftype = f.get("type")
@@ -336,7 +375,7 @@ class ImportWizardEngine:
                 if not isinstance(value, int):
                     raise StepSubmissionError(f"field '{name}' must be int")
                 constraints = f.get("constraints")
-                if isinstance(constraints, dict):
+                if _is_str_object_dict(constraints):
                     mn = constraints.get("min")
                     mx = constraints.get("max")
                     if isinstance(mn, int) and value < mn:
@@ -366,7 +405,7 @@ class ImportWizardEngine:
                 if name not in payload:
                     continue
                 value = payload[name]
-                if not isinstance(value, list):
+                if not _is_object_list(value):
                     raise StepSubmissionError(f"field '{name}' must be list")
                 normalized[name] = value
                 continue
@@ -379,24 +418,26 @@ class ImportWizardEngine:
         self,
         *,
         name: str,
-        field: dict[str, Any],
-        payload: dict[str, Any],
-        state: dict[str, Any],
+        field: dict[str, object],
+        payload: dict[str, object],
+        state: dict[str, object],
     ) -> list[str]:
         # Source items are taken from field.items when present, otherwise from discovery.
-        items: list[dict[str, Any]] = []
+        items: list[dict[str, object]] = []
         items_any = field.get("items")
         if (
-            isinstance(items_any, list)
+            _is_object_list(items_any)
             and items_any
-            and all(isinstance(x, dict) for x in items_any)
+            and all(_is_str_object_dict(x) for x in items_any)
         ):
-            items = [cast(dict[str, Any], x) for x in items_any]
+            items = _as_dict_list(items_any)
         else:
             session_dir = f"import/sessions/{state.get('session_id')}"
             discovery_any = read_json(self._fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
-            if isinstance(discovery_any, list) and all(isinstance(x, dict) for x in discovery_any):
-                items = [cast(dict[str, Any], x) for x in discovery_any]
+            if _is_object_list(discovery_any) and all(
+                _is_str_object_dict(x) for x in discovery_any
+            ):
+                items = _as_dict_list(discovery_any)
 
         ordered_ids: list[str] = []
         for it in items:
@@ -409,7 +450,7 @@ class ImportWizardEngine:
 
         if f"{name}_ids" in payload:
             raw = payload.get(f"{name}_ids")
-            if not (isinstance(raw, list) and all(isinstance(x, str) for x in raw)):
+            if not (_is_object_list(raw) and all(isinstance(x, str) for x in raw)):
                 raise StepSubmissionError(f"field '{name}_ids' must be list[str]")
             requested = [str(x) for x in raw]
             unknown = sorted({x for x in requested if x not in set(ordered_ids)})
@@ -440,13 +481,13 @@ class ImportWizardEngine:
                 selected_ids.append(item_id)
         return selected_ids
 
-    def apply_action(self, session_id: str, action: str) -> dict[str, Any]:
+    def apply_action(self, session_id: str, action: str) -> dict[str, object]:
         try:
             effective_model = self._load_effective_model(session_id)
             if is_v3_effective_model(effective_model):
                 return apply_action_v3(engine=self, session_id=session_id, action=str(action))
             state = self._load_state(session_id)
-            if int(state.get("phase") or 1) == 2:
+            if _to_int_or_default(state.get("phase"), 1) == 2:
                 return invariant_violation(
                     message="session is locked (phase 2)",
                     path="$.phase",
@@ -515,8 +556,9 @@ class ImportWizardEngine:
         except Exception as e:
             return _exception_envelope(e)
 
-    def compute_plan(self, session_id: str) -> dict[str, Any]:
+    def compute_plan(self, session_id: str) -> dict[str, object]:
         state = self._load_state(session_id)
+        derived = _as_str_object_dict(state.get("derived"))
 
         _emit_required(
             "plan.compute",
@@ -524,16 +566,15 @@ class ImportWizardEngine:
             {
                 "session_id": session_id,
                 "model_fingerprint": state.get("model_fingerprint"),
-                "discovery_fingerprint": state.get("derived", {}).get("discovery_fingerprint"),
-                "effective_config_fingerprint": state.get("derived", {}).get(
-                    "effective_config_fingerprint"
-                ),
+                "discovery_fingerprint": derived.get("discovery_fingerprint"),
+                "effective_config_fingerprint": derived.get("effective_config_fingerprint"),
             },
         )
 
         session_dir = f"import/sessions/{session_id}"
-        discovery = read_json(self._fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
-        src = state.get("source") or {}
+        discovery_any = read_json(self._fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
+        discovery = _as_dict_list(discovery_any)
+        src = _as_str_object_dict(state.get("source"))
         src_root = str(src.get("root") or "")
         src_rel = str(src.get("relative_path") or "")
         plan = compute_plan(
@@ -541,20 +582,20 @@ class ImportWizardEngine:
             root=src_root,
             relative_path=src_rel,
             discovery=discovery,
-            inputs=dict(state.get("answers") or {}),
-            selected_book_ids=list(state.get("selected_book_ids") or []),
+            inputs=_as_str_object_dict(state.get("answers")),
+            selected_book_ids=_as_str_list(state.get("selected_book_ids")),
         )
         atomic_write_json(self._fs, RootName.WIZARDS, f"{session_dir}/plan.json", plan)
 
-        computed = dict(state.get("computed") or {})
-        summary_any = plan.get("summary") if isinstance(plan, dict) else None
-        sel_any = plan.get("selected_policies") if isinstance(plan, dict) else None
-        summary = summary_any if isinstance(summary_any, dict) else {}
-        selected_policies = sel_any if isinstance(sel_any, dict) else {}
+        computed = _as_str_object_dict(state.get("computed"))
+        summary_any = plan.get("summary") if _is_str_object_dict(plan) else None
+        sel_any = plan.get("selected_policies") if _is_str_object_dict(plan) else None
+        summary = summary_any if _is_str_object_dict(summary_any) else {}
+        selected_policies = sel_any if _is_str_object_dict(sel_any) else {}
         computed["plan_summary"] = {
-            "files": int(summary.get("files") or 0),
-            "dirs": int(summary.get("dirs") or 0),
-            "bundles": int(summary.get("bundles") or 0),
+            "files": _to_int_or_default(summary.get("files"), 0),
+            "dirs": _to_int_or_default(summary.get("dirs"), 0),
+            "bundles": _to_int_or_default(summary.get("bundles"), 0),
             "selected_policies": dict(selected_policies),
         }
         state["computed"] = computed
@@ -572,7 +613,7 @@ class ImportWizardEngine:
         self._persist_state(session_id, state)
         return plan
 
-    def finalize(self, session_id: str) -> dict[str, Any]:
+    def finalize(self, session_id: str) -> dict[str, object]:
         # finalize() is a legacy entry point kept for compatibility.
         # Per spec: job_requests.json may only be created by start_processing(confirm=true).
         return invariant_violation(
@@ -582,13 +623,13 @@ class ImportWizardEngine:
             meta={},
         )
 
-    def start_processing(self, session_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    def start_processing(self, session_id: str, body: dict[str, object]) -> dict[str, object]:
         return start_processing_impl(engine=self, session_id=session_id, body=body)
 
     def _start_processing_idempotent(
-        self, session_id: str, state: dict[str, Any], body: dict[str, Any]
-    ) -> dict[str, Any]:
-        if not isinstance(body, dict):
+        self, session_id: str, state: dict[str, object], body: dict[str, object]
+    ) -> dict[str, object]:
+        if not _is_str_object_dict(body):
             raise ValueError("body must be an object")
         confirm = body.get("confirm")
         if confirm is not True:
@@ -605,7 +646,7 @@ class ImportWizardEngine:
             raise FinalizeError("job_requests.json is missing")
 
         job_requests_any = read_json(self._fs, RootName.WIZARDS, job_path)
-        if not isinstance(job_requests_any, dict):
+        if not _is_str_object_dict(job_requests_any):
             raise FinalizeError("job_requests.json is invalid")
         idem_key = str(job_requests_any.get("idempotency_key") or "")
         if not idem_key:
@@ -618,21 +659,21 @@ class ImportWizardEngine:
             if self._fs.exists(RootName.WIZARDS, plan_path)
             else {}
         )
-        plan = plan if isinstance(plan, dict) else {}
+        plan = plan if _is_str_object_dict(plan) else {}
 
         result = {"job_ids": [job_id], "batch_size": planned_units_count(plan)}
-        finalize_any = (state.get("computed") or {}).get("finalize")
-        if isinstance(finalize_any, dict):
+        finalize_any = _as_str_object_dict(state.get("computed")).get("finalize")
+        if _is_str_object_dict(finalize_any):
             result["finalize"] = dict(finalize_any)
         return result
 
     def _resolve_flag_for_scan(
         self,
         *,
-        state: dict[str, Any],
+        state: dict[str, object],
         policy: str,
         current_fp: str,
-        current_conflicts: list[dict[str, Any]],
+        current_conflicts: list[dict[str, object]],
     ) -> bool:
         if policy != "ask":
             return True
@@ -640,19 +681,19 @@ class ImportWizardEngine:
             return True
 
         prev = state.get("conflicts")
-        prev_resolved = bool(prev.get("resolved")) if isinstance(prev, dict) else False
-        prev_fp = str(state.get("derived", {}).get("conflict_fingerprint") or "")
+        prev_resolved = bool(prev.get("resolved")) if _is_str_object_dict(prev) else False
+        prev_fp = str(_as_str_object_dict(state.get("derived")).get("conflict_fingerprint") or "")
         if current_fp != prev_fp:
             return False
         return prev_resolved
 
-    def _enter_phase_2(self, session_id: str, state: dict[str, Any]) -> None:
+    def _enter_phase_2(self, session_id: str, state: dict[str, object]) -> None:
         effective_model = self._load_effective_model(session_id)
         catalog_any = effective_model.get("catalog")
         step_ids: set[str] = set()
-        if isinstance(catalog_any, dict):
+        if _is_str_object_dict(catalog_any):
             try:
-                catalog = CatalogModel.from_dict(cast(dict[str, Any], catalog_any))
+                catalog = CatalogModel.from_dict(catalog_any)
                 step_ids = catalog.step_ids()
             except Exception:
                 step_ids = set()
@@ -671,23 +712,23 @@ class ImportWizardEngine:
             raise ValueError("mode must be 'stage' or 'inplace'")
         return mode
 
-    def _load_effective_flow_config(self, session_id: str) -> dict[str, Any]:
+    def _load_effective_flow_config(self, session_id: str) -> dict[str, object]:
         session_dir = f"import/sessions/{session_id}"
         cfg_any = read_json(self._fs, RootName.WIZARDS, f"{session_dir}/effective_config.json")
-        if not isinstance(cfg_any, dict):
+        if not _is_str_object_dict(cfg_any):
             return {"version": 1, "steps": {}, "defaults": {}, "ui": {}}
         flow_cfg_any = cfg_any.get("flow_config")
-        if not isinstance(flow_cfg_any, dict):
+        if not _is_str_object_dict(flow_cfg_any):
             return {"version": 1, "steps": {}, "defaults": {}, "ui": {}}
         return flow_cfg_any
 
     def _load_session_wizard_definition_snapshot(
-        self, session_id: str, state: dict[str, Any]
-    ) -> dict[str, Any]:
+        self, session_id: str, state: dict[str, object]
+    ) -> dict[str, object]:
         derived_any = state.get("derived")
-        derived: dict[str, Any] = derived_any if isinstance(derived_any, dict) else {}
+        derived: dict[str, object] = derived_any if _is_str_object_dict(derived_any) else {}
         snap_any = derived.get("wizard_definition_snapshot")
-        if isinstance(snap_any, dict):
+        if _is_str_object_dict(snap_any):
             if "flow_transition_hops" not in derived:
                 derived["flow_transition_hops"] = 0
             return snap_any
@@ -708,12 +749,12 @@ class ImportWizardEngine:
             RootName.WIZARDS,
             f"import/sessions/{session_id}/effective_model.json",
         )
-        steps_any = effective.get("steps") if isinstance(effective, dict) else None
-        if not isinstance(steps_any, list):
+        steps_any = effective.get("steps") if _is_str_object_dict(effective) else None
+        if not _is_object_list(steps_any):
             return []
         out: list[str] = []
         for s in steps_any:
-            if not isinstance(s, dict):
+            if not _is_str_object_dict(s):
                 continue
             sid = s.get("step_id")
             if isinstance(sid, str) and sid:
@@ -741,13 +782,13 @@ class ImportWizardEngine:
         self,
         *,
         step_id: str,
-        state: dict[str, Any],
-        flow_cfg_norm: dict[str, Any],
+        state: dict[str, object],
+        flow_cfg_norm: dict[str, object],
     ) -> str:
         session_id = str(state.get("session_id") or "")
 
         derived_any = state.get("derived")
-        derived: dict[str, Any] = derived_any if isinstance(derived_any, dict) else {}
+        derived: dict[str, object] = derived_any if _is_str_object_dict(derived_any) else {}
         hops_any = derived.get("flow_transition_hops")
         hops = int(hops_any) if isinstance(hops_any, int) and not isinstance(hops_any, bool) else 0
         hops += 1
@@ -759,12 +800,12 @@ class ImportWizardEngine:
         # Conflict scan side effect is engine-owned (spec 10.3.4) but branching is graph-owned.
         if step_id == "final_summary_confirm":
             inputs = state.get("inputs") or {}
-            payload = inputs.get("final_summary_confirm") if isinstance(inputs, dict) else None
-            confirm = payload.get("confirm_start") if isinstance(payload, dict) else None
+            payload = inputs.get("final_summary_confirm") if _is_str_object_dict(inputs) else None
+            confirm = payload.get("confirm_start") if _is_str_object_dict(payload) else None
             if confirm is True:
                 conflicts = state.get("conflicts")
                 policy = "ask"
-                if isinstance(conflicts, dict):
+                if _is_str_object_dict(conflicts):
                     policy = str(conflicts.get("policy") or "ask")
                 if policy == "ask":
                     self._update_conflicts(session_id, state)
@@ -778,7 +819,7 @@ class ImportWizardEngine:
         def is_enabled(sid: str) -> bool:
             return self._is_step_enabled(sid, flow_cfg_norm)
 
-        def debug_log(kind: str, payload: dict[str, Any]) -> None:
+        def debug_log(kind: str, payload: dict[str, object]) -> None:
             _emit_required(
                 "flow_graph.debug",
                 "flow_graph.debug",
@@ -797,19 +838,19 @@ class ImportWizardEngine:
             debug_log=debug_log,
         )
 
-    def _is_step_enabled(self, step_id: str, flow_cfg_norm: dict[str, Any]) -> bool:
+    def _is_step_enabled(self, step_id: str, flow_cfg_norm: dict[str, object]) -> bool:
         steps_any = flow_cfg_norm.get("steps")
-        if not isinstance(steps_any, dict):
+        if not _is_str_object_dict(steps_any):
             return True
         cfg_any = steps_any.get(step_id)
-        if not isinstance(cfg_any, dict):
+        if not _is_str_object_dict(cfg_any):
             return True
         enabled = cfg_any.get("enabled")
         if enabled is None:
             return True
         return bool(enabled)
 
-    def _coerce_start_step(self, flow: FlowModel, flow_cfg_norm: dict[str, Any]) -> str:
+    def _coerce_start_step(self, flow: FlowModel, flow_cfg_norm: dict[str, object]) -> str:
         entry = str(flow.entry_step_id)
         if self._is_step_enabled(entry, flow_cfg_norm):
             return entry
@@ -824,7 +865,7 @@ class ImportWizardEngine:
         from_step_id: str,
         *,
         direction: str,
-        flow_cfg_norm: dict[str, Any],
+        flow_cfg_norm: dict[str, object],
     ) -> str | None:
         if direction not in {"next", "back"}:
             raise ValueError("direction must be 'next' or 'back'")
@@ -847,15 +888,15 @@ class ImportWizardEngine:
                 return candidate
             cur = candidate
 
-    def _normalize_flow_config(self, raw: Any) -> dict[str, Any]:
+    def _normalize_flow_config(self, raw: object) -> dict[str, object]:
         return flow_config_api.normalize_flow_config(raw)
 
     def _merge_flow_config_overrides(
-        self, base: dict[str, Any], overrides: dict[str, Any]
-    ) -> dict[str, Any]:
+        self, base: dict[str, object], overrides: dict[str, object]
+    ) -> dict[str, object]:
         return flow_config_api.merge_flow_config_overrides(base, overrides)
 
-    def _scan_conflicts(self, session_id: str, state: dict[str, Any]) -> list[dict[str, str]]:
+    def _scan_conflicts(self, session_id: str, state: dict[str, object]) -> list[dict[str, object]]:
         from .conflicts import scan_conflicts
 
         session_dir = f"import/sessions/{session_id}"
@@ -864,20 +905,19 @@ class ImportWizardEngine:
             _ = self.compute_plan(session_id)
 
         plan = read_json(self._fs, RootName.WIZARDS, plan_path)
-        plan = plan if isinstance(plan, dict) else {}
+        plan = plan if _is_str_object_dict(plan) else {}
 
         mode = self._validate_mode(str(state.get("mode") or "stage"))
-        items = scan_conflicts(self._fs, plan=plan, mode=mode)
-        return [cast(dict[str, str], it) for it in items]
+        items_any = scan_conflicts(self._fs, plan=plan, mode=mode)
+        return _as_dict_list(items_any)
 
-    def _update_conflicts(self, session_id: str, state: dict[str, Any]) -> None:
+    def _update_conflicts(self, session_id: str, state: dict[str, object]) -> None:
         items = self._scan_conflicts(session_id, state)
         fp = fingerprint_json(items)
-        policy = str(
-            (state.get("answers") or {}).get("conflict_policy", {}).get("mode")
-            or (state.get("conflicts") or {}).get("policy")
-            or "ask"
-        )
+        answers = _as_str_object_dict(state.get("answers"))
+        conflict_policy = _as_str_object_dict(answers.get("conflict_policy"))
+        existing_conflicts = _as_str_object_dict(state.get("conflicts"))
+        policy = str(conflict_policy.get("mode") or existing_conflicts.get("policy") or "ask")
         resolved = self._resolve_flag_for_scan(
             state=state,
             policy=policy,
@@ -885,7 +925,9 @@ class ImportWizardEngine:
             current_conflicts=items,
         )
 
-        state.setdefault("derived", {})["conflict_fingerprint"] = fp
+        derived = _as_str_object_dict(state.get("derived"))
+        derived["conflict_fingerprint"] = fp
+        state["derived"] = derived
         state["conflicts"] = {
             "present": bool(items),
             "items": items,
@@ -895,7 +937,7 @@ class ImportWizardEngine:
         session_dir = f"import/sessions/{session_id}"
         atomic_write_json(self._fs, RootName.WIZARDS, f"{session_dir}/conflicts.json", items)
 
-    def _get_or_create_job(self, session_id: str, state: dict[str, Any], idem_key: str) -> str:
+    def _get_or_create_job(self, session_id: str, state: dict[str, object], idem_key: str) -> str:
         # Invariants must be validated before job creation.
         wd = self._load_session_wizard_definition_snapshot(session_id, state)
         known_step_ids = _wizard_definition_known_step_ids(wd)
@@ -907,23 +949,20 @@ class ImportWizardEngine:
         mapping: dict[str, str] = {}
         if self._fs.exists(RootName.WIZARDS, idem_path):
             loaded = read_json(self._fs, RootName.WIZARDS, idem_path)
-            if isinstance(loaded, dict):
+            if _is_str_object_dict(loaded):
                 mapping = {str(k): str(v) for k, v in loaded.items()}
 
         if idem_key in mapping and mapping[idem_key]:
             return mapping[idem_key]
 
-        meta = {
+        derived = _as_str_object_dict(state.get("derived"))
+        meta: dict[str, object] = {
             "source": "import",
             "session_id": session_id,
             "idempotency_key": idem_key,
-            "effective_config_fingerprint": str(
-                state.get("derived", {}).get("effective_config_fingerprint") or ""
-            ),
+            "effective_config_fingerprint": str(derived.get("effective_config_fingerprint") or ""),
             "model_fingerprint": str(state.get("model_fingerprint") or ""),
-            "discovery_fingerprint": str(
-                state.get("derived", {}).get("discovery_fingerprint") or ""
-            ),
+            "discovery_fingerprint": str(derived.get("discovery_fingerprint") or ""),
             "job_requests_path": f"wizards:{session_dir}/job_requests.json",
             "detached_runtime_json": serialize_detached_runtime_bootstrap(fs=self._fs),
         }
@@ -932,38 +971,41 @@ class ImportWizardEngine:
         atomic_write_json(self._fs, RootName.WIZARDS, idem_path, mapping)
         return job_id
 
-    def _load_state(self, session_id: str) -> dict[str, Any]:
+    def _load_state(self, session_id: str) -> dict[str, object]:
         session_dir = f"import/sessions/{session_id}"
         state_path = f"{session_dir}/state.json"
         if not self._fs.exists(RootName.WIZARDS, state_path):
             raise SessionNotFoundError(f"session not found: {session_id}")
-        state = read_json(self._fs, RootName.WIZARDS, state_path)
-        if isinstance(state, dict):
-            state = _ensure_session_state_fields(state)
-            discovery_path = f"{session_dir}/discovery.json"
-            if self._fs.exists(RootName.WIZARDS, discovery_path):
-                discovery_any = read_json(self._fs, RootName.WIZARDS, discovery_path)
-                if (
-                    phase1_session_authority_applies(
-                        effective_model=self._load_effective_model(session_id)
-                    )
-                    and isinstance(discovery_any, list)
-                    and all(isinstance(item, dict) for item in discovery_any)
-                ):
-                    state.setdefault("vars", {})["phase1"] = build_phase1_projection(
-                        discovery=discovery_any,
-                        state=state,
-                        fs=self._fs,
-                    )
-            state.setdefault("conflicts", {})["policy"] = str(
-                (state.get("answers") or {}).get("conflict_policy", {}).get("mode")
-                or (state.get("conflicts") or {}).get("policy")
-                or "ask"
-            )
-            self._persist_state(session_id, state)
+        state_any = read_json(self._fs, RootName.WIZARDS, state_path)
+        if not _is_str_object_dict(state_any):
+            raise FinalizeError("state.json is invalid")
+
+        state = _ensure_session_state_fields(state_any)
+        discovery_path = f"{session_dir}/discovery.json"
+        if self._fs.exists(RootName.WIZARDS, discovery_path):
+            discovery_any = read_json(self._fs, RootName.WIZARDS, discovery_path)
+            discovery = _as_dict_list(discovery_any)
+            if phase1_session_authority_applies(
+                effective_model=self._load_effective_model(session_id)
+            ):
+                vars_doc = _as_str_object_dict(state.get("vars"))
+                vars_doc["phase1"] = build_phase1_projection(
+                    discovery=discovery,
+                    state=state,
+                    fs=self._fs,
+                )
+                state["vars"] = vars_doc
+
+        answers = _as_str_object_dict(state.get("answers"))
+        conflict_policy = _as_str_object_dict(answers.get("conflict_policy"))
+        conflicts = _as_str_object_dict(state.get("conflicts"))
+        conflicts["policy"] = str(conflict_policy.get("mode") or conflicts.get("policy") or "ask")
+        state["conflicts"] = conflicts
+
+        self._persist_state(session_id, state)
         return state
 
-    def _persist_state(self, session_id: str, state: dict[str, Any]) -> None:
+    def _persist_state(self, session_id: str, state: dict[str, object]) -> None:
         session_dir = f"import/sessions/{session_id}"
         atomic_write_json(self._fs, RootName.WIZARDS, f"{session_dir}/state.json", state)
 
@@ -975,13 +1017,13 @@ class ImportWizardEngine:
         to reflect this runtime-effective model.
         """
         model_any = self._load_effective_model(session_id)
-        if isinstance(model_any, dict):
+        if _is_str_object_dict(model_any):
             return fingerprint_json(model_any)
         return ""
 
     def _effective_model_with_runtime_selection_items(
-        self, session_id: str, effective_model: dict[str, Any]
-    ) -> dict[str, Any]:
+        self, session_id: str, effective_model: dict[str, object]
+    ) -> dict[str, object]:
         session_dir = f"import/sessions/{session_id}"
         discovery_path = f"{session_dir}/discovery.json"
 
@@ -989,38 +1031,39 @@ class ImportWizardEngine:
             return effective_model
 
         discovery_any = read_json(self._fs, RootName.WIZARDS, discovery_path)
-        if not isinstance(discovery_any, list):
+        if not _is_object_list(discovery_any):
             return effective_model
 
-        authors_items, books_items = _derive_selection_items(discovery_any)
+        discovery = _as_dict_list(discovery_any)
+        authors_items, books_items = _derive_selection_items(discovery)
         return _inject_selection_items(
             effective_model=effective_model,
             authors_items=authors_items,
             books_items=books_items,
         )
 
-    def _load_effective_model(self, session_id: str) -> dict[str, Any]:
+    def _load_effective_model(self, session_id: str) -> dict[str, object]:
         session_dir = f"import/sessions/{session_id}"
         model_any = read_json(
             self._fs,
             RootName.WIZARDS,
             f"{session_dir}/effective_model.json",
         )
-        if isinstance(model_any, dict):
+        if _is_str_object_dict(model_any):
             return self._effective_model_with_runtime_selection_items(session_id, model_any)
-        return model_any
+        raise FinalizeError("effective_model.json is invalid")
 
     def _append_decision(
         self,
         session_id: str,
         *,
         step_id: str,
-        payload: dict[str, Any],
+        payload: dict[str, object],
         result: str,
-        error: dict[str, Any] | None,
+        error: dict[str, object] | None,
     ) -> None:
         session_dir = f"import/sessions/{session_id}"
-        entry: dict[str, Any] = {
+        entry: dict[str, object] = {
             "at": _iso_utc_now(),
             "step_id": step_id,
             "payload": dict(payload),

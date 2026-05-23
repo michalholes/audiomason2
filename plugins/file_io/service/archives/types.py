@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
 
 
 class ArchiveFormat(StrEnum):
@@ -44,7 +43,7 @@ class DetectedArchiveFormat:
 class OpEvent:
     op: str
     phase: OpPhase
-    details: dict[str, Any] = field(default_factory=dict)
+    details: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

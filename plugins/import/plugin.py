@@ -7,6 +7,9 @@ ASCII-only.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import cast
+
 from audiomason.core.config import ConfigResolver
 
 from . import processed_registry_required
@@ -40,24 +43,25 @@ class ImportPlugin:
     def get_engine(self) -> ImportWizardEngine:
         return self.engine
 
-    def get_cli_commands(self) -> dict[str, object]:
+    def get_cli_commands(self) -> dict[str, Callable[[list[str]], int]]:
         """Return plugin-provided CLI command handlers.
 
         This plugin provides the top-level 'import' command.
         """
 
-        return {
-            "import": lambda argv: import_cli_main(
+        def _run_import(argv: list[str]) -> int:
+            return import_cli_main(
                 argv,
                 engine=self.engine,
                 resolver=self._resolver,
             )
-        }
 
-    def get_fastapi_router(self):
+        return {"import": _run_import}
+
+    def get_fastapi_router(self) -> object:
         """Return the import UI router (host must mount it)."""
 
-        return build_router(engine=self.engine)
+        return cast(object, build_router(engine=self.engine))
 
 
 __all__ = ["ImportPlugin"]

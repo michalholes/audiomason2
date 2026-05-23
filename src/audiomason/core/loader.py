@@ -8,24 +8,27 @@ import sys
 import types
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeGuard, cast
-
-import yaml
+from typing import TYPE_CHECKING, TypeGuard, cast
 
 if TYPE_CHECKING:
     from audiomason.core.plugin_registry import PluginRegistry
 
 from audiomason.core.errors import PluginError, PluginNotFoundError, PluginValidationError
+from audiomason.core.serde import yaml_safe_load_stream
 
 
-def _is_str_any_dict(value: Any) -> TypeGuard[dict[str, Any]]:
+def _is_str_any_dict(value: object) -> TypeGuard[dict[str, object]]:
     return isinstance(value, dict)
 
 
-def _require_str(value: Any, *, field: str, manifest_path: Path) -> str:
+def _require_str(value: object, *, field: str, manifest_path: Path) -> str:
     if not isinstance(value, str):
         raise PluginError(f"Invalid '{field}' in manifest {manifest_path}: must be string")
     return value
+
+
+def _path_name(path: Path) -> str:
+    return path.name
 
 
 @dataclass
@@ -41,8 +44,8 @@ class PluginManifest:
     interfaces: list[str]
     cli_commands: list[str]
     hooks: list[str]
-    dependencies: dict[str, Any]
-    config_schema: dict[str, Any]
+    dependencies: dict[str, object]
+    config_schema: dict[str, object]
     test_level: str  # "none" | "basic" | "strict"
     wizard_callable_manifest_pointer: str | None = None
 
@@ -81,7 +84,7 @@ class PluginLoader:
         self._registry = registry
 
         # Loaded plugins
-        self._plugins: dict[str, Any] = {}
+        self._plugins: dict[str, object] = {}
         self._manifests: dict[str, PluginManifest] = {}
 
     def _ensure_builtin_import_root(self) -> None:
@@ -134,7 +137,7 @@ class PluginLoader:
         """
         return self._load_manifest(plugin_dir)
 
-    def load_plugin(self, plugin_dir: Path, validate: bool = True) -> Any:
+    def load_plugin(self, plugin_dir: Path, validate: bool = True) -> object:
         """Load a single plugin.
 
         Args:
@@ -181,7 +184,7 @@ class PluginLoader:
 
         return plugin_instance
 
-    def get_plugin(self, name: str) -> Any:
+    def get_plugin(self, name: str) -> object:
         """Get loaded plugin by name.
 
         Args:
@@ -237,7 +240,7 @@ class PluginLoader:
         if not base_dir.exists():
             return plugin_dirs
 
-        for item in sorted(base_dir.iterdir(), key=lambda p: p.name):
+        for item in sorted(base_dir.iterdir(), key=_path_name):
             if item.is_dir() and (item / "plugin.yaml").exists():
                 plugin_dirs.append(item)
 
@@ -262,7 +265,7 @@ class PluginLoader:
 
         try:
             with open(manifest_path) as f:
-                raw_data = yaml.safe_load(f)
+                raw_data = yaml_safe_load_stream(f)
 
             if not _is_str_any_dict(raw_data):
                 raise PluginError(f"Invalid manifest {manifest_path}: root must be a mapping")
@@ -378,7 +381,7 @@ class PluginLoader:
         except Exception as e:
             raise PluginError(f"Failed to load manifest from {manifest_path}: {e}") from e
 
-    def _load_plugin_class(self, plugin_dir: Path, entrypoint: str) -> type:
+    def _load_plugin_class(self, plugin_dir: Path, entrypoint: str) -> type[object]:
         """Load plugin class from entrypoint.
 
         Args:
@@ -442,7 +445,11 @@ class PluginLoader:
             if not hasattr(module, class_name):
                 raise PluginError(f"Class '{class_name}' not found in {module_name}")
 
-            return getattr(module, class_name)
+            plugin_class_obj = module.__dict__.get(class_name)  # type: ignore[misc]
+            if not isinstance(plugin_class_obj, type):  # type: ignore[misc]
+                raise PluginError(f"Class '{class_name}' not found in {module_name}")
+
+            return plugin_class_obj
 
         except Exception as e:
             raise PluginError(f"Failed to load plugin class: {e}") from e

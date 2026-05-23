@@ -3,16 +3,161 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 import unicodedata
-from functools import lru_cache, partial
-from typing import Any
+from functools import partial
+from typing import TypeGuard
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
 
 from audiomason.core.errors import MetadataError
+from audiomason.core.serde import json_loads_object
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _as_dict_list(value: object) -> list[dict[str, object]]:
+    if not _is_object_list(value):
+        return []
+    return [dict(item) for item in value if _is_str_object_dict(item)]
+
+
+def _as_str_list(value: object) -> list[str]:
+    if not _is_object_list(value):
+        return []
+    out: list[str] = []
+    for item in value:
+        text = _to_non_empty_str_or_none(item)
+        if text is not None:
+            out.append(text)
+    return out
+
+
+def _to_non_empty_str_or_none(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value
+    return None
+
+
+def _to_int_or_default(value: object, default: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _to_int_or_none(value: object) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _to_float_or_default(value: object, default: float) -> float:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return default
+    return default
+
+
+class _CachedHttpResult:
+    def __init__(self, *, max_size: int) -> None:
+        self._max_size = max_size
+        self._cache: dict[tuple[str, float, int], tuple[bool, str]] = {}
+
+    def cache_clear(self) -> None:
+        self._cache.clear()
+
+    def __call__(
+        self,
+        *,
+        url: str,
+        timeout_seconds: float,
+        max_response_bytes: int,
+    ) -> tuple[bool, str]:
+        cache_key = (url, timeout_seconds, max_response_bytes)
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        req = Request(url, headers={"User-Agent": "AudioMason2/metadata_openlibrary"})
+        try:
+            raw_data = _read_response_bytes(
+                req=req,
+                timeout_seconds=timeout_seconds,
+                max_response_bytes=max_response_bytes,
+            )
+        except HTTPError as e:
+            result = (False, f"API request failed: HTTP {e.code}")
+            self._store(cache_key, result)
+            return result
+        except URLError as e:
+            result = (False, f"API request failed: {e.reason}")
+            self._store(cache_key, result)
+            return result
+        except TimeoutError:
+            result = (False, "API request failed: timeout")
+            self._store(cache_key, result)
+            return result
+        except Exception as e:
+            result = (False, f"API request failed: {e}")
+            self._store(cache_key, result)
+            return result
+
+        data = raw_data
+        if len(data) > max_response_bytes:
+            result = (False, "API request failed: response too large")
+            self._store(cache_key, result)
+            return result
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError as e:
+            result = (False, f"Invalid API response: {e}")
+            self._store(cache_key, result)
+            return result
+        try:
+            parsed = json_loads_object(text)
+        except ValueError as e:
+            result = (False, f"Invalid API response: {e}")
+            self._store(cache_key, result)
+            return result
+        if not _is_str_object_dict(parsed):
+            result = (False, "Invalid API response: object expected")
+            self._store(cache_key, result)
+            return result
+
+        result = (True, text)
+        self._store(cache_key, result)
+        return result
+
+    def _store(self, key: tuple[str, float, int], value: tuple[bool, str]) -> None:
+        self._cache[key] = value
+        if len(self._cache) > self._max_size:
+            oldest_key = next(iter(self._cache))
+            self._cache.pop(oldest_key, None)
 
 
 class OpenLibraryPlugin:
@@ -27,24 +172,18 @@ class OpenLibraryPlugin:
     REQUEST_VERSION = 1
     JOB_VERSION = 1
     JOB_TYPE = "metadata_openlibrary.request"
+    _HTTP_CACHE_MAX = 256
+    _cached_http_result = _CachedHttpResult(max_size=_HTTP_CACHE_MAX)
 
-    def __init__(self, config: dict | None = None) -> None:
-        self.config = config or {}
+    def __init__(self, config: dict[str, object] | None = None) -> None:
+        self.config = dict(config) if config is not None else {}
 
         timeout = self.config.get("timeout_seconds", self.DEFAULT_TIMEOUT_SECONDS)
         max_bytes = self.config.get("max_response_bytes", self.DEFAULT_MAX_RESPONSE_BYTES)
+        self.timeout_seconds = _to_float_or_default(timeout, self.DEFAULT_TIMEOUT_SECONDS)
+        self.max_response_bytes = _to_int_or_default(max_bytes, self.DEFAULT_MAX_RESPONSE_BYTES)
 
-        try:
-            self.timeout_seconds = float(timeout)
-        except (TypeError, ValueError):
-            self.timeout_seconds = self.DEFAULT_TIMEOUT_SECONDS
-
-        try:
-            self.max_response_bytes = int(max_bytes)
-        except (TypeError, ValueError):
-            self.max_response_bytes = self.DEFAULT_MAX_RESPONSE_BYTES
-
-    def build_fetch_request(self, query: dict[str, Any]) -> dict[str, Any]:
+    def build_fetch_request(self, query: dict[str, object]) -> dict[str, object]:
         payload = dict(query) if isinstance(query, dict) else {}
         return {
             "request_version": self.REQUEST_VERSION,
@@ -52,35 +191,35 @@ class OpenLibraryPlugin:
             "payload": payload,
         }
 
-    def build_validate_author_request(self, name: str) -> dict[str, Any]:
+    def build_validate_author_request(self, name: str) -> dict[str, object]:
         return {
             "request_version": self.REQUEST_VERSION,
             "operation": "validate_author",
             "payload": {"name": str(name)},
         }
 
-    def build_validate_book_request(self, author: str, title: str) -> dict[str, Any]:
+    def build_validate_book_request(self, author: str, title: str) -> dict[str, object]:
         return {
             "request_version": self.REQUEST_VERSION,
             "operation": "validate_book",
             "payload": {"author": str(author), "title": str(title)},
         }
 
-    def build_lookup_book_request(self, author: str, title: str) -> dict[str, Any]:
+    def build_lookup_book_request(self, author: str, title: str) -> dict[str, object]:
         return {
             "request_version": self.REQUEST_VERSION,
             "operation": "lookup_book",
             "payload": {"author": str(author), "title": str(title)},
         }
 
-    def build_phase1_validation_request(self, author: str, title: str) -> dict[str, Any]:
+    def build_phase1_validation_request(self, author: str, title: str) -> dict[str, object]:
         return {
             "request_version": self.REQUEST_VERSION,
             "operation": "phase1_validate",
             "payload": {"author": str(author), "title": str(title)},
         }
 
-    def build_job(self, request: dict[str, Any]) -> dict[str, Any]:
+    def build_job(self, request: dict[str, object]) -> dict[str, object]:
         payload = dict(request) if isinstance(request, dict) else {}
         return {
             "job_type": self.JOB_TYPE,
@@ -89,49 +228,45 @@ class OpenLibraryPlugin:
             "request": payload,
         }
 
-    def build_fetch_job(self, query: dict[str, Any]) -> dict[str, Any]:
+    def build_fetch_job(self, query: dict[str, object]) -> dict[str, object]:
         return self.build_job(self.build_fetch_request(query))
 
-    def build_validate_author_job(self, name: str) -> dict[str, Any]:
+    def build_validate_author_job(self, name: str) -> dict[str, object]:
         return self.build_job(self.build_validate_author_request(name))
 
-    def build_validate_book_job(self, author: str, title: str) -> dict[str, Any]:
+    def build_validate_book_job(self, author: str, title: str) -> dict[str, object]:
         return self.build_job(self.build_validate_book_request(author, title))
 
-    def build_lookup_book_job(self, author: str, title: str) -> dict[str, Any]:
+    def build_lookup_book_job(self, author: str, title: str) -> dict[str, object]:
         return self.build_job(self.build_lookup_book_request(author, title))
 
-    def build_phase1_validation_job(self, author: str, title: str) -> dict[str, Any]:
+    def build_phase1_validation_job(self, author: str, title: str) -> dict[str, object]:
         return self.build_job(self.build_phase1_validation_request(author, title))
 
-    async def execute_job(self, job: dict[str, Any]) -> dict[str, Any]:
+    async def execute_job(self, job: dict[str, object]) -> dict[str, object]:
         return await self._execute_job(job)
 
-    async def execute_request(self, request: dict[str, Any]) -> dict[str, Any]:
+    async def execute_request(self, request: dict[str, object]) -> dict[str, object]:
         return await self._execute_request(request)
 
-    async def _execute_job(self, job: dict[str, Any]) -> dict[str, Any]:
-        if not isinstance(job, dict):
-            raise MetadataError("Job must be an object")
+    async def _execute_job(self, job: dict[str, object]) -> dict[str, object]:
         job_type = str(job.get("job_type") or "").strip()
         if job_type != self.JOB_TYPE:
             raise MetadataError(f"Unsupported job type: {job_type}")
-        version = int(job.get("job_version") or self.JOB_VERSION)
+        version = _to_int_or_default(job.get("job_version"), self.JOB_VERSION)
         if version != self.JOB_VERSION:
             raise MetadataError(f"Unsupported job version: {version}")
         request_any = job.get("request")
-        request = dict(request_any) if isinstance(request_any, dict) else {}
+        request = _as_str_object_dict(request_any)
         return await self._execute_request(request)
 
-    async def _execute_request(self, request: dict[str, Any]) -> dict[str, Any]:
-        if not isinstance(request, dict):
-            raise MetadataError("Request must be an object")
-        version = int(request.get("request_version") or self.REQUEST_VERSION)
+    async def _execute_request(self, request: dict[str, object]) -> dict[str, object]:
+        version = _to_int_or_default(request.get("request_version"), self.REQUEST_VERSION)
         if version != self.REQUEST_VERSION:
             raise MetadataError(f"Unsupported request version: {version}")
         operation = str(request.get("operation") or "").strip()
         payload_any = request.get("payload")
-        payload = dict(payload_any) if isinstance(payload_any, dict) else {}
+        payload = _as_str_object_dict(payload_any)
 
         if operation == "fetch":
             return await self._execute_fetch(payload)
@@ -165,10 +300,10 @@ class OpenLibraryPlugin:
             }
         raise MetadataError(f"Unsupported operation: {operation}")
 
-    async def _execute_fetch(self, query: dict[str, Any]) -> dict[str, Any]:
+    async def _execute_fetch(self, query: dict[str, object]) -> dict[str, object]:
         author = str(query.get("author") or "")
         title = str(query.get("title") or "")
-        isbn = query.get("isbn")
+        isbn = _to_non_empty_str_or_none(query.get("isbn"))
         docs = await self._search_docs(author=author, title=title, isbn=isbn, limit=20)
         if not docs:
             raise MetadataError("No results found")
@@ -179,7 +314,7 @@ class OpenLibraryPlugin:
             raise MetadataError("No results found")
         return self._extract_metadata(match[0])
 
-    async def _execute_validate_author(self, name: str) -> dict[str, Any]:
+    async def _execute_validate_author(self, name: str) -> dict[str, object]:
         if not self._normalize_text(name):
             raise MetadataError("Need author name")
         docs = await self._search_docs(author=name, limit=20)
@@ -190,7 +325,7 @@ class OpenLibraryPlugin:
             return {"valid": True, "canonical": candidate, "suggestion": None}
         return {"valid": False, "canonical": None, "suggestion": candidate}
 
-    async def _execute_validate_book(self, *, author: str, title: str) -> dict[str, Any]:
+    async def _execute_validate_book(self, *, author: str, title: str) -> dict[str, object]:
         if not self._normalize_text(author) and not self._normalize_text(title):
             raise MetadataError("Need author or title")
         docs = await self._search_docs(author=author, title=title, limit=20)
@@ -224,7 +359,7 @@ class OpenLibraryPlugin:
         )
         return {"valid": False, "canonical": None, "suggestion": suggestion}
 
-    async def _execute_lookup_book(self, *, author: str, title: str) -> dict[str, Any]:
+    async def _execute_lookup_book(self, *, author: str, title: str) -> dict[str, object]:
         if not self._normalize_text(author) and not self._normalize_text(title):
             raise MetadataError("Need author or title")
         docs = await self._search_docs(author=author, title=title, limit=20)
@@ -240,7 +375,7 @@ class OpenLibraryPlugin:
         title: str = "",
         isbn: str | None = None,
         limit: int = 1,
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, object]]:
         params: list[str] = []
         if author:
             params.append(f"author={quote_plus(author)}")
@@ -252,7 +387,7 @@ class OpenLibraryPlugin:
             raise MetadataError("Need at least author, title, or ISBN")
         data = await self._api_request(f"{self.SEARCH_URL}?{'&'.join(params)}&limit={limit}")
         docs = data.get("docs")
-        return [doc for doc in docs if isinstance(doc, dict)] if isinstance(docs, list) else []
+        return _as_dict_list(docs)
 
     @staticmethod
     def _normalize_text(text: str) -> str:
@@ -269,7 +404,7 @@ class OpenLibraryPlugin:
         shared = len(set(query_norm.split()) & set(candidate_norm.split()))
         return (self._match_rank(query_norm, candidate_norm), -shared, candidate_norm, candidate)
 
-    def _best_author_name(self, *, name: str, docs: list[dict[str, Any]]) -> str | None:
+    def _best_author_name(self, *, name: str, docs: list[dict[str, object]]) -> str | None:
         query_norm = self._normalize_text(name)
         best: tuple[tuple[int, int, str, str], str] | None = None
         for doc in docs:
@@ -290,25 +425,29 @@ class OpenLibraryPlugin:
         *,
         author: str,
         title: str,
-        docs: list[dict[str, Any]],
-    ) -> tuple[dict[str, Any], str] | None:
+        docs: list[dict[str, object]],
+    ) -> tuple[dict[str, object], str] | None:
         author_norm = self._normalize_text(author)
         title_norm = self._normalize_text(title)
-        best: tuple[tuple[Any, ...], dict[str, Any], str] | None = None
+        best: tuple[tuple[object, ...], dict[str, object], str] | None = None
         for doc in docs:
             title_value = str(doc.get("title") or "").strip()
             if not self._normalize_text(title_value):
                 continue
-            raw_authors = doc.get("author_name")
-            if not isinstance(raw_authors, list) or not raw_authors:
-                continue
-            authors = [str(raw_name or "").strip() for raw_name in raw_authors]
-            authors = [candidate for candidate in authors if self._normalize_text(candidate)]
+            authors = [
+                candidate
+                for candidate in _as_str_list(doc.get("author_name"))
+                if self._normalize_text(candidate)
+            ]
             if not authors:
                 continue
+
+            def _rank_candidate(candidate: str) -> tuple[int, int, str, str]:
+                return self._candidate_rank(author_norm, candidate)
+
             author_name = min(
                 authors,
-                key=lambda candidate: self._candidate_rank(author_norm, candidate),
+                key=_rank_candidate,
             )
             title_rank = self._candidate_rank(title_norm, title_value)
             author_rank = self._candidate_rank(author_norm, author_name)
@@ -375,7 +514,7 @@ class OpenLibraryPlugin:
         author: str = "",
         title: str = "",
         limit: int = 1,
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, object]]:
         query_parts: list[str] = []
         if author:
             query_parts.append(f"inauthor:{author}")
@@ -388,9 +527,9 @@ class OpenLibraryPlugin:
             limit=limit,
         )
         items = data.get("items")
-        return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+        return _as_dict_list(items)
 
-    async def _googlebooks_request(self, *, query: str, limit: int) -> dict[str, Any]:
+    async def _googlebooks_request(self, *, query: str, limit: int) -> dict[str, object]:
         url = f"{self.GOOGLE_BOOKS_API_URL}?q={quote_plus(query)}&maxResults={limit}"
         return await asyncio.to_thread(
             partial(
@@ -406,25 +545,31 @@ class OpenLibraryPlugin:
         *,
         author: str,
         title: str,
-        items: list[dict[str, Any]],
+        items: list[dict[str, object]],
     ) -> tuple[str | None, str] | None:
         author_norm = self._normalize_text(author)
         title_norm = self._normalize_text(title)
-        best: tuple[tuple[Any, ...], str | None, str] | None = None
+        best: tuple[tuple[object, ...], str | None, str] | None = None
         for item in items:
             volume_info = item.get("volumeInfo")
-            if not isinstance(volume_info, dict):
+            if not _is_str_object_dict(volume_info):
                 continue
             title_value = str(volume_info.get("title") or "").strip()
             if not self._normalize_text(title_value):
                 continue
-            raw_authors = volume_info.get("authors")
-            authors = [str(raw_name or "").strip() for raw_name in raw_authors or []]
-            authors = [candidate for candidate in authors if self._normalize_text(candidate)]
+            authors = [
+                candidate
+                for candidate in _as_str_list(volume_info.get("authors"))
+                if self._normalize_text(candidate)
+            ]
+
+            def _rank_candidate(candidate: str) -> tuple[int, int, str, str]:
+                return self._candidate_rank(author_norm, candidate)
+
             author_name = (
                 min(
                     authors,
-                    key=lambda candidate: self._candidate_rank(author_norm, candidate),
+                    key=_rank_candidate,
                 )
                 if authors
                 else None
@@ -449,23 +594,28 @@ class OpenLibraryPlugin:
         return None if best is None else (best[1], best[2])
 
     @classmethod
-    def _extract_metadata(cls, doc: dict[str, Any]) -> dict[str, Any]:
-        metadata = {
-            "title": doc.get("title"),
-            "subtitle": doc.get("subtitle"),
-            "authors": doc.get("author_name", []),
-            "author": ", ".join(doc.get("author_name", [])),
-            "year": doc.get("first_publish_year"),
-            "publisher": doc.get("publisher", [None])[0] if doc.get("publisher") else None,
-            "isbn": doc.get("isbn", [None])[0] if doc.get("isbn") else None,
-            "language": doc.get("language", [None])[0] if doc.get("language") else None,
-            "cover_url": cls._get_cover_url(doc.get("cover_i")),
-            "subjects": doc.get("subject", []),
-            "ebook_access": doc.get("ebook_access"),
+    def _extract_metadata(cls, doc: dict[str, object]) -> dict[str, object]:
+        authors = _as_str_list(doc.get("author_name"))
+        publishers = _as_str_list(doc.get("publisher"))
+        isbns = _as_str_list(doc.get("isbn"))
+        languages = _as_str_list(doc.get("language"))
+        subjects = _as_str_list(doc.get("subject"))
+        metadata: dict[str, object] = {
+            "title": _to_non_empty_str_or_none(doc.get("title")),
+            "subtitle": _to_non_empty_str_or_none(doc.get("subtitle")),
+            "authors": authors,
+            "author": ", ".join(authors) if authors else None,
+            "year": _to_int_or_none(doc.get("first_publish_year")),
+            "publisher": publishers[0] if publishers else None,
+            "isbn": isbns[0] if isbns else None,
+            "language": languages[0] if languages else None,
+            "cover_url": cls._get_cover_url(_to_int_or_none(doc.get("cover_i"))),
+            "subjects": subjects,
+            "ebook_access": _to_non_empty_str_or_none(doc.get("ebook_access")),
         }
         return {key: value for key, value in metadata.items() if value is not None}
 
-    async def _api_request(self, url: str) -> dict[str, Any]:
+    async def _api_request(self, url: str) -> dict[str, object]:
         return await asyncio.to_thread(
             partial(
                 self._http_get_json,
@@ -478,7 +628,7 @@ class OpenLibraryPlugin:
     @staticmethod
     def _http_get_json(
         *, url: str, timeout_seconds: float, max_response_bytes: int
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         ok, payload = OpenLibraryPlugin._cached_http_result(
             url=url,
             timeout_seconds=timeout_seconds,
@@ -486,39 +636,21 @@ class OpenLibraryPlugin:
         )
         if not ok:
             raise MetadataError(payload)
-        return json.loads(payload)
-
-    @staticmethod
-    @lru_cache(maxsize=256)
-    def _cached_http_result(
-        *, url: str, timeout_seconds: float, max_response_bytes: int
-    ) -> tuple[bool, str]:
-        req = Request(url, headers={"User-Agent": "AudioMason2/metadata_openlibrary"})
-        try:
-            with urlopen(req, timeout=timeout_seconds) as resp:
-                data = resp.read(max_response_bytes + 1)
-        except HTTPError as e:
-            return False, f"API request failed: HTTP {e.code}"
-        except URLError as e:
-            return False, f"API request failed: {e.reason}"
-        except TimeoutError:
-            return False, "API request failed: timeout"
-        except Exception as e:
-            return False, f"API request failed: {e}"
-        if len(data) > max_response_bytes:
-            return False, "API request failed: response too large"
-        try:
-            text = data.decode("utf-8")
-        except UnicodeDecodeError as e:
-            return False, f"Invalid API response: {e}"
-        try:
-            json.loads(text)
-        except json.JSONDecodeError as e:
-            return False, f"Invalid API response: {e}"
-        return True, text
+        parsed = json_loads_object(payload)
+        if not _is_str_object_dict(parsed):
+            raise MetadataError("Invalid API response: object expected")
+        return parsed
 
     @classmethod
     def _get_cover_url(cls, cover_id: int | None) -> str | None:
         if not cover_id:
             return None
         return f"{cls.COVERS_URL}/{cover_id}-L.jpg"
+
+
+def _read_response_bytes(*, req: Request, timeout_seconds: float, max_response_bytes: int) -> bytes:
+    with urlopen(req, timeout=timeout_seconds) as resp:  # type: ignore[misc]
+        raw_payload: object = resp.read(max_response_bytes + 1)  # type: ignore[misc]
+    if not isinstance(raw_payload, bytes):
+        raise MetadataError("API request failed: invalid response payload")
+    return raw_payload

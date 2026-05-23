@@ -8,15 +8,13 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
-
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
 from .flow_config_validation import normalize_flow_config
 from .storage import atomic_write_json_if_missing
 
-DEFAULT_FLOW_CONFIG: dict[str, Any] = {
+DEFAULT_FLOW_CONFIG: dict[str, object] = {
     "version": 1,
     "steps": {},
     "defaults": {},

@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from importlib import import_module
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Protocol, TypeGuard
+from typing import Protocol, TextIO, TypeGuard, cast
 
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import JobState, JobType
@@ -27,7 +27,7 @@ from audiomason.core.process_job_contracts import resolve_process_job_contract
 class _ClaimedJob(contextlib.AbstractContextManager[bool]):
     def __init__(self, path: Path) -> None:
         self._path = path
-        self._fd: Any | None = None
+        self._fd: TextIO | None = None
 
     def __enter__(self) -> bool:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -79,7 +79,7 @@ def _mark_job_running(orch: Orchestrator, job_id: str) -> None:
 
 def _builtin_plugins_root() -> Path:
     plugins_pkg = import_module("plugins")
-    pkg_file = getattr(plugins_pkg, "__file__", None)
+    pkg_file = plugins_pkg.__file__
     if not isinstance(pkg_file, str) or not pkg_file:
         raise RuntimeError("plugins package path unavailable")
     return Path(pkg_file).resolve().parent
@@ -89,9 +89,16 @@ def _user_plugins_root() -> Path:
     return Path.home() / ".audiomason/plugins"
 
 
+class _DetachedRuntimeModule(Protocol):
+    def load_detached_runtime_bootstrap_from_meta(self, job_meta: dict[str, str]) -> object: ...
+
+    def rehydrate_detached_runtime_from_bootstrap(self, bootstrap: object) -> object: ...
+
+
 def _detached_contract_runtime(*, job_meta: dict[str, str]) -> object | None:
     try:
-        runtime_mod = import_module("plugins.import.detached_runtime")
+        runtime_mod_obj = import_module("plugins.import.detached_runtime")
+        runtime_mod = cast(_DetachedRuntimeModule, runtime_mod_obj)
         bootstrap = runtime_mod.load_detached_runtime_bootstrap_from_meta(job_meta=dict(job_meta))
         return runtime_mod.rehydrate_detached_runtime_from_bootstrap(bootstrap=bootstrap)
     except Exception:
@@ -204,12 +211,18 @@ def _process_job(store: JobStore, *, job_id: str) -> None:
                 orch.jobs.store.save_job(job)
 
 
+class _AuthorityArgs(argparse.Namespace):
+    jobs_root: str
+    job_id: str | None
+    adopt_all: bool
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--jobs-root", required=True)
     parser.add_argument("--job-id")
     parser.add_argument("--adopt-all", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(namespace=_AuthorityArgs())
 
     store = JobStore(root=Path(args.jobs_root))
     if args.job_id and not args.adopt_all:

@@ -8,9 +8,17 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypeGuard
 
 from .fingerprints import sha256_hex
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _item_sort_key(item: dict[str, str]) -> tuple[str, str]:
+    return (item.get("label", ""), item.get("item_id", ""))
 
 
 def _to_ascii(text: str) -> str:
@@ -19,7 +27,7 @@ def _to_ascii(text: str) -> str:
 
 
 def derive_selection_items(
-    discovery: list[dict[str, Any]],
+    discovery: list[dict[str, object]],
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """Derive stable author/book selectable items from discovery.
 
@@ -31,7 +39,7 @@ def derive_selection_items(
 
     dirs: list[str] = []
     for it in discovery:
-        if not (isinstance(it, dict) and it.get("kind") == "dir"):
+        if not (_is_str_object_dict(it) and it.get("kind") == "dir"):
             continue
         rel_any = it.get("relative_path")
         if not isinstance(rel_any, str):
@@ -79,22 +87,22 @@ def derive_selection_items(
                 "display_label": book_display_label,
             }
 
-    authors_items = sorted(authors.values(), key=lambda x: (x["label"], x["item_id"]))
-    books_items = sorted(books.values(), key=lambda x: (x["label"], x["item_id"]))
+    authors_items = sorted(list(authors.values()), key=_item_sort_key)
+    books_items = sorted(list(books.values()), key=_item_sort_key)
     return authors_items, books_items
 
 
 def inject_selection_items(
     *,
-    effective_model: dict[str, Any],
+    effective_model: dict[str, object],
     authors_items: list[dict[str, str]],
     books_items: list[dict[str, str]],
-) -> dict[str, Any]:
+) -> dict[str, object]:
     steps_any = effective_model.get("steps")
     if not isinstance(steps_any, list):
         return effective_model
 
-    steps: list[dict[str, Any]] = [s for s in steps_any if isinstance(s, dict)]
+    steps: list[dict[str, object]] = [dict(step) for step in steps_any if _is_str_object_dict(step)]
     for step in steps:
         step_id = step.get("step_id")
         if step_id not in {"select_authors", "select_books"}:
@@ -102,7 +110,9 @@ def inject_selection_items(
         fields_any = step.get("fields")
         if not isinstance(fields_any, list):
             continue
-        fields: list[dict[str, Any]] = [f for f in fields_any if isinstance(f, dict)]
+        fields: list[dict[str, object]] = [
+            dict(field) for field in fields_any if _is_str_object_dict(field)
+        ]
         for f in fields:
             if f.get("type") != "multi_select_indexed":
                 continue

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 from importlib import import_module
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -208,7 +207,7 @@ def test_subscriber_skips_shared_helper_owned_completion(
 
     calls: list[str] = []
 
-    def _unexpected_call(**kwargs: Any) -> dict[str, Any] | None:
+    def _unexpected_call(**kwargs: object) -> dict[str, object] | None:
         calls.append(str(kwargs.get("job_id") or ""))
         return None
 
@@ -285,14 +284,14 @@ def test_live_completion_and_success_event_stay_exact_once(
     real_apply = completion_mod.apply_successful_process_completion
     calls: list[str] = []
 
-    def _count_apply(**kwargs: Any) -> dict[str, Any] | None:
+    def _count_apply(**kwargs: object) -> dict[str, object] | None:
         calls.append(str(kwargs.get("job_id") or ""))
         return real_apply(**kwargs)
 
     monkeypatch.setattr(completion_mod, "apply_successful_process_completion", _count_apply)
     monkeypatch.setattr(processed_required, "apply_successful_process_completion", _count_apply)
 
-    async def _fake_phase2(**_kwargs: Any) -> None:
+    async def _fake_phase2(**_kwargs: object) -> None:
         return None
 
     monkeypatch.setattr(completion_mod, "run_phase2_job_requests", _fake_phase2)

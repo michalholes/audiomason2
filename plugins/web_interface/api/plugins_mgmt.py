@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import zipfile
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
@@ -15,9 +15,9 @@ from ..util.fs import find_repo_root
 from ..util.yamlutil import safe_load_yaml
 
 
-def _read_plugin_meta(path: Path) -> dict[str, Any]:
+def _read_plugin_meta(path: Path) -> dict[str, object]:
     y = path / "plugin.yaml"
-    meta: dict[str, Any] = {"name": path.name}
+    meta: dict[str, object] = {"name": path.name}
     if y.exists():
         obj = safe_load_yaml(y.read_text(encoding="utf-8"))
         if isinstance(obj, dict):
@@ -34,8 +34,7 @@ def _user_plugins_root() -> Path:
 
 
 def mount_plugins_mgmt(app: FastAPI) -> None:
-    @app.get("/api/plugins")
-    def list_plugins() -> dict[str, Any]:
+    def list_plugins() -> dict[str, object]:
         repo = find_repo_root()
         cfg = ConfigService()
         reg = PluginRegistry(cfg)
@@ -46,7 +45,7 @@ def mount_plugins_mgmt(app: FastAPI) -> None:
         dirs = loader.discover()
 
         plugin_ids: list[str] = []
-        items: list[dict[str, Any]] = []
+        items: list[dict[str, object]] = []
         for d in sorted(dirs):
             if not d.is_dir():
                 continue
@@ -67,22 +66,19 @@ def mount_plugins_mgmt(app: FastAPI) -> None:
 
         return {"items": items}
 
-    @app.post("/api/plugins/{name}/enable")
-    def enable_plugin(name: str) -> dict[str, Any]:
+    def enable_plugin(name: str) -> dict[str, object]:
         cfg = ConfigService()
         reg = PluginRegistry(cfg)
         reg.set_enabled(name, True)
         return {"ok": True}
 
-    @app.post("/api/plugins/{name}/disable")
-    def disable_plugin(name: str) -> dict[str, Any]:
+    def disable_plugin(name: str) -> dict[str, object]:
         cfg = ConfigService()
         reg = PluginRegistry(cfg)
         reg.set_enabled(name, False)
         return {"ok": True}
 
-    @app.delete("/api/plugins/{name}")
-    def delete_plugin(name: str) -> dict[str, Any]:
+    def delete_plugin(name: str) -> dict[str, object]:
         # Only allow deleting user-installed plugins.
         root = _user_plugins_root()
         target = (root / name).resolve()
@@ -96,8 +92,7 @@ def mount_plugins_mgmt(app: FastAPI) -> None:
         shutil.rmtree(target)
         return {"ok": True}
 
-    @app.post("/api/plugins/upload")
-    async def upload_plugin(file: Annotated[UploadFile, File()]) -> dict[str, Any]:
+    async def upload_plugin(file: Annotated[UploadFile, File()]) -> dict[str, object]:
         if not file.filename or not file.filename.lower().endswith(".zip"):
             raise HTTPException(status_code=400, detail="expected .zip")
         data = await file.read()
@@ -126,3 +121,9 @@ def mount_plugins_mgmt(app: FastAPI) -> None:
                 out.write_bytes(z.read(n))
 
         return {"ok": True}
+
+    app.add_api_route("/api/plugins", list_plugins, methods=["GET"])
+    app.add_api_route("/api/plugins/{name}/enable", enable_plugin, methods=["POST"])
+    app.add_api_route("/api/plugins/{name}/disable", disable_plugin, methods=["POST"])
+    app.add_api_route("/api/plugins/{name}", delete_plugin, methods=["DELETE"])
+    app.add_api_route("/api/plugins/upload", upload_plugin, methods=["POST"])

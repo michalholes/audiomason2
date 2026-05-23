@@ -9,17 +9,41 @@ ASCII-only.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Protocol
 
 from plugins.file_io.service.types import RootName
 
 from .engine_session_guards import validate_root_and_path
 
 
+class _LauncherConfig(Protocol):
+    @property
+    def launcher_mode(self) -> str: ...
+
+    @property
+    def default_root(self) -> str: ...
+
+    @property
+    def default_path(self) -> str: ...
+
+    @property
+    def noninteractive(self) -> bool: ...
+
+    @property
+    def confirm_defaults(self) -> bool: ...
+
+    @property
+    def nav_ui(self) -> str: ...
+
+
+class _SupportsStartProcessing(Protocol):
+    def start_processing(self, session_id: str, body: dict[str, object]) -> dict[str, object]: ...
+
+
 def resolve_launcher_inputs(
     *,
-    engine: Any,
-    cfg: Any,
+    engine: object,
+    cfg: _LauncherConfig,
     input_fn: Callable[[str], str],
     print_fn: Callable[[str], None],
 ) -> tuple[bool, str, str, str]:
@@ -32,10 +56,10 @@ def resolve_launcher_inputs(
     - relative_path may be "" (default)
     """
 
-    launcher_mode = str(getattr(cfg, "launcher_mode", "interactive"))
-    default_root = str(getattr(cfg, "default_root", ""))
-    default_path = str(getattr(cfg, "default_path", ""))
-    noninteractive = bool(getattr(cfg, "noninteractive", False))
+    launcher_mode = str(cfg.launcher_mode or "interactive")
+    default_root = str(cfg.default_root or "")
+    default_path = str(cfg.default_path or "")
+    noninteractive = bool(cfg.noninteractive)
 
     if noninteractive:
         root = default_root
@@ -77,16 +101,16 @@ def resolve_launcher_inputs(
 
 
 def _pick_root(
-    cfg: Any,
+    cfg: _LauncherConfig,
     *,
     input_fn: Callable[[str], str],
     print_fn: Callable[[str], None],
 ) -> str | None:
     roots = [r.value for r in RootName]
-    default_root = str(getattr(cfg, "default_root", ""))
+    default_root = str(cfg.default_root or "")
     default = default_root if default_root in roots else "inbox"
 
-    confirm_defaults = bool(getattr(cfg, "confirm_defaults", True))
+    confirm_defaults = bool(cfg.confirm_defaults)
 
     print_fn("Select root:")
     for idx, r in enumerate(roots, start=1):
@@ -99,7 +123,7 @@ def _pick_root(
         prompt = "Enter root number (Enter=default): "
 
     raw = input_fn(prompt).strip()
-    nav_ui = str(getattr(cfg, "nav_ui", "prompt"))
+    nav_ui = str(cfg.nav_ui or "prompt")
     if nav_ui in {"inline", "both"} and raw.strip().lower() in {":cancel", "cancel"}:
         return None
     if raw == "" and confirm_defaults:
@@ -115,8 +139,8 @@ def _pick_root(
 
 
 def _pick_path(
-    engine: Any,
-    cfg: Any,
+    engine: object,
+    cfg: _LauncherConfig,
     *,
     root: str,
     input_fn: Callable[[str], str],
@@ -125,8 +149,8 @@ def _pick_path(
     del engine
     del root
 
-    default = str(getattr(cfg, "default_path", ""))
-    confirm_defaults = bool(getattr(cfg, "confirm_defaults", True))
+    default = str(cfg.default_path or "")
+    confirm_defaults = bool(cfg.confirm_defaults)
 
     print_fn("Path is relative to the selected root. Leave empty for root.")
 
@@ -136,7 +160,7 @@ def _pick_path(
         prompt = "Enter path (relative) (Enter=default): "
 
     raw = input_fn(prompt).strip()
-    nav_ui = str(getattr(cfg, "nav_ui", "prompt"))
+    nav_ui = str(cfg.nav_ui or "prompt")
     if nav_ui in {"inline", "both"} and raw.strip().lower() in {":cancel", "cancel"}:
         return None
     if raw == "" and confirm_defaults:
@@ -144,7 +168,12 @@ def _pick_path(
     return raw
 
 
-def begin_phase2(engine: Any, session_id: str, *, print_fn: Callable[[str], None]) -> int:
+def begin_phase2(
+    engine: _SupportsStartProcessing,
+    session_id: str,
+    *,
+    print_fn: Callable[[str], None],
+) -> int:
     """Start PHASE 2 processing (confirm=true) and print result.
 
     Renderer must not branch on step_id; this facade is allowed to call engine APIs.
@@ -165,7 +194,7 @@ def begin_phase2(engine: Any, session_id: str, *, print_fn: Callable[[str], None
     return 0
 
 
-def _json_dump(obj: Any) -> str:
+def _json_dump(obj: object) -> str:
     import json
 
     return json.dumps(obj, indent=2, sort_keys=True)

@@ -3,6 +3,12 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Protocol, cast
+
+
+class _Args(Protocol):
+    host: str
+    port: int
 
 
 def _ensure_repo_root_on_syspath() -> None:
@@ -18,7 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8081)
-    args = p.parse_args(argv)
+    args = cast(_Args, p.parse_args(argv))
 
     _ensure_repo_root_on_syspath()
 
@@ -31,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from plugins.web_interface.core import WebInterfacePlugin
 
-    WebInterfacePlugin().run(host=str(args.host), port=int(args.port))
+    WebInterfacePlugin().run(host=args.host, port=args.port)
     return 0
 
 

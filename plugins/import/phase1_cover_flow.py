@@ -5,26 +5,38 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypeGuard
+
+from plugins.file_io.service import FileService
 
 from .cover_boundary import discover_cover_candidates
 from .file_io_boundary import source_ref_from_state
 
 
-def _answer_dict(state: dict[str, Any], key: str) -> dict[str, Any]:
-    answers_any = state.get("answers")
-    answers = dict(answers_any) if isinstance(answers_any, dict) else {}
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _answer_dict(state: dict[str, object], key: str) -> dict[str, object]:
+    answers = _as_str_object_dict(state.get("answers"))
     value = answers.get(key)
-    return dict(value) if isinstance(value, dict) else {}
+    return _as_str_object_dict(value)
 
 
-def _selected_paths(source_projection: dict[str, Any]) -> list[str]:
-    selected_any = source_projection.get("select_books")
-    selected = dict(selected_any) if isinstance(selected_any, dict) else {}
+def _selected_paths(source_projection: dict[str, object]) -> list[str]:
+    selected = _as_str_object_dict(source_projection.get("select_books"))
     selected_paths_any = selected.get("selected_source_relative_paths")
     return (
         [item for item in selected_paths_any if isinstance(item, str)]
-        if isinstance(selected_paths_any, list)
+        if _is_object_list(selected_paths_any)
         else []
     )
 
@@ -34,8 +46,8 @@ def _candidate_entries(
     source_relative_path: str,
     source_prefix: str,
     root_name: str,
-    state: dict[str, Any],
-    fs: Any | None,
+    state: dict[str, object],
+    fs: FileService | None,
 ) -> list[dict[str, str]]:
     source_root, _ = source_ref_from_state(state)
     if source_root is None or fs is None:
@@ -49,18 +61,18 @@ def _candidate_entries(
     )
 
 
-def _sanitize_candidates(result_any: Any) -> list[dict[str, str]] | None:
-    if not isinstance(result_any, list):
+def _sanitize_candidates(result_any: object) -> list[dict[str, str]] | None:
+    if not _is_object_list(result_any):
         return None
     out: list[dict[str, str]] = []
     for item in result_any:
-        if isinstance(item, dict):
+        if _is_str_object_dict(item):
             out.append({str(key): str(value) for key, value in item.items()})
     return out
 
 
-def _sanitize_candidates_by_source(result_any: Any) -> dict[str, list[dict[str, str]]] | None:
-    if not isinstance(result_any, dict):
+def _sanitize_candidates_by_source(result_any: object) -> dict[str, list[dict[str, str]]] | None:
+    if not _is_str_object_dict(result_any):
         return None
     out: dict[str, list[dict[str, str]]] = {}
     for key, value in result_any.items():
@@ -74,26 +86,26 @@ def _sanitize_candidates_by_source(result_any: Any) -> dict[str, list[dict[str, 
     return out
 
 
-def _sanitize_error_dict(error_any: Any) -> dict[str, Any] | None:
-    if not isinstance(error_any, dict):
+def _sanitize_error_dict(error_any: object) -> dict[str, object] | None:
+    if not _is_str_object_dict(error_any):
         return None
-    out: dict[str, Any] = {}
+    out: dict[str, object] = {}
     for key, value in error_any.items():
         out[str(key)] = value
     return out
 
 
-def _explicit_cover_entries_from_loop_results(result_any: Any) -> list[dict[str, Any]] | None:
-    if not isinstance(result_any, list):
+def _explicit_cover_entries_from_loop_results(result_any: object) -> list[dict[str, object]] | None:
+    if not _is_object_list(result_any):
         return None
-    entries: list[dict[str, Any]] = []
+    entries: list[dict[str, object]] = []
     for item in result_any:
-        if not isinstance(item, dict):
+        if not _is_str_object_dict(item):
             continue
         subflow_any = item.get("subflow")
-        subflow = dict(subflow_any) if isinstance(subflow_any, dict) else {}
+        subflow = dict(subflow_any) if _is_str_object_dict(subflow_any) else {}
         returns_any = subflow.get("returns")
-        returns = dict(returns_any) if isinstance(returns_any, dict) else {}
+        returns = dict(returns_any) if _is_str_object_dict(returns_any) else {}
         source_relative_path = str(
             returns.get("source_relative_path") or item.get("item") or ""
         ).strip()
@@ -113,8 +125,8 @@ def _explicit_cover_entries_from_loop_results(result_any: Any) -> list[dict[str,
 def _explicit_cover_candidates_from_state(
     *,
     selected_paths: list[str],
-    state: dict[str, Any],
-) -> list[dict[str, Any]] | None:
+    state: dict[str, object],
+) -> list[dict[str, object]] | None:
     answer = _answer_dict(state, "cover_discover_initial")
     result_any = answer.get("result")
     error_any = answer.get("error")
@@ -180,10 +192,10 @@ def _explicit_cover_candidates_from_state(
 
 def _build_cover_summary(
     *,
-    per_source_candidates: list[dict[str, Any]],
-    error_any: Any,
+    per_source_candidates: list[dict[str, object]],
+    error_any: object,
 ) -> str:
-    top_level_error = dict(error_any) if isinstance(error_any, dict) else {}
+    top_level_error = dict(error_any) if _is_str_object_dict(error_any) else {}
     if top_level_error:
         message = str(
             top_level_error.get("message")
@@ -193,7 +205,7 @@ def _build_cover_summary(
         return f"Cover autodetection failed: {message}"
     parts: list[str] = []
     for item in per_source_candidates:
-        if not isinstance(item, dict):
+        if not _is_str_object_dict(item):
             continue
         source_relative_path = str(item.get("source_relative_path") or "")
         item_error = _sanitize_error_dict(item.get("error"))
@@ -203,8 +215,8 @@ def _build_cover_summary(
             continue
         candidates_any = item.get("candidates")
         candidates = (
-            [dict(candidate) for candidate in candidates_any if isinstance(candidate, dict)]
-            if isinstance(candidates_any, list)
+            [dict(candidate) for candidate in candidates_any if _is_str_object_dict(candidate)]
+            if _is_object_list(candidates_any)
             else []
         )
         if not candidates:
@@ -229,20 +241,21 @@ def _first_matching_candidate(
 def _resolve_choice_by_source(
     *,
     selected_paths: list[str],
-    per_source_candidates: list[dict[str, Any]],
-    answer: dict[str, Any],
+    per_source_candidates: list[dict[str, object]],
+    answer: dict[str, object],
 ) -> tuple[dict[str, dict[str, str]], str, str, dict[str, str]]:
-    candidates_by_source = {
-        str(item.get("source_relative_path") or ""): [
-            dict(candidate)
-            for candidate in item.get("candidates", [])
-            if isinstance(candidate, dict)
-        ]
-        for item in per_source_candidates
-        if isinstance(item, dict)
-    }
+    candidates_by_source: dict[str, list[dict[str, str]]] = {}
+    for item in per_source_candidates:
+        if not _is_str_object_dict(item):
+            continue
+        source_relative_path = str(item.get("source_relative_path") or "")
+        if not source_relative_path:
+            continue
+        candidates_by_source[source_relative_path] = (
+            _sanitize_candidates(item.get("candidates")) or []
+        )
     answer_choice_any = answer.get("choice")
-    answer_choice = dict(answer_choice_any) if isinstance(answer_choice_any, dict) else {}
+    answer_choice = dict(answer_choice_any) if _is_str_object_dict(answer_choice_any) else {}
     requested_kind = str(answer_choice.get("kind") or answer.get("mode") or "").strip().lower()
     requested_url = str(answer.get("url") or answer_choice.get("url") or "")
     requested_candidate_id = str(
@@ -315,23 +328,22 @@ def _resolve_choice_by_source(
 
 def build_phase1_cover_projection(
     *,
-    discovery: list[dict[str, Any]],
-    source_projection: dict[str, Any],
-    state: dict[str, Any],
-    fs: Any | None = None,
-) -> dict[str, Any]:
+    discovery: list[dict[str, object]],
+    source_projection: dict[str, object],
+    state: dict[str, object],
+    fs: FileService | None = None,
+) -> dict[str, object]:
     del discovery
     selected_paths = _selected_paths(source_projection)
-    source_prefix = (
-        str(state.get("source", {}).get("relative_path") or "").replace("\\", "/").strip("/")
-    )
-    root_name = str(state.get("source", {}).get("root") or "")
+    source = _as_str_object_dict(state.get("source"))
+    source_prefix = str(source.get("relative_path") or "").replace("\\", "/").strip("/")
+    root_name = str(source.get("root") or "")
     explicit_candidates = _explicit_cover_candidates_from_state(
         selected_paths=selected_paths,
         state=state,
     )
     if explicit_candidates is None:
-        per_source_candidates: list[dict[str, Any]] = [
+        per_source_candidates: list[dict[str, object]] = [
             {
                 "source_relative_path": source_relative_path,
                 "candidates": _candidate_entries(
@@ -348,36 +360,40 @@ def build_phase1_cover_projection(
         explicit_by_source = {
             str(item.get("source_relative_path") or ""): dict(item)
             for item in explicit_candidates
-            if isinstance(item, dict)
+            if _is_str_object_dict(item)
         }
-        per_source_candidates = [
-            {
-                "source_relative_path": source_relative_path,
-                "candidates": (
-                    list(explicit_by_source[source_relative_path].get("candidates") or [])
-                    if source_relative_path in explicit_by_source
-                    else _candidate_entries(
-                        source_relative_path=source_relative_path,
-                        source_prefix=source_prefix,
-                        root_name=root_name,
-                        state=state,
-                        fs=fs,
-                    )
-                ),
-                "error": (
-                    _sanitize_error_dict(explicit_by_source[source_relative_path].get("error"))
-                    if source_relative_path in explicit_by_source
-                    else None
-                ),
-            }
-            for source_relative_path in selected_paths
-        ]
-    candidates = [
-        dict(candidate)
-        for block in per_source_candidates
-        for candidate in block.get("candidates", [])
-        if isinstance(candidate, dict)
-    ]
+        per_source_candidates = []
+        for source_relative_path in selected_paths:
+            explicit = explicit_by_source.get(source_relative_path)
+            if explicit is None:
+                per_source_candidates.append(
+                    {
+                        "source_relative_path": source_relative_path,
+                        "candidates": _candidate_entries(
+                            source_relative_path=source_relative_path,
+                            source_prefix=source_prefix,
+                            root_name=root_name,
+                            state=state,
+                            fs=fs,
+                        ),
+                        "error": None,
+                    }
+                )
+                continue
+            per_source_candidates.append(
+                {
+                    "source_relative_path": source_relative_path,
+                    "candidates": _sanitize_candidates(explicit.get("candidates")) or [],
+                    "error": _sanitize_error_dict(explicit.get("error")),
+                }
+            )
+
+    candidates: list[dict[str, object]] = []
+    for block in per_source_candidates:
+        if not _is_str_object_dict(block):
+            continue
+        block_candidates = _sanitize_candidates(block.get("candidates")) or []
+        candidates.extend(dict(candidate) for candidate in block_candidates)
     answer = _answer_dict(state, "covers_policy")
     by_source_relative_path, mode, url, choice = _resolve_choice_by_source(
         selected_paths=selected_paths,
@@ -387,7 +403,9 @@ def build_phase1_cover_projection(
     discover_answer = _answer_dict(state, "cover_discover_initial")
     allowed_modes = ["skip", "url"]
     candidate_kinds = {
-        str(candidate.get("kind") or "") for candidate in candidates if isinstance(candidate, dict)
+        str(candidate.get("kind") or "")
+        for candidate in candidates
+        if _is_str_object_dict(candidate)
     }
     if "embedded" in candidate_kinds:
         allowed_modes.insert(0, "embedded")

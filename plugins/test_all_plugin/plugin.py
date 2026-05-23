@@ -5,8 +5,6 @@ This plugin is deterministic and non-interactive.
 
 from __future__ import annotations
 
-from typing import Any
-
 from audiomason.core.context import ProcessingContext
 
 
@@ -24,7 +22,7 @@ class TestAllPlugin:
         context.final_metadata["test_all_plugin_enriched"] = True
         return context
 
-    async def fetch(self, query: dict[str, Any]) -> dict[str, Any]:
+    async def fetch(self, query: dict[str, object]) -> dict[str, object]:
         """IProvider: return a deterministic provider response."""
         return {
             "provider": "test_all_plugin",
@@ -44,7 +42,7 @@ class TestAllPlugin:
         """IStorage stub."""
         raise NotImplementedError("test_all_plugin does not implement storage backends")
 
-    def get_cli_commands(self) -> dict[str, Any]:
+    def get_cli_commands(self) -> dict[str, object]:
         """ICLICommands: provide deterministic CLI command handlers."""
 
         def test_all(argv: list[str]) -> str:

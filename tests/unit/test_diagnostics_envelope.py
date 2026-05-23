@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from audiomason.core.context import ProcessingContext
 from audiomason.core.events import get_event_bus
@@ -9,7 +8,7 @@ from audiomason.core.orchestration import Orchestrator
 from audiomason.core.orchestration_models import ProcessRequest
 
 
-def assert_is_envelope(published_event: str, payload: dict[str, Any]) -> None:
+def assert_is_envelope(published_event: str, payload: dict[str, object]) -> None:
     assert isinstance(payload, dict)
     required = {"event", "component", "operation", "timestamp", "data"}
     assert set(payload.keys()) == required
@@ -26,7 +25,7 @@ class _OkPlugin:
 
 
 class _FakePluginLoader:
-    def get_plugin(self, name: str) -> Any:
+    def get_plugin(self, name: str) -> object:
         assert name == "ok"
         return _OkPlugin()
 
@@ -35,9 +34,9 @@ def test_diagnostics_envelope_and_min_event_set(tmp_path: Path) -> None:
     bus = get_event_bus()
     bus.clear()
 
-    published: list[tuple[str, dict[str, Any]]] = []
+    published: list[tuple[str, dict[str, object]]] = []
 
-    def _on_all(event: str, data: dict[str, Any]) -> None:
+    def _on_all(event: str, data: dict[str, object]) -> None:
         published.append((event, data))
 
     bus.subscribe_all(_on_all)

@@ -7,10 +7,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from copy import deepcopy
-from typing import Any
+from typing import TypeGuard
 
 
-def _object_schema(*, required: list[str] | None = None) -> dict[str, Any]:
+def _object_schema(*, required: list[str] | None = None) -> dict[str, object]:
     return {
         "type": "object",
         "properties": {},
@@ -19,7 +19,7 @@ def _object_schema(*, required: list[str] | None = None) -> dict[str, Any]:
     }
 
 
-REGISTRY_ENTRIES: list[dict[str, Any]] = [
+REGISTRY_ENTRIES: list[dict[str, object]] = [
     {
         "primitive_id": "ui.message",
         "version": 1,
@@ -107,9 +107,17 @@ _EXPR_METADATA_KEYS: tuple[str, ...] = (
 )
 
 
-def _is_expr_ref(value: Any) -> bool:
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _is_expr_ref(value: object) -> bool:
     return (
-        isinstance(value, dict)
+        _is_str_object_dict(value)
         and set(value.keys()) == {"expr"}
         and isinstance(value.get("expr"), str)
     )
@@ -128,11 +136,11 @@ def prompt_output_key(primitive_id: str, primitive_version: int) -> str | None:
 def project_prompt_ui(
     primitive_id: str,
     primitive_version: int,
-    inputs: dict[str, Any],
-) -> dict[str, Any] | None:
+    inputs: dict[str, object],
+) -> dict[str, object] | None:
     if not is_prompt_primitive(primitive_id, primitive_version):
         return None
-    out: dict[str, Any] = {}
+    out: dict[str, object] = {}
     for key in PROMPT_METADATA_KEYS:
         if key in inputs:
             value = inputs[key]
@@ -145,15 +153,15 @@ def project_prompt_ui(
 def normalize_prompt_ui(
     primitive_id: str,
     primitive_version: int,
-    metadata: dict[str, Any],
+    metadata: dict[str, object],
     *,
-    resolve_expr: Callable[[dict[str, Any], str, dict[str, Any]], Any],
+    resolve_expr: Callable[[dict[str, object], str, dict[str, object]], object],
     path_prefix: str,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     if not is_prompt_primitive(primitive_id, primitive_version):
         return {}
 
-    normalized: dict[str, Any] = {}
+    normalized: dict[str, object] = {}
     for key in PROMPT_RENDERER_METADATA_KEYS:
         if key in metadata:
             normalized[key] = deepcopy(metadata[key])
@@ -166,41 +174,54 @@ def normalize_prompt_ui(
     ):
         if key not in metadata:
             continue
+        expr_ref = metadata[key]
+        if not _is_str_object_dict(expr_ref):
+            raise ValueError(f"{primitive_id}@1 {key} must be ExprRef")
         value = resolve_expr(
-            metadata[key],
+            expr_ref,
             f"{path_prefix}.{key}",
             normalized,
         )
         if target_key == "examples":
-            if not isinstance(value, list):
+            if not _is_object_list(value):
                 raise ValueError(f"{primitive_id}@1 {key} must resolve to list")
+            normalized[target_key] = [item for item in value]
         else:
             if not isinstance(value, str):
                 raise ValueError(f"{primitive_id}@1 {key} must resolve to string")
-        normalized[target_key] = value
+            normalized[target_key] = value
     if "default_value" in metadata:
         normalized["default_value"] = deepcopy(metadata["default_value"])
     if "prefill" in metadata:
         normalized["prefill"] = deepcopy(metadata["prefill"])
     if "default_expr" in metadata:
+        default_expr = metadata["default_expr"]
+        if not _is_str_object_dict(default_expr):
+            raise ValueError(f"{primitive_id}@1 default_expr must be ExprRef")
         value = resolve_expr(
-            metadata["default_expr"],
+            default_expr,
             f"{path_prefix}.default_expr",
             normalized,
         )
         if value is not None:
             normalized["default_value"] = value
     if "prefill_expr" in metadata:
+        prefill_expr = metadata["prefill_expr"]
+        if not _is_str_object_dict(prefill_expr):
+            raise ValueError(f"{primitive_id}@1 prefill_expr must be ExprRef")
         value = resolve_expr(
-            metadata["prefill_expr"],
+            prefill_expr,
             f"{path_prefix}.prefill_expr",
             normalized,
         )
         if value is not None:
             normalized["prefill"] = value
     if "autofill_if" in metadata:
+        autofill_expr = metadata["autofill_if"]
+        if not _is_str_object_dict(autofill_expr):
+            raise ValueError(f"{primitive_id}@1 autofill_if must be ExprRef")
         value = resolve_expr(
-            metadata["autofill_if"],
+            autofill_expr,
             f"{path_prefix}.autofill_if",
             normalized,
         )
@@ -213,8 +234,8 @@ def normalize_prompt_ui(
 def validate_submit_payload(
     primitive_id: str,
     primitive_version: int,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
+    payload: dict[str, object],
+) -> dict[str, object]:
     if primitive_version != 1:
         raise ValueError("unsupported primitive version")
     if primitive_id == "ui.prompt_text":
@@ -238,8 +259,8 @@ def validate_submit_payload(
 def execute_non_prompt(
     primitive_id: str,
     primitive_version: int,
-    inputs: dict[str, Any],
-) -> dict[str, Any]:
+    inputs: dict[str, object],
+) -> dict[str, object]:
     if primitive_version != 1:
         raise ValueError("unsupported primitive version")
     if primitive_id == "ui.message":

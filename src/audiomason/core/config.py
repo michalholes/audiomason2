@@ -12,17 +12,16 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypeGuard
-
-import yaml
+from typing import TypeGuard
 
 from audiomason.core.errors import ConfigError
+from audiomason.core.serde import yaml_safe_load_stream
 
 ALLOWED_LOGGING_LEVELS = frozenset({"quiet", "normal", "verbose", "debug"})
 DEFAULT_LOGGING_LEVEL = "normal"
 
 
-def _is_str_any_dict(value: Any) -> TypeGuard[dict[str, Any]]:
+def _is_str_any_dict(value: object) -> TypeGuard[dict[str, object]]:
     return isinstance(value, dict)
 
 
@@ -30,7 +29,7 @@ def _is_str_any_dict(value: Any) -> TypeGuard[dict[str, Any]]:
 class ConfigSource:
     """Represents where a config value came from."""
 
-    value: Any
+    value: object
     source: str  # 'cli' | 'env' | 'user_config' | 'system_config' | 'default'
 
 
@@ -55,7 +54,7 @@ class ConfigKeySchema:
     key_path: str
     type: str
     description: str = ""
-    default: Any | None = None
+    default: object | None = None
     enum_values: list[str] | None = None
     allow_numeric_strings: bool = False
     allow_bool_strings: bool = False
@@ -69,7 +68,7 @@ class ConfigSchema:
         self._keys = dict(keys)
 
     @classmethod
-    def from_defaults(cls, defaults: dict[str, Any]) -> ConfigSchema:
+    def from_defaults(cls, defaults: dict[str, object]) -> ConfigSchema:
         keys: dict[str, ConfigKeySchema] = {}
         for key_path, value in _flatten_items(defaults):
             keys[key_path] = ConfigKeySchema(
@@ -86,7 +85,7 @@ class ConfigSchema:
         return self._keys.get(key_path)
 
 
-def _infer_schema_type(value: Any) -> str:
+def _infer_schema_type(value: object) -> str:
     if isinstance(value, bool):
         return CONFIG_TYPE_BOOL
     if isinstance(value, int):
@@ -102,13 +101,13 @@ def _infer_schema_type(value: Any) -> str:
     return CONFIG_TYPE_ANY
 
 
-def _flatten_items(data: dict[str, Any], prefix: str = "") -> list[tuple[str, Any]]:
+def _flatten_items(data: dict[str, object], prefix: str = "") -> list[tuple[str, object]]:
     """Flatten nested dicts to dot-notation key paths.
 
     For lists and scalars, the current prefix becomes the leaf key.
     For dicts, recursion continues.
     """
-    items: list[tuple[str, Any]] = []
+    items: list[tuple[str, object]] = []
 
     for key, value in data.items():
         key_path = f"{prefix}.{key}" if prefix else str(key)
@@ -121,7 +120,7 @@ def _flatten_items(data: dict[str, Any], prefix: str = "") -> list[tuple[str, An
     return items
 
 
-def _flatten_keys(data: dict[str, Any], prefix: str = "") -> set[str]:
+def _flatten_keys(data: dict[str, object], prefix: str = "") -> set[str]:
     return {k for k, _v in _flatten_items(data, prefix=prefix)}
 
 
@@ -156,10 +155,10 @@ class ConfigResolver:
 
     def __init__(
         self,
-        cli_args: dict[str, Any] | None = None,
+        cli_args: dict[str, object] | None = None,
         user_config_path: Path | None = None,
         system_config_path: Path | None = None,
-        defaults: dict[str, Any] | None = None,
+        defaults: dict[str, object] | None = None,
         schema: ConfigSchema | None = None,
     ) -> None:
         """Initialize config resolver.
@@ -178,10 +177,10 @@ class ConfigResolver:
         self.schema = schema or ConfigSchema.from_defaults(self.defaults)
 
         # Cache loaded configs
-        self._user_config: dict[str, Any] | None = None
-        self._system_config: dict[str, Any] | None = None
+        self._user_config: dict[str, object] | None = None
+        self._system_config: dict[str, object] | None = None
 
-    def resolve(self, key: str) -> tuple[Any, str]:
+    def resolve(self, key: str) -> tuple[object, str]:
         """Resolve config value with priority.
 
         Args:
@@ -318,7 +317,7 @@ class ConfigResolver:
         norm = self._normalize_logging_level(key, value)
         return norm, ConfigSource(value=norm, source=source)
 
-    def _try_resolve_value(self, key: str) -> tuple[Any, str] | None:
+    def _try_resolve_value(self, key: str) -> tuple[object, str] | None:
         try:
             return self.resolve(key)
         except ConfigError as e:
@@ -326,7 +325,7 @@ class ConfigResolver:
                 return None
             raise
 
-    def _normalize_logging_level(self, key: str, value: Any) -> str:
+    def _normalize_logging_level(self, key: str, value: object) -> str:
         if not isinstance(value, str):
             raise ConfigError(f"Config key '{key}' must be a string, got {type(value).__name__}")
 
@@ -359,7 +358,7 @@ class ConfigResolver:
             unknown=True,
         )
 
-    def validate_value(self, key_path: str, value: Any) -> None:
+    def validate_value(self, key_path: str, value: object) -> None:
         """Validate a value against schema (no coercion).
 
         Unknown keys are not validated.
@@ -451,11 +450,11 @@ class ConfigResolver:
 
         return result
 
-    def _from_cli(self, key: str) -> Any | None:
+    def _from_cli(self, key: str) -> object | None:
         """Get value from CLI args."""
         return self._get_nested(self.cli_args, key)
 
-    def _from_env(self, key: str) -> Any | None:
+    def _from_env(self, key: str) -> object | None:
         """Get value from environment variables.
 
         Environment variable format: AUDIOMASON_KEY_NAME
@@ -465,45 +464,45 @@ class ConfigResolver:
         env_key = f"AUDIOMASON_{key.upper().replace('.', '_')}"
         return os.environ.get(env_key)
 
-    def _from_user_config(self, key: str) -> Any | None:
+    def _from_user_config(self, key: str) -> object | None:
         """Get value from user config file."""
         config = self._get_user_config()
         return self._get_nested(config, key)
 
-    def _from_system_config(self, key: str) -> Any | None:
+    def _from_system_config(self, key: str) -> object | None:
         """Get value from system config file."""
         config = self._get_system_config()
         return self._get_nested(config, key)
 
-    def _from_defaults(self, key: str) -> Any | None:
+    def _from_defaults(self, key: str) -> object | None:
         """Get value from defaults."""
         return self._get_nested(self.defaults, key)
 
-    def _get_user_config(self) -> dict[str, Any]:
+    def _get_user_config(self) -> dict[str, object]:
         """Load user config file (cached)."""
         if self._user_config is None:
             self._user_config = self._load_yaml(self.user_config_path)
         return self._user_config
 
-    def _get_system_config(self) -> dict[str, Any]:
+    def _get_system_config(self) -> dict[str, object]:
         """Load system config file (cached)."""
         if self._system_config is None:
             self._system_config = self._load_yaml(self.system_config_path)
         return self._system_config
 
-    def _load_yaml(self, path: Path) -> dict[str, Any]:
+    def _load_yaml(self, path: Path) -> dict[str, object]:
         """Load YAML file."""
         if not path.exists():
             return {}
 
         try:
             with open(path) as f:
-                data = yaml.safe_load(f)
+                data = yaml_safe_load_stream(f)
                 return data if _is_str_any_dict(data) else {}
         except Exception as e:
             raise ConfigError(f"Failed to load config from {path}: {e}") from e
 
-    def _get_nested(self, data: dict[str, Any], key: str) -> Any | None:
+    def _get_nested(self, data: dict[str, object], key: str) -> object | None:
         """Get nested value using dot notation.
 
         Example:
@@ -511,7 +510,7 @@ class ConfigResolver:
             _get_nested(data, 'logging.level') -> 'debug'
         """
         parts = key.split(".")
-        current: Any = data
+        current: object = data
 
         for part in parts:
             if not _is_str_any_dict(current):
@@ -523,7 +522,7 @@ class ConfigResolver:
         return current
 
     @staticmethod
-    def _default_config() -> dict[str, Any]:
+    def _default_config() -> dict[str, object]:
         """Default configuration."""
         return {
             # Paths

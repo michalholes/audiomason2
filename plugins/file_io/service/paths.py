@@ -9,7 +9,6 @@ import time
 import traceback
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any
 
 from audiomason.core.diagnostics import build_envelope
 from audiomason.core.errors import FileError
@@ -28,7 +27,7 @@ def _short_traceback(*, max_lines: int = 20) -> str:
     return "\n".join(tb_lines[-max_lines:])
 
 
-def _safe_publish(event: str, payload: dict[str, Any]) -> None:
+def _safe_publish(event: str, payload: dict[str, object]) -> None:
     try:
         get_event_bus().publish(event, payload)
     except Exception:

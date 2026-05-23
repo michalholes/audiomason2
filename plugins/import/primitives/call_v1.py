@@ -8,11 +8,11 @@ from __future__ import annotations
 import asyncio
 import inspect
 import threading
+from collections.abc import Awaitable
 from dataclasses import dataclass
-from functools import lru_cache
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Protocol, TypeGuard, cast
 
 from audiomason.core.config_service import ConfigService
 from audiomason.core.errors import PluginNotFoundError
@@ -27,7 +27,7 @@ from ..detached_runtime import rehydrate_detached_runtime_from_bootstrap
 from ..file_io_facade import file_service_from_resolver
 
 
-def _object_schema(*, required: list[str] | None = None) -> dict[str, Any]:
+def _object_schema(*, required: list[str] | None = None) -> dict[str, object]:
     return {
         "type": "object",
         "properties": {},
@@ -36,7 +36,7 @@ def _object_schema(*, required: list[str] | None = None) -> dict[str, Any]:
     }
 
 
-REGISTRY_ENTRIES: list[dict[str, Any]] = [
+REGISTRY_ENTRIES: list[dict[str, object]] = [
     {
         "primitive_id": "call.invoke",
         "version": 1,
@@ -53,7 +53,23 @@ REGISTRY_ENTRIES: list[dict[str, Any]] = [
 
 
 class _JobExecutorPlugin(Protocol):
-    async def execute_job(self, job: dict[str, Any]) -> Any: ...
+    async def execute_job(self, job: dict[str, object]) -> object: ...
+
+
+class _RuntimeArgFactory(Protocol):
+    def __call__(self, *, state: dict[str, object] | None = None) -> object: ...
+
+
+class _KeywordCallable(Protocol):
+    def __call__(self, **kwargs: object) -> object: ...
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
 
 
 @dataclass(frozen=True)
@@ -64,13 +80,13 @@ class _ResolvedCallableBinding:
     callable_obj: object
 
 
-def _runtime_arg_file_service(*, state: dict[str, Any] | None = None) -> Any:
+def _runtime_arg_file_service(*, state: dict[str, object] | None = None) -> object:
     vars_any = (state or {}).get("vars")
-    vars_map = dict(vars_any) if isinstance(vars_any, dict) else {}
+    vars_map = _as_str_object_dict(vars_any)
     runtime_any = vars_map.get("runtime")
-    runtime = dict(runtime_any) if isinstance(runtime_any, dict) else {}
+    runtime = _as_str_object_dict(runtime_any)
     bootstrap_any = runtime.get("detached_runtime")
-    bootstrap = dict(bootstrap_any) if isinstance(bootstrap_any, dict) else {}
+    bootstrap = _as_str_object_dict(bootstrap_any)
     if bootstrap:
         detached = rehydrate_detached_runtime_from_bootstrap(bootstrap=bootstrap)
         if detached is not None:
@@ -78,26 +94,32 @@ def _runtime_arg_file_service(*, state: dict[str, Any] | None = None) -> Any:
     return file_service_from_resolver(ConfigService())
 
 
-_RUNTIME_ARG_FACTORIES: dict[str, Any] = {
+_RUNTIME_ARG_FACTORIES: dict[str, _RuntimeArgFactory] = {
     "file_service": _runtime_arg_file_service,
 }
 
 
 def _builtin_plugins_dir() -> Path:
     plugins_pkg = import_module("plugins")
-    pkg_file = getattr(plugins_pkg, "__file__", None)
+    pkg_file = plugins_pkg.__file__
     if not isinstance(pkg_file, str) or not pkg_file:
         raise RuntimeError("plugins package path unavailable")
     return Path(pkg_file).resolve().parent
 
 
-@lru_cache(maxsize=1)
+_AUTHORITY_CACHE: tuple[PluginRegistry, PluginLoader] | None = None
+
+
 def _callable_authority() -> tuple[PluginRegistry, PluginLoader]:
+    global _AUTHORITY_CACHE
+    if _AUTHORITY_CACHE is not None:
+        return _AUTHORITY_CACHE
     registry = PluginRegistry(ConfigService())
     loader = PluginLoader(
         builtin_plugins_dir=_builtin_plugins_dir(),
         registry=registry,
     )
+    _AUTHORITY_CACHE = (registry, loader)
     return registry, loader
 
 
@@ -136,8 +158,8 @@ def _resolve_published_callable_binding(
     )
 
 
-def _run_coro_blocking(coro: Any) -> Any:
-    result_box: dict[str, Any] = {}
+def _run_coro_blocking(coro: Awaitable[object]) -> object:
+    result_box: dict[str, object] = {}
     error_box: dict[str, BaseException] = {}
 
     def _runner() -> None:
@@ -165,29 +187,26 @@ def _run_coro_blocking(coro: Any) -> Any:
     return result_box.get("result")
 
 
-def _execute_inline(*, binding: _ResolvedCallableBinding, args: dict[str, Any]) -> Any:
-    callable_obj = cast(Any, binding.callable_obj)
+def _execute_inline(*, binding: _ResolvedCallableBinding, args: dict[str, object]) -> object:
+    callable_obj = cast(_KeywordCallable, binding.callable_obj)
     return callable_obj(**dict(args))
 
 
-def _execute_job(*, binding: _ResolvedCallableBinding, args: dict[str, Any]) -> Any:
-    build_job = cast(Any, binding.callable_obj)
+def _execute_job(*, binding: _ResolvedCallableBinding, args: dict[str, object]) -> object:
+    build_job = cast(_KeywordCallable, binding.callable_obj)
     job = build_job(**dict(args))
     if not isinstance(job, dict):
         raise RuntimeError("wizard_callable_job_builder_must_return_object")
     plugin = cast(_JobExecutorPlugin, binding.plugin_obj)
-    execute_job = getattr(plugin, "execute_job", None)
-    if not callable(execute_job):
-        raise RuntimeError("wizard_callable_job_plugin_missing_execute_job")
-    return _run_coro_blocking(execute_job(dict(job)))
+    return _run_coro_blocking(plugin.execute_job(dict(job)))
 
 
 def _bind_runtime_args(
     *,
     callable_obj: object,
-    args: dict[str, Any],
-    state: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+    args: dict[str, object],
+    state: dict[str, object] | None = None,
+) -> dict[str, object]:
     bound = dict(args)
     if not callable(callable_obj):
         return bound
@@ -208,9 +227,9 @@ def _bind_runtime_args(
 def execute(
     primitive_id: str,
     primitive_version: int,
-    inputs: dict[str, Any],
-    state: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+    inputs: dict[str, object],
+    state: dict[str, object] | None = None,
+) -> dict[str, object]:
     if primitive_version != 1:
         raise ValueError("unsupported primitive version")
     if primitive_id != "call.invoke":
@@ -219,7 +238,7 @@ def execute(
     execution_mode = str(inputs.get("execution_mode") or "").strip().lower()
     error_mode = str(inputs.get("error_mode") or "raise").strip().lower()
     args_any = inputs.get("args")
-    args = dict(args_any) if isinstance(args_any, dict) else {}
+    args = _as_str_object_dict(args_any)
     if not operation_id:
         raise ValueError("operation_id is required")
     if execution_mode not in {"inline", "job"}:

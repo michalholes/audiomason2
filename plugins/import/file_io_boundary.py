@@ -11,19 +11,36 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Protocol, TypeGuard, cast
 
 from plugins.file_io.import_runtime import normalize_relative_path
 from plugins.file_io.service import FileService, RootName
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+class _ResolveLocalPathCallable(Protocol):
+    def __call__(
+        self,
+        root_name: RootName,
+        rel: str,
+        *,
+        silent_polling_read: bool = False,
+    ) -> Path: ...
 
 
 def _normalize_root_name(root: str | RootName) -> RootName:
     return root if isinstance(root, RootName) else RootName(str(root))
 
 
-def _source_ref_from_state(state: dict[str, Any]) -> tuple[RootName | None, str]:
-    source_any = state.get("source")
-    source = dict(source_any) if isinstance(source_any, dict) else {}
+def _source_ref_from_state(state: dict[str, object]) -> tuple[RootName | None, str]:
+    source = _as_str_object_dict(state.get("source"))
     root_text = str(source.get("root") or "").strip()
     rel = normalize_relative_path(str(source.get("relative_path") or ""))
     if not root_text:
@@ -46,13 +63,13 @@ def _join_source_relative_path(*, source_prefix: str, source_relative_path: str)
 
 def _materialize_root_dir(fs: FileService, root: str | RootName) -> Path:
     root_name = _normalize_root_name(root)
-    root_dir = getattr(fs, "root_dir", None)
+    root_dir = cast(object, getattr(fs, "root_dir", None))
     if callable(root_dir):
         return cast(Callable[[RootName], Path], root_dir)(root_name)
-    root_cfg = getattr(fs, "_root", None)
+    root_cfg = cast(object, getattr(fs, "_root", None))
     if callable(root_cfg):
-        cfg = root_cfg(root_name)
-        path = getattr(cfg, "dir_path", None)
+        cfg = cast(Callable[[RootName], object], root_cfg)(root_name)
+        path = cast(object, getattr(cfg, "dir_path", None))
         if isinstance(path, Path):
             return path
     raise RuntimeError("file_io root materialization unavailable")
@@ -67,11 +84,15 @@ def _materialize_local_path(
 ) -> Path:
     root_name = _normalize_root_name(root)
     rel = normalize_relative_path(rel_path)
-    resolver = getattr(fs, "_resolve_local_path", None)
+    resolver = cast(object, getattr(fs, "_resolve_local_path", None))
     if callable(resolver):
-        resolved = resolver(root_name, rel, silent_polling_read=silent_polling_read)
-        return cast(Path, resolved)
-    resolve_abs = getattr(fs, "resolve_abs_path", None)
+        resolved = cast(_ResolveLocalPathCallable, resolver)(
+            root_name,
+            rel,
+            silent_polling_read=silent_polling_read,
+        )
+        return resolved
+    resolve_abs = cast(object, getattr(fs, "resolve_abs_path", None))
     if callable(resolve_abs):
         return cast(Callable[[RootName, str], Path], resolve_abs)(root_name, rel)
     base = _materialize_root_dir(fs, root_name)
@@ -80,11 +101,11 @@ def _materialize_local_path(
     return base / Path(*[part for part in rel.split("/") if part])
 
 
-def _read_json_ref(fs: FileService, root: str | RootName, rel_path: str) -> dict[str, Any]:
+def _read_json_ref(fs: FileService, root: str | RootName, rel_path: str) -> dict[str, object]:
     with fs.open_read(_normalize_root_name(root), normalize_relative_path(rel_path)) as handle:
         data = handle.read()
-    parsed = json.loads(data.decode("utf-8"))
-    if not isinstance(parsed, dict):
+    parsed = cast(object, json.loads(data.decode("utf-8")))
+    if not _is_str_object_dict(parsed):
         raise ValueError("JSON artifact must be an object")
     return parsed
 

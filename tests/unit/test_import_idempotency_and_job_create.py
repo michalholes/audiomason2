@@ -6,7 +6,6 @@ import json
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import Any
 
 from audiomason.core.config import ConfigResolver
 
@@ -18,7 +17,7 @@ class _Job:
     job_id: str
 
 
-def _make_engine(tmp_path: Path) -> tuple[Any, dict[str, Path]]:
+def _make_engine(tmp_path: Path) -> tuple[object, dict[str, Path]]:
     roots = {
         "inbox": tmp_path / "inbox",
         "stage": tmp_path / "stage",

@@ -8,7 +8,7 @@ import sys
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import pytest
 
@@ -50,7 +50,7 @@ class _Bus:
         self.events.append((event, payload))
 
 
-def _make_engine(tmp_path: Path) -> tuple[Any, dict[str, Path]]:
+def _make_engine(tmp_path: Path) -> tuple[object, dict[str, Path]]:
     if not _HAS_SRC_TREE:
         raise RuntimeError("src tree unavailable")
     config_resolver_cls = import_module("audiomason.core.config").ConfigResolver

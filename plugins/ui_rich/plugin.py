@@ -9,11 +9,68 @@ Features:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Protocol, runtime_checkable
 
 from audiomason.core.logging import get_logger
 
 log = get_logger(__name__)
+
+
+def _to_bool_or_default(value: object, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
+@runtime_checkable
+class _SupportsTitle(Protocol):
+    title: object
+
+
+@runtime_checkable
+class _SupportsProgress(Protocol):
+    progress: object
+
+
+@runtime_checkable
+class _SupportsState(Protocol):
+    state: object
+
+
+@runtime_checkable
+class _SupportsValue(Protocol):
+    value: object
+
+
+def _context_title(ctx: object) -> str:
+    if isinstance(ctx, _SupportsTitle) and isinstance(ctx.title, str) and ctx.title.strip():
+        return ctx.title
+    return "Unknown"
+
+
+def _context_status(ctx: object) -> str:
+    if (
+        isinstance(ctx, _SupportsState)
+        and isinstance(ctx.state, _SupportsValue)
+        and isinstance(ctx.state.value, str)
+        and ctx.state.value.strip()
+    ):
+        return ctx.state.value
+    return "unknown"
+
+
+def _context_progress(ctx: object) -> str:
+    if isinstance(ctx, _SupportsProgress):
+        value = ctx.progress
+        if isinstance(value, int | float):
+            return f"{float(value) * 100:.0f}%"
+    return "0%"
 
 
 class RichUIPlugin:
@@ -23,14 +80,14 @@ class RichUIPlugin:
     For full Rich support, install: pip install rich
     """
 
-    def __init__(self, config: dict | None = None) -> None:
+    def __init__(self, config: dict[str, object] | None = None) -> None:
         """Initialize plugin.
 
         Args:
             config: Plugin configuration
         """
-        self.config = config or {}
-        self.color = self.config.get("color", True)
+        self.config = dict(config) if config is not None else {}
+        self.color = _to_bool_or_default(self.config.get("color"), True)
 
         # Try to import Rich
         try:
@@ -102,7 +159,7 @@ class RichUIPlugin:
         """
         log.info(text)
 
-    def create_progress(self) -> Any:
+    def create_progress(self) -> object:
         """Create progress bar.
 
         Returns:
@@ -143,7 +200,7 @@ class RichUIPlugin:
             for row in rows:
                 print(" | ".join(row))
 
-    def print_status(self, contexts: list[Any]) -> None:
+    def print_status(self, contexts: list[object]) -> None:
         """Print status for multiple books.
 
         Args:
@@ -158,9 +215,9 @@ class RichUIPlugin:
             table.add_column("Progress", style="green")
 
             for ctx in contexts:
-                status = ctx.state.value if hasattr(ctx, "state") else "unknown"
-                progress = f"{ctx.progress * 100:.0f}%" if hasattr(ctx, "progress") else "0%"
-                title = getattr(ctx, "title", "Unknown")
+                title = _context_title(ctx)
+                status = _context_status(ctx)
+                progress = _context_progress(ctx)
 
                 table.add_row(title, status, progress)
 
@@ -169,9 +226,9 @@ class RichUIPlugin:
             # Fallback
             log.info("Processing Status:")
             for i, ctx in enumerate(contexts, 1):
-                title = getattr(ctx, "title", "Unknown")
-                status = ctx.state.value if hasattr(ctx, "state") else "unknown"
-                progress = f"{ctx.progress * 100:.0f}%" if hasattr(ctx, "progress") else "0%"
+                title = _context_title(ctx)
+                status = _context_status(ctx)
+                progress = _context_progress(ctx)
                 log.info(f"{i}. {title} {status} {progress}")
 
 

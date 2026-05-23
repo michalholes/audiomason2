@@ -6,7 +6,6 @@ ASCII-only.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 
 def _ascii_message(message: str) -> str:
@@ -25,8 +24,8 @@ def ascii_message(message: str) -> str:
 def _detail(
     path: str,
     reason: str,
-    meta: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+    meta: dict[str, object] | None = None,
+) -> dict[str, object]:
     if meta is None:
         meta = {}
     return {"path": path, "reason": reason, "meta": dict(meta)}
@@ -36,9 +35,9 @@ def _detail(
 class ErrorEnvelope:
     code: str
     message: str
-    details: list[dict[str, Any]]
+    details: list[dict[str, object]]
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "error": {
                 "code": self.code,
@@ -52,15 +51,15 @@ def error_envelope(
     code: str,
     message: str,
     *,
-    details: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
+    details: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
     """Return a canonical ErrorEnvelope dict.
 
     Spec shape (10.4.1):
       {"error": {"code": ..., "message": ..., "details": [{"path","reason","meta"}, ...]}}
     """
 
-    safe_details: list[dict[str, Any]] = []
+    safe_details: list[dict[str, object]] = []
     for d in details or []:
         if not isinstance(d, dict):
             continue
@@ -85,8 +84,8 @@ def validation_error(
     message: str,
     path: str,
     reason: str,
-    meta: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+    meta: dict[str, object] | None = None,
+) -> dict[str, object]:
     return error_envelope(
         "VALIDATION_ERROR",
         message,
@@ -99,8 +98,8 @@ def invariant_violation(
     message: str,
     path: str,
     reason: str,
-    meta: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+    meta: dict[str, object] | None = None,
+) -> dict[str, object]:
     return error_envelope(
         "INVARIANT_VIOLATION",
         message,

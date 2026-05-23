@@ -6,9 +6,8 @@ ASCII-only.
 from __future__ import annotations
 
 import shutil
-from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import Protocol, runtime_checkable
 
 from audiomason.core.errors import FileError
 
@@ -23,6 +22,11 @@ _ARCHIVE_SUFFIXES: dict[ArchiveFormat, tuple[str, ...]] = {
     ArchiveFormat.RAR: (".rar",),
     ArchiveFormat.SEVEN_Z: (".7z",),
 }
+
+
+@runtime_checkable
+class _SupportsLocalPathResolver(Protocol):
+    def _resolve_local_path(self, root: RootName, rel_path: str) -> Path: ...
 
 
 def normalize_relative_path(rel_path: str) -> str:
@@ -55,9 +59,8 @@ def target_root_for_mode(mode: str) -> RootName:
 
 
 def _local_path(fs: FileService, root: RootName, rel_path: str) -> Path:
-    resolver = getattr(fs, "_resolve_local_path", None)
-    if callable(resolver):
-        return cast(Callable[[RootName, str], Path], resolver)(root, rel_path)
+    if isinstance(fs, _SupportsLocalPathResolver):
+        return fs._resolve_local_path(root, rel_path)
     return fs.resolve_abs_path(root, rel_path)
 
 

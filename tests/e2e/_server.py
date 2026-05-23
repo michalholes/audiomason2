@@ -4,7 +4,6 @@ import importlib
 import os
 import sys
 from pathlib import Path
-from typing import Any
 
 import uvicorn
 
@@ -22,7 +21,7 @@ def _bootstrap_paths() -> Path:
     return repo_root
 
 
-def _load_web_app(*, repo_root: Path, verbosity: int) -> Any:
+def _load_web_app(*, repo_root: Path, verbosity: int) -> object:
     plugins_dir = repo_root / "plugins"
     loader = PluginLoader(builtin_plugins_dir=plugins_dir)
 

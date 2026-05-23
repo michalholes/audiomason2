@@ -30,22 +30,30 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from typing import Any
+from typing import TypeGuard
 
 from .flow_graph_state_view import FlowGraphStateView
 
 
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
 def eval_condition(
-    cond: Any,
+    cond: object,
     state_view: FlowGraphStateView,
     *,
-    warn: Callable[[str, dict[str, Any]], None] | None = None,
+    warn: Callable[[str, dict[str, object]], None] | None = None,
 ) -> bool:
     if cond is None:
         return True
     if isinstance(cond, bool):
         return cond
-    if isinstance(cond, dict):
+    if _is_str_object_dict(cond):
         op_any = cond.get("op")
         if op_any is None:
             # Compatibility forms
@@ -66,12 +74,12 @@ def eval_condition(
             return _op_truthy(cond, state_view, warn=warn)
         if op == "and":
             conds_any = cond.get("conds")
-            if not isinstance(conds_any, list):
+            if not _is_object_list(conds_any):
                 return False
             return all(eval_condition(c, state_view, warn=warn) for c in conds_any)
         if op == "or":
             conds_any = cond.get("conds")
-            if not isinstance(conds_any, list):
+            if not _is_object_list(conds_any):
                 return False
             return any(eval_condition(c, state_view, warn=warn) for c in conds_any)
         if op == "not":
@@ -81,10 +89,10 @@ def eval_condition(
 
 
 def _op_eq(
-    cond: dict[str, Any],
+    cond: dict[str, object],
     state_view: FlowGraphStateView,
     *,
-    warn: Callable[[str, dict[str, Any]], None] | None = None,
+    warn: Callable[[str, dict[str, object]], None] | None = None,
 ) -> bool:
     path = cond.get("path")
     if not isinstance(path, str) or not path:
@@ -95,10 +103,10 @@ def _op_eq(
 
 
 def _op_ne(
-    cond: dict[str, Any],
+    cond: dict[str, object],
     state_view: FlowGraphStateView,
     *,
-    warn: Callable[[str, dict[str, Any]], None] | None = None,
+    warn: Callable[[str, dict[str, object]], None] | None = None,
 ) -> bool:
     path = cond.get("path")
     if not isinstance(path, str) or not path:
@@ -109,10 +117,10 @@ def _op_ne(
 
 
 def _op_exists(
-    cond: dict[str, Any],
+    cond: dict[str, object],
     state_view: FlowGraphStateView,
     *,
-    warn: Callable[[str, dict[str, Any]], None] | None = None,
+    warn: Callable[[str, dict[str, object]], None] | None = None,
 ) -> bool:
     path = cond.get("path")
     if not isinstance(path, str) or not path:
@@ -122,10 +130,10 @@ def _op_exists(
 
 
 def _op_truthy(
-    cond: dict[str, Any],
+    cond: dict[str, object],
     state_view: FlowGraphStateView,
     *,
-    warn: Callable[[str, dict[str, Any]], None] | None = None,
+    warn: Callable[[str, dict[str, object]], None] | None = None,
 ) -> bool:
     path = cond.get("path")
     if not isinstance(path, str) or not path:
@@ -136,19 +144,19 @@ def _op_truthy(
 _PART_RE = re.compile(r"^(?P<key>[^\[]+)(\[(?P<idx>\d+)\])?$")
 
 
-def find_invalid_condition_path(cond: Any) -> str | None:
+def find_invalid_condition_path(cond: object) -> str | None:
     """Return the first invalid path found in a condition tree, or None."""
 
-    def _walk(c: Any) -> str | None:
+    def _walk(c: object) -> str | None:
         if c is None or isinstance(c, bool):
             return None
-        if not isinstance(c, dict):
+        if not _is_str_object_dict(c):
             return None
 
         op = c.get("op")
         if op in {"and", "or"}:
             conds_any = c.get("conds")
-            if not isinstance(conds_any, list):
+            if not _is_object_list(conds_any):
                 return None
             for x in conds_any:
                 bad = _walk(x)
@@ -177,12 +185,12 @@ def _normalize_runtime_path(path: str) -> str | None:
 
 
 def _get_path(
-    obj: Any,
+    obj: object,
     path: str,
     *,
-    default: Any = None,
-    warn: Callable[[str, dict[str, Any]], None] | None = None,
-) -> Any:
+    default: object = None,
+    warn: Callable[[str, dict[str, object]], None] | None = None,
+) -> object:
     runtime_path = _normalize_runtime_path(path)
     if runtime_path is None:
         if warn is not None:

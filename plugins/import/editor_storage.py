@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
+from typing import Protocol, TypeGuard, cast, runtime_checkable
 
 from plugins.file_io.service import FileService, RootName
 
@@ -33,7 +33,21 @@ HISTORY_DIR = "import/editor_history"
 HISTORY_LIMIT = 5
 
 
-def _derived_editor_catalog(fs: FileService) -> dict[str, Any]:
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+@runtime_checkable
+class _Flushable(Protocol):
+    def flush(self) -> None: ...
+
+
+@runtime_checkable
+class _HasFileno(Protocol):
+    def fileno(self) -> int: ...
+
+
+def _derived_editor_catalog(fs: FileService) -> dict[str, object]:
     wizard_definition = ensure_wizard_definition_active_exists(fs)
     flow_config = ensure_flow_config_active_exists(fs)
     projection = build_step_catalog_projection(
@@ -52,7 +66,7 @@ def _derived_editor_catalog(fs: FileService) -> dict[str, Any]:
     return {"version": 1, "steps": steps}
 
 
-def _derived_editor_flow(fs: FileService) -> dict[str, Any]:
+def _derived_editor_flow(fs: FileService) -> dict[str, object]:
     wizard_definition = ensure_wizard_definition_active_exists(fs)
     flow_config = ensure_flow_config_active_exists(fs)
     step_order = build_effective_workflow_snapshot(
@@ -73,27 +87,27 @@ def _derived_editor_flow(fs: FileService) -> dict[str, Any]:
     }
 
 
-def load_catalog(fs: FileService) -> Any:
+def load_catalog(fs: FileService) -> object:
     return _derived_editor_catalog(fs)
 
 
-def load_flow(fs: FileService) -> Any:
+def load_flow(fs: FileService) -> object:
     return _derived_editor_flow(fs)
 
 
-def save_catalog(fs: FileService, obj: Any) -> None:
+def save_catalog(fs: FileService, obj: object) -> None:
     raise ValueError("catalog is immutable; editor may only modify flow_config")
 
 
-def save_flow(fs: FileService, obj: Any) -> None:
+def save_flow(fs: FileService, obj: object) -> None:
     raise ValueError("flow is immutable; editor may only modify flow_config")
 
 
-def load_flow_config(fs: FileService) -> Any:
+def load_flow_config(fs: FileService) -> object:
     return _load_json(fs, RootName.WIZARDS, FLOW_CONFIG_REL_PATH)
 
 
-def save_flow_config(fs: FileService, obj: Any) -> None:
+def save_flow_config(fs: FileService, obj: object) -> None:
     """Save ACTIVE flow_config with history.
 
     This legacy helper persists directly to the ACTIVE file. It is still
@@ -134,15 +148,15 @@ def rollback(fs: FileService, *, kind: str, fingerprint: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _strip_legacy_ui(obj: Any) -> Any:
-    if isinstance(obj, dict) and "ui" in obj:
+def _strip_legacy_ui(obj: object) -> object:
+    if _is_str_object_dict(obj) and "ui" in obj:
         out = dict(obj)
         out.pop("ui", None)
         return out
     return obj
 
 
-def ensure_flow_config_active_exists(fs: FileService) -> dict[str, Any]:
+def ensure_flow_config_active_exists(fs: FileService) -> dict[str, object]:
     if not fs.exists(RootName.WIZARDS, FLOW_CONFIG_REL_PATH):
         boot = _strip_legacy_ui(DEFAULT_FLOW_CONFIG)
         canon = normalize_flow_config(boot)
@@ -150,7 +164,7 @@ def ensure_flow_config_active_exists(fs: FileService) -> dict[str, Any]:
         return canon
 
     raw = _load_json(fs, RootName.WIZARDS, FLOW_CONFIG_REL_PATH)
-    had_ui = isinstance(raw, dict) and "ui" in raw
+    had_ui = _is_str_object_dict(raw) and "ui" in raw
     cfg = normalize_flow_config(_strip_legacy_ui(raw))
 
     if had_ui:
@@ -159,7 +173,7 @@ def ensure_flow_config_active_exists(fs: FileService) -> dict[str, Any]:
     return cfg
 
 
-def get_flow_config_draft(fs: FileService) -> dict[str, Any]:
+def get_flow_config_draft(fs: FileService) -> dict[str, object]:
     active = ensure_flow_config_active_exists(fs)
     if fs.exists(RootName.WIZARDS, FLOW_CONFIG_DRAFT_REL_PATH):
         draft_any = _load_json(fs, RootName.WIZARDS, FLOW_CONFIG_DRAFT_REL_PATH)
@@ -168,19 +182,19 @@ def get_flow_config_draft(fs: FileService) -> dict[str, Any]:
     return active
 
 
-def put_flow_config_draft(fs: FileService, obj: Any) -> dict[str, Any]:
+def put_flow_config_draft(fs: FileService, obj: object) -> dict[str, object]:
     canon = normalize_flow_config(obj)
     _atomic_write_json(fs, RootName.WIZARDS, FLOW_CONFIG_DRAFT_REL_PATH, canon)
     return canon
 
 
-def reset_flow_config_draft(fs: FileService) -> dict[str, Any]:
+def reset_flow_config_draft(fs: FileService) -> dict[str, object]:
     canon = normalize_flow_config(_strip_legacy_ui(DEFAULT_FLOW_CONFIG))
     _atomic_write_json(fs, RootName.WIZARDS, FLOW_CONFIG_DRAFT_REL_PATH, canon)
     return canon
 
 
-def activate_flow_config_draft(fs: FileService) -> dict[str, Any]:
+def activate_flow_config_draft(fs: FileService) -> dict[str, object]:
     active = ensure_flow_config_active_exists(fs)
 
     if not fs.exists(RootName.WIZARDS, FLOW_CONFIG_DRAFT_REL_PATH):
@@ -206,13 +220,13 @@ def delete_flow_config_draft(fs: FileService) -> None:
         fs.delete_file(RootName.WIZARDS, FLOW_CONFIG_DRAFT_REL_PATH)
 
 
-def _load_json(fs: FileService, root: RootName, rel_path: str) -> Any:
+def _load_json(fs: FileService, root: RootName, rel_path: str) -> object:
     with fs.open_read(root, rel_path) as f:
         data = f.read()
-    return json.loads(data.decode("utf-8"))
+    return cast(object, json.loads(data.decode("utf-8")))
 
 
-def _atomic_write_json(fs: FileService, root: RootName, rel_path: str, obj: Any) -> None:
+def _atomic_write_json(fs: FileService, root: RootName, rel_path: str, obj: object) -> None:
     data = (
         json.dumps(
             obj,
@@ -225,7 +239,7 @@ def _atomic_write_json(fs: FileService, root: RootName, rel_path: str, obj: Any)
     _atomic_write_bytes(fs, root, rel_path, data)
 
 
-def _save_with_history(fs: FileService, *, kind: str, rel_path: str, obj: Any) -> None:
+def _save_with_history(fs: FileService, *, kind: str, rel_path: str, obj: object) -> None:
     # Snapshot current file into history (if it exists and differs).
     if fs.exists(RootName.WIZARDS, rel_path):
         current = _load_json(fs, RootName.WIZARDS, rel_path)
@@ -252,7 +266,7 @@ def _load_history_index(fs: FileService, *, kind: str) -> list[str]:
     return list(data)
 
 
-def _store_history_entry(fs: FileService, *, kind: str, fingerprint: str, obj: Any) -> None:
+def _store_history_entry(fs: FileService, *, kind: str, fingerprint: str, obj: object) -> None:
     rel = f"{HISTORY_DIR}/{kind}/{fingerprint}.json"
     if not fs.exists(RootName.WIZARDS, rel):
         _atomic_write_json(fs, RootName.WIZARDS, rel, obj)
@@ -272,15 +286,11 @@ def _atomic_write_bytes(fs: FileService, root: RootName, rel_path: str, data: by
     fs.rename(root, tmp_path, rel_path, overwrite=True)
 
 
-def _best_effort_fsync(f: Any) -> None:
+def _best_effort_fsync(f: object) -> None:
     try:
-        flush = getattr(f, "flush", None)
-        if callable(flush):
-            flush()
-        fileno = getattr(f, "fileno", None)
-        if callable(fileno):
-            fd = fileno()
-            if isinstance(fd, int):
-                os.fsync(fd)
+        if isinstance(f, _Flushable):
+            f.flush()
+        if isinstance(f, _HasFileno):
+            os.fsync(f.fileno())
     except Exception:
         return

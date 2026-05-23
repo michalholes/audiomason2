@@ -7,7 +7,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, TypeGuard
 
 from plugins.file_io.service.types import RootName
 
@@ -31,8 +31,21 @@ from .flow_runtime import CONDITIONAL_STEP_IDS
 from .phase1_source_intake import build_phase1_projection, phase1_session_authority_applies
 from .storage import read_json
 
+if TYPE_CHECKING:
+    from .engine import ImportWizardEngine
 
-def _selection_ids_from_value(*, ordered_ids: list[str], selection: Any) -> list[str]:
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in value)
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _selection_ids_from_value(*, ordered_ids: list[str], selection: object) -> list[str]:
     if not ordered_ids:
         return []
 
@@ -69,7 +82,7 @@ def _selection_ids_from_value(*, ordered_ids: list[str], selection: Any) -> list
     ]
 
 
-def _load_v3_discovery(*, engine: Any, session_id: str) -> list[dict[str, Any]]:
+def _load_v3_discovery(*, engine: ImportWizardEngine, session_id: str) -> list[dict[str, object]]:
     session_dir = f"import/sessions/{session_id}"
     discovery_any = read_json(engine._fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
     if not isinstance(discovery_any, list) or not all(
@@ -79,11 +92,11 @@ def _load_v3_discovery(*, engine: Any, session_id: str) -> list[dict[str, Any]]:
     return [dict(item) for item in discovery_any]
 
 
-def _ordered_ids_from_state(*, state: dict[str, Any], step_id: str) -> list[str]:
-    phase1_any = dict(state.get("vars") or {}).get("phase1")
-    phase1 = dict(phase1_any) if isinstance(phase1_any, dict) else {}
+def _ordered_ids_from_state(*, state: dict[str, object], step_id: str) -> list[str]:
+    vars_state = _as_str_object_dict(state.get("vars"))
+    phase1 = _as_str_object_dict(vars_state.get("phase1"))
     prompt_any = phase1.get(step_id)
-    prompt = dict(prompt_any) if isinstance(prompt_any, dict) else {}
+    prompt = _as_str_object_dict(prompt_any)
     key = "filtered_ids" if step_id == "select_books" else "ordered_ids"
     ordered_ids_any = prompt.get(key)
     if not isinstance(ordered_ids_any, list):
@@ -93,11 +106,11 @@ def _ordered_ids_from_state(*, state: dict[str, Any], step_id: str) -> list[str]
 
 def _derive_v3_selected_ids(
     *,
-    engine: Any,
+    engine: ImportWizardEngine,
     session_id: str,
     step_id: str,
-    selection: Any,
-    state: dict[str, Any] | None = None,
+    selection: object,
+    state: dict[str, object] | None = None,
 ) -> list[str]:
     ordered_ids = (
         _ordered_ids_from_state(state=state, step_id=step_id) if isinstance(state, dict) else []
@@ -119,11 +132,11 @@ def _derive_v3_selected_ids(
 
 def _validate_v3_selection_payload(
     *,
-    engine: Any,
+    engine: ImportWizardEngine,
     session_id: str,
     step_id: str,
-    payload: dict[str, Any],
-    state: dict[str, Any],
+    payload: dict[str, object],
+    state: dict[str, object],
 ) -> None:
     if step_id not in {"select_authors", "select_books"}:
         return
@@ -152,9 +165,11 @@ def _validate_v3_selection_payload(
     raise StepSubmissionError("selection out of range")
 
 
-def _sync_v3_legacy_state(*, engine: Any, session_id: str, state: dict[str, Any]) -> dict[str, Any]:
-    answers = dict(state.get("answers") or {})
-    inputs = dict(state.get("inputs") or {})
+def _sync_v3_legacy_state(
+    *, engine: ImportWizardEngine, session_id: str, state: dict[str, object]
+) -> dict[str, object]:
+    answers = _as_str_object_dict(state.get("answers"))
+    inputs = _as_str_object_dict(state.get("inputs"))
 
     for mirrored_step_id in (
         "select_authors",
@@ -163,13 +178,13 @@ def _sync_v3_legacy_state(*, engine: Any, session_id: str, state: dict[str, Any]
         "final_summary_confirm",
     ):
         answer_any = answers.get(mirrored_step_id)
-        if isinstance(answer_any, dict):
+        if _is_str_object_dict(answer_any):
             inputs[mirrored_step_id] = dict(answer_any)
 
     state["inputs"] = inputs
 
     authors_any = inputs.get("select_authors")
-    if isinstance(authors_any, dict):
+    if _is_str_object_dict(authors_any):
         state["selected_author_ids"] = _derive_v3_selected_ids(
             engine=engine,
             session_id=session_id,
@@ -179,7 +194,7 @@ def _sync_v3_legacy_state(*, engine: Any, session_id: str, state: dict[str, Any]
         )
 
     books_any = inputs.get("select_books")
-    if isinstance(books_any, dict):
+    if _is_str_object_dict(books_any):
         state["selected_book_ids"] = _derive_v3_selected_ids(
             engine=engine,
             session_id=session_id,
@@ -191,7 +206,7 @@ def _sync_v3_legacy_state(*, engine: Any, session_id: str, state: dict[str, Any]
     return state
 
 
-def _needs_v3_plan_refresh(state: dict[str, Any]) -> bool:
+def _needs_v3_plan_refresh(state: dict[str, object]) -> bool:
     computed_any = state.get("computed")
     if isinstance(computed_any, dict) and "plan_summary" in computed_any:
         return False
@@ -201,21 +216,23 @@ def _needs_v3_plan_refresh(state: dict[str, Any]) -> bool:
         return False
 
     return any(
-        isinstance(entry, dict) and entry.get("step_id") == "plan_preview_batch"
+        _is_str_object_dict(entry) and entry.get("step_id") == "plan_preview_batch"
         for entry in trace_any
     )
 
 
 def submit_step_impl(
     *,
-    engine: Any,
+    engine: ImportWizardEngine,
     session_id: str,
     step_id: str,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
+    payload: dict[str, object],
+) -> dict[str, object]:
     try:
         state = engine._load_state(session_id)
-        if int(state.get("phase") or 1) == 2:
+        phase_any = state.get("phase")
+        phase = phase_any if isinstance(phase_any, int) else 1
+        if phase == 2:
             return invariant_violation(
                 message="session is locked (phase 2)",
                 path="$.phase",
@@ -232,8 +249,10 @@ def submit_step_impl(
                 "session_id": session_id,
                 "step_id": step_id,
                 "model_fingerprint": state.get("model_fingerprint"),
-                "discovery_fingerprint": state.get("derived", {}).get("discovery_fingerprint"),
-                "effective_config_fingerprint": state.get("derived", {}).get(
+                "discovery_fingerprint": _as_str_object_dict(state.get("derived")).get(
+                    "discovery_fingerprint"
+                ),
+                "effective_config_fingerprint": _as_str_object_dict(state.get("derived")).get(
                     "effective_config_fingerprint"
                 ),
             },
@@ -270,11 +289,13 @@ def submit_step_impl(
                 and isinstance(discovery_any, list)
                 and all(isinstance(item, dict) for item in discovery_any)
             ):
-                next_state.setdefault("vars", {})["phase1"] = build_phase1_projection(
+                vars_state = _as_str_object_dict(next_state.get("vars"))
+                vars_state["phase1"] = build_phase1_projection(
                     discovery=discovery_any,
                     state=next_state,
                     fs=engine._fs,
                 )
+                next_state["vars"] = vars_state
             next_state["updated_at"] = _iso_utc_now()
             engine._persist_state(session_id, next_state)
             if _needs_v3_plan_refresh(next_state):
@@ -291,7 +312,7 @@ def submit_step_impl(
         steps_any = effective_model.get("steps")
         if not isinstance(steps_any, list):
             raise StepSubmissionError("effective model missing steps")
-        steps = [s for s in steps_any if isinstance(s, dict)]
+        steps = [s for s in steps_any if _is_str_object_dict(s)]
         flow_cfg_norm = engine._load_effective_flow_config(session_id)
 
         step_ids = {str(s.get("step_id")) for s in steps if isinstance(s.get("step_id"), str)}
@@ -314,7 +335,10 @@ def submit_step_impl(
             raise StepSubmissionError("computed-only step cannot be submitted")
 
         normalized_payload = engine._validate_and_canonicalize_payload(
-            step_id=step_id, schema=schema, payload=payload
+            step_id=step_id,
+            schema=schema,
+            payload=payload,
+            state=state,
         )
 
         if step_id == "conflict_policy":
@@ -328,40 +352,51 @@ def submit_step_impl(
                 payload=normalized_payload,
             )
 
-        answers = dict(state.get("answers") or {})
+        answers = _as_str_object_dict(state.get("answers"))
         answers[step_id] = normalized_payload
         state["answers"] = answers
 
         # Backward compatibility: maintain legacy inputs mirror.
-        inputs = dict(state.get("inputs") or {})
+        inputs = _as_str_object_dict(state.get("inputs"))
         inputs[step_id] = normalized_payload
         state["inputs"] = inputs
 
         if step_id == "select_authors":
             sel = normalized_payload.get("selection")
-            if isinstance(sel, list) and all(isinstance(x, str) for x in sel):
-                state["selected_author_ids"] = list(sel)
+            if isinstance(sel, list):
+                selected_author_ids = [item for item in sel if isinstance(item, str)]
+                if len(selected_author_ids) == len(sel):
+                    state["selected_author_ids"] = selected_author_ids
 
         if step_id == "select_books":
             sel = normalized_payload.get("selection")
-            if isinstance(sel, list) and all(isinstance(x, str) for x in sel):
-                state["selected_book_ids"] = list(sel)
+            if isinstance(sel, list):
+                selected_book_ids = [item for item in sel if isinstance(item, str)]
+                if len(selected_book_ids) == len(sel):
+                    state["selected_book_ids"] = selected_book_ids
 
         if step_id == "effective_author_title":
-            state["effective_author_title"] = dict(normalized_payload)
+            state["effective_author_title"] = _as_str_object_dict(normalized_payload)
 
-        completed = list(state.get("completed_step_ids") or [])
+        completed_any = state.get("completed_step_ids")
+        completed = (
+            [item for item in completed_any if isinstance(item, str)]
+            if isinstance(completed_any, list)
+            else []
+        )
         if step_id not in completed:
             completed.append(step_id)
         state["completed_step_ids"] = completed
 
         next_step = engine._next_step_after_submit(
             step_id=step_id,
+            state=state,
             flow_cfg_norm=flow_cfg_norm,
         )
 
         state["current_step_id"] = engine._auto_advance_computed_steps(
             session_id=session_id,
+            state=state,
             next_step_id=next_step,
             flow_cfg_norm=flow_cfg_norm,
         )

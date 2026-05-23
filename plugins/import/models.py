@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from typing import Any
+from typing import TypeGuard
 
 from .errors import ModelLoadError, ModelValidationError
 
@@ -52,24 +52,32 @@ _ALLOWED_FIELD_TYPES = {
 }
 
 
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
 @dataclass(frozen=True)
 class CatalogModel:
     version: int
-    steps: list[dict[str, Any]]
+    steps: list[dict[str, object]]
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> CatalogModel:
-        if not isinstance(data, dict):
+    def from_dict(cls, data: dict[str, object]) -> CatalogModel:
+        if not _is_str_object_dict(data):
             raise ModelLoadError("Catalog must be an object")
         version = data.get("version")
         steps = data.get("steps")
         if not isinstance(version, int):
             raise ModelLoadError("Catalog missing valid 'version' (int)")
-        if not isinstance(steps, list):
+        if not _is_object_list(steps):
             raise ModelLoadError("Catalog missing valid 'steps' list")
-        normalized_steps: list[dict[str, Any]] = []
+        normalized_steps: list[dict[str, object]] = []
         for i, step in enumerate(steps):
-            if not isinstance(step, dict):
+            if not _is_str_object_dict(step):
                 raise ModelLoadError(f"Catalog step[{i}] must be an object")
             _validate_step_schema(step, i)
             normalized_steps.append(step)
@@ -98,8 +106,8 @@ class FlowModel:
     nodes: list[FlowNode]
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> FlowModel:
-        if not isinstance(data, dict):
+    def from_dict(cls, data: dict[str, object]) -> FlowModel:
+        if not _is_str_object_dict(data):
             raise ModelLoadError("Flow must be an object")
         version = data.get("version")
         entry = data.get("entry_step_id")
@@ -108,7 +116,7 @@ class FlowModel:
             raise ModelLoadError("Flow missing valid 'version' (int)")
         if not isinstance(entry, str) or not entry:
             raise ModelLoadError("Flow missing valid 'entry_step_id'")
-        if not isinstance(nodes_raw, list):
+        if not _is_object_list(nodes_raw):
             raise ModelLoadError("Flow missing valid 'nodes' list")
 
         nodes: list[FlowNode] = []
@@ -122,18 +130,20 @@ class FlowModel:
                 nodes.append(FlowNode(step_id=step_id, next_step_id=next_id, prev_step_id=prev_id))
         else:
             for i, n in enumerate(nodes_raw):
-                if not isinstance(n, dict):
+                if not _is_str_object_dict(n):
                     raise ModelLoadError(f"Flow node[{i}] must be an object")
                 sid_any = n.get("step_id")
                 if not isinstance(sid_any, str) or not sid_any:
                     raise ModelLoadError(f"Flow node[{i}] missing valid 'step_id'")
                 sid: str = sid_any
-                next_id = n.get("next_step_id")
-                prev_id = n.get("prev_step_id")
-                if next_id is not None and not isinstance(next_id, str):
+                next_any = n.get("next_step_id")
+                prev_any = n.get("prev_step_id")
+                if next_any is not None and not isinstance(next_any, str):
                     raise ModelLoadError(f"Flow node[{i}] invalid 'next_step_id'")
-                if prev_id is not None and not isinstance(prev_id, str):
+                if prev_any is not None and not isinstance(prev_any, str):
                     raise ModelLoadError(f"Flow node[{i}] invalid 'prev_step_id'")
+                next_id = next_any if isinstance(next_any, str) else None
+                prev_id = prev_any if isinstance(prev_any, str) else None
                 nodes.append(
                     FlowNode(
                         step_id=sid,
@@ -185,7 +195,7 @@ def validate_models(catalog: CatalogModel, flow: FlowModel) -> None:
         raise ModelValidationError("Flow must reach processing from entry_step_id")
 
 
-def _require_ascii_str(value: Any, *, field: str, step_index: int) -> str:
+def _require_ascii_str(value: object, *, field: str, step_index: int) -> str:
     if not isinstance(value, str) or not value:
         raise ModelValidationError(
             f"Catalog step[{step_index}] missing valid '{field}' (non-empty string)"
@@ -199,23 +209,23 @@ def _require_ascii_str(value: Any, *, field: str, step_index: int) -> str:
     return value
 
 
-def _require_bool(value: Any, *, field: str, step_index: int) -> bool:
+def _require_bool(value: object, *, field: str, step_index: int) -> bool:
     if not isinstance(value, bool):
         raise ModelValidationError(f"Catalog step[{step_index}] missing valid '{field}' (bool)")
     return value
 
 
-def _validate_step_schema(step: dict[str, Any], step_index: int) -> None:
+def _validate_step_schema(step: dict[str, object], step_index: int) -> None:
     _ = _require_ascii_str(step.get("step_id"), field="step_id", step_index=step_index)
     _ = _require_ascii_str(step.get("title"), field="title", step_index=step_index)
     _ = _require_bool(step.get("computed_only"), field="computed_only", step_index=step_index)
 
     fields_any = step.get("fields")
-    if not isinstance(fields_any, list):
+    if not _is_object_list(fields_any):
         raise ModelValidationError(f"Catalog step[{step_index}] missing valid 'fields' (list)")
 
     for i, f in enumerate(fields_any):
-        if not isinstance(f, dict):
+        if not _is_str_object_dict(f):
             raise ModelValidationError(f"Catalog step[{step_index}] field[{i}] must be an object")
         name = f.get("name")
         ftype = f.get("type")
@@ -227,8 +237,8 @@ def _validate_step_schema(step: dict[str, Any], step_index: int) -> None:
             raise ModelValidationError(
                 f"Catalog step[{step_index}] field[{i}] has unsupported type '{ftype}'"
             )
-        constraints = f.get("constraints", {})
-        if not isinstance(constraints, dict):
+        constraints_any = f.get("constraints", {})
+        if not _is_str_object_dict(constraints_any):
             raise ModelValidationError(
                 f"Catalog step[{step_index}] field[{i}] constraints must be an object"
             )
@@ -236,7 +246,7 @@ def _validate_step_schema(step: dict[str, Any], step_index: int) -> None:
         # Optional schema extensions for certain baseline types.
         if str(ftype) == "multi_select_indexed":
             items_any = f.get("items")
-            if items_any is not None and not isinstance(items_any, list):
+            if items_any is not None and not _is_object_list(items_any):
                 raise ModelValidationError(
                     f"Catalog step[{step_index}] field[{i}] items must be a list when present"
                 )

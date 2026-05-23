@@ -6,14 +6,15 @@ from audiomason.core import ProcessingContext
 class ExamplePlugin:
     """Example plugin that implements IProcessor interface."""
 
-    def __init__(self, config: dict | None = None) -> None:
+    def __init__(self, config: dict[str, object] | None = None) -> None:
         """Initialize plugin.
 
         Args:
             config: Plugin configuration
         """
-        self.config = config or {}
-        self.message = self.config.get("message", "Hello from plugin!")
+        self.config = dict(config) if config is not None else {}
+        message = self.config.get("message")
+        self.message = message if isinstance(message, str) and message else "Hello from plugin!"
 
     async def process(self, context: ProcessingContext) -> ProcessingContext:
         """Process context.

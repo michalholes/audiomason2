@@ -5,10 +5,14 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TypeGuard
 
 
-def _object_schema() -> dict[str, Any]:
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _object_schema() -> dict[str, object]:
     return {
         "type": "object",
         "properties": {},
@@ -17,7 +21,7 @@ def _object_schema() -> dict[str, Any]:
     }
 
 
-REGISTRY_ENTRIES: list[dict[str, Any]] = [
+REGISTRY_ENTRIES: list[dict[str, object]] = [
     {
         "primitive_id": "parallel.map",
         "version": 1,
@@ -30,13 +34,15 @@ REGISTRY_ENTRIES: list[dict[str, Any]] = [
 ]
 
 
-def execute(primitive_id: str, primitive_version: int, inputs: dict[str, Any]) -> dict[str, Any]:
+def execute(
+    primitive_id: str, primitive_version: int, inputs: dict[str, object]
+) -> dict[str, object]:
     if primitive_id != "parallel.map" or primitive_version != 1:
         raise ValueError("unknown parallel primitive")
     merge_mode = inputs.get("merge_mode", "fail_on_conflict")
     if merge_mode != "fail_on_conflict":
         raise RuntimeError("parallel.map@1 merge_mode must be fail_on_conflict")
     items = inputs.get("items")
-    if isinstance(items, list):
-        return {"items": list(items), "merge_mode": merge_mode}
+    if _is_object_list(items):
+        return {"items": [item for item in items], "merge_mode": merge_mode}
     return {"items": [], "merge_mode": merge_mode}
