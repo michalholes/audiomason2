@@ -1,8 +1,7 @@
 {
   "pythonVersion": "3.11",
-  "typeCheckingMode": "basic",
+  "typeCheckingMode": "strict",
   "include": ["src", "plugins"],
-  "strict": ["src"],
   "exclude": [
     "tests",
     "patches",
