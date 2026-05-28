@@ -48,6 +48,7 @@ from .errors import (
 )
 from .field_schema_validation import validate_step_fields
 from .fingerprints import fingerprint_json
+from .flow_config_validation import normalize_flow_config
 from .flow_graph import MAX_TRANSITION_HOPS, normalize_to_graph, select_next_step
 from .flow_graph_state_view import build_flow_graph_state_view
 from .flow_runtime import (
@@ -1020,7 +1021,7 @@ class ImportWizardEngine:
             cur = candidate
 
     def _normalize_flow_config(self, raw: object) -> dict[str, object]:
-        return flow_config_api.normalize_flow_config(raw)
+        return normalize_flow_config(raw)
 
     def _merge_flow_config_overrides(
         self, base: dict[str, object], overrides: dict[str, object]

@@ -58,7 +58,7 @@ class _FileResponseFactory(Protocol):
     def __call__(self, path: str) -> object: ...
 
 
-def build_router(*, engine: object):
+def build_router(*, engine: object) -> object:
     try:
         from fastapi import APIRouter
         from fastapi.responses import FileResponse, HTMLResponse, JSONResponse

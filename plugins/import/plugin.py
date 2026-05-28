@@ -8,7 +8,6 @@ ASCII-only.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import cast
 
 from audiomason.core.config import ConfigResolver
 
@@ -61,7 +60,7 @@ class ImportPlugin:
     def get_fastapi_router(self) -> object:
         """Return the import UI router (host must mount it)."""
 
-        return cast(object, build_router(engine=self.engine))
+        return build_router(engine=self.engine)
 
 
 __all__ = ["ImportPlugin"]

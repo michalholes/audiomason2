@@ -14,7 +14,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypeGuard
 
-from audiomason.core.config import ConfigError, ConfigResolver
+from audiomason.core.config import ConfigResolver
+from audiomason.core.errors import ConfigError
 from audiomason.core.events import get_event_bus
 from audiomason.core.logging import get_logger
 

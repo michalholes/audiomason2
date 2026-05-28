@@ -88,6 +88,7 @@ class _LegacyArgs(Protocol):
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="audiomason import", add_help=False)
     sub = p.add_subparsers(dest="cmd")
+    start_intent_choices: list[str] = sorted(ALLOWED_USER_START_INTENTS)
 
     wiz = sub.add_parser("wizard", add_help=False)
     wiz_sub = wiz.add_subparsers(dest="wiz_cmd")
@@ -95,7 +96,7 @@ def _build_parser() -> argparse.ArgumentParser:
     start = wiz_sub.add_parser("start", add_help=False)
     start.add_argument("--root", required=True)
     start.add_argument("--path", required=True)
-    start.add_argument("--intent", choices=sorted(ALLOWED_USER_START_INTENTS), default=None)
+    start.add_argument("--intent", choices=start_intent_choices, default=None)
 
     resume = wiz_sub.add_parser("resume", add_help=False)
     resume.add_argument("session_id")
@@ -169,9 +170,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _build_launcher_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="audiomason import", add_help=False)
+    launcher_mode_choices: list[str] = ["interactive", "fixed", "disabled"]
     p.add_argument(
         "--launcher",
-        choices=["interactive", "fixed", "disabled"],
+        choices=launcher_mode_choices,
         dest="launcher_mode",
         default=None,
     )

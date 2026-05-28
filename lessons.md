@@ -63,3 +63,17 @@
 - affected workflow step or files: compatibility entrypoints in `plugins/import/processed_registry_required.py` (`install_processed_registry_subscriber`, `_install_processed_registry_subscriber`, `_set_installed_compat`).
 - safety class: instruction-only
 - scope: inside current issue scope
+
+## 2026-05-28
+
+### Optimization 10: Pre-type argparse `choices` collections in strict `Any`-free mode
+- impact: Avoided repeated strict mypy `list[Any]` leaks from `argparse.add_argument(..., choices=...)` kwargs by storing choices in explicitly typed local variables before passing them.
+- affected workflow step or files: import CLI parser helpers in `plugins/import/cli.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 11: Wrap untyped third-party constructors behind typed callables
+- impact: Removed strict `no-untyped-call` blockers without behavior change by casting external constructors once to `Callable[[str], object]` and keeping typed protocols at boundary reads.
+- affected workflow step or files: cover metadata extraction boundary in `plugins/cover_handler/plugin.py` (`ID3`, `MP4` calls).
+- safety class: instruction-only
+- scope: inside current issue scope

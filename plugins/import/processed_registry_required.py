@@ -31,7 +31,7 @@ from .storage import read_json
 _installed = False
 _registered_file_services: list[FileService] = []
 # Backward-compatible globals used by tests and older code paths.
-_INSTALLED: bool = cast(bool, False)
+_INSTALLED: bool = False
 _REGISTERED_FILE_SERVICES: list[FileService] = _registered_file_services
 
 

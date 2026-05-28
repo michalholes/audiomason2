@@ -15,7 +15,7 @@ import hashlib
 import mimetypes
 import shutil
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Protocol, TypeGuard, cast, runtime_checkable
 from urllib.parse import urlparse
@@ -92,6 +92,11 @@ class _SupportsID3GetAll(Protocol):
 
 
 @runtime_checkable
+class _SupportsTagsAttr(Protocol):
+    tags: object
+
+
+@runtime_checkable
 class _FileServiceRootDir(Protocol):
     def root_dir(self, root_name: object) -> Path: ...
 
@@ -138,7 +143,8 @@ def _has_embedded_artwork(audio_file: Path) -> bool:
     suffix = audio_file.suffix.lower()
     try:
         if suffix == ".mp3":
-            mp3_tags = ID3(str(audio_file))
+            id3_ctor = cast(Callable[[str], object], ID3)
+            mp3_tags = id3_ctor(str(audio_file))
             id3_tags = cast(_SupportsID3GetAll, mp3_tags)
             apic_frames = id3_tags.getall("APIC")
             return any(
@@ -147,7 +153,9 @@ def _has_embedded_artwork(audio_file: Path) -> bool:
                 if isinstance(frame, _SupportsDataAttr)
             )
         if suffix in {".m4a", ".m4b"}:
-            mp4_tags = _dict_str_object(MP4(str(audio_file)).tags)
+            mp4_ctor = cast(Callable[[str], object], MP4)
+            mp4_file = cast(_SupportsTagsAttr, mp4_ctor(str(audio_file)))
+            mp4_tags = _dict_str_object(mp4_file.tags)
             covers_any = mp4_tags.get("covr")
             covers = covers_any if _is_object_list(covers_any) else []
             return any(bool(_to_bytes_or_none(item)) for item in covers)
