@@ -56,6 +56,7 @@ class DiscoveryItem:
     root: str
     relative_path: str
     kind: str
+    size: int | None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -63,6 +64,7 @@ class DiscoveryItem:
             "root": self.root,
             "relative_path": self.relative_path,
             "kind": self.kind,
+            "size": self.size,
         }
 
 
@@ -81,6 +83,7 @@ def run_discovery(fs: FileService, *, root: str, relative_path: str) -> list[dic
                 root=root,
                 relative_path=rel_norm,
                 kind=_kind(e),
+                size=e.size,
             )
         )
 

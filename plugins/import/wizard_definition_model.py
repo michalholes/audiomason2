@@ -11,6 +11,7 @@ ASCII-only.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import TypeGuard, cast
 
 from plugins.file_io.service import FileService
@@ -56,6 +57,446 @@ def _as_dict_list(value: object) -> list[dict[str, object]]:
     if not _is_object_list(value):
         return []
     return [dict(item) for item in value if _is_str_object_dict(item)]
+
+
+def _replace_expr_ref_inplace(node: object, *, old: str, new: str) -> None:
+    if _is_str_object_dict(node):
+        for key, value in list(node.items()):
+            if key == "expr" and isinstance(value, str) and value == old:
+                node[key] = new
+                continue
+            _replace_expr_ref_inplace(value, old=old, new=new)
+        return
+    if _is_object_list(node):
+        for item in node:
+            _replace_expr_ref_inplace(item, old=old, new=new)
+
+
+def _migrate_v3_loop_step(
+    wizard_definition: dict[str, object],
+    *,
+    old_step_id: str,
+    loop_step_ids: tuple[str, ...],
+    replaced_edge_from_step: str,
+    replaced_expr_old: str,
+    replaced_expr_new: str,
+    shipped_default: dict[str, object],
+) -> tuple[dict[str, object], bool]:
+    nodes = _as_dict_list(wizard_definition.get("nodes"))
+    node_ids = [str(node.get("step_id") or "") for node in nodes]
+    if old_step_id not in node_ids or loop_step_ids[1] in node_ids:
+        return wizard_definition, False
+    if replaced_edge_from_step not in set(node_ids):
+        return wizard_definition, False
+
+    default_nodes = {
+        str(node.get("step_id") or ""): dict(node)
+        for node in _as_dict_list(shipped_default.get("nodes"))
+        if isinstance(node.get("step_id"), str)
+    }
+    if not all(step_id in default_nodes for step_id in loop_step_ids):
+        return wizard_definition, False
+
+    migrated_nodes: list[dict[str, object]] = []
+    inserted_loop = False
+    loop_id_set = set(loop_step_ids)
+    for node in nodes:
+        step_id = str(node.get("step_id") or "")
+        if step_id in loop_id_set:
+            continue
+        if step_id == old_step_id:
+            migrated_nodes.extend(deepcopy(default_nodes[item_id]) for item_id in loop_step_ids)
+            inserted_loop = True
+            continue
+        cloned_node = deepcopy(node)
+        _replace_expr_ref_inplace(cloned_node, old=replaced_expr_old, new=replaced_expr_new)
+        migrated_nodes.append(cloned_node)
+    if not inserted_loop:
+        return wizard_definition, False
+
+    edges = _as_dict_list(wizard_definition.get("edges"))
+    default_edges = _as_dict_list(shipped_default.get("edges"))
+
+    filtered_edges: list[dict[str, object]] = []
+    loop_target_ids = set(loop_step_ids)
+    for edge in edges:
+        from_step = str(edge.get("from") or "")
+        to_step = str(edge.get("to") or "")
+        if from_step == old_step_id or to_step == old_step_id:
+            continue
+        if from_step in loop_target_ids or to_step in loop_target_ids:
+            continue
+        if from_step == replaced_edge_from_step:
+            continue
+        filtered_edges.append(deepcopy(edge))
+
+    loop_edge_sources = {replaced_edge_from_step, *loop_step_ids}
+    migrated_edges = list(filtered_edges)
+    migrated_edges.extend(
+        deepcopy(edge) for edge in default_edges if str(edge.get("from") or "") in loop_edge_sources
+    )
+
+    migrated = dict(wizard_definition)
+    migrated["nodes"] = migrated_nodes
+    migrated["edges"] = migrated_edges
+    return migrated, True
+
+
+def _has_edge(
+    edges: list[dict[str, object]],
+    *,
+    from_step: str,
+    to_step: str,
+    condition_expr: str | None,
+) -> bool:
+    for edge in edges:
+        if str(edge.get("from") or "") != from_step:
+            continue
+        if str(edge.get("to") or "") != to_step:
+            continue
+        cond = edge.get("condition_expr")
+        if condition_expr is None:
+            if cond is None:
+                return True
+            continue
+        cond_dict = _as_str_object_dict(cond)
+        if str(cond_dict.get("expr") or "") == condition_expr:
+            return True
+    return False
+
+
+def _migrate_v3_cover_loop(
+    wizard_definition: dict[str, object],
+) -> tuple[dict[str, object], bool]:
+    if wizard_definition.get("version") != 3:
+        return wizard_definition, False
+
+    nodes = _as_dict_list(wizard_definition.get("nodes"))
+    node_ids = {str(node.get("step_id") or "") for node in nodes}
+    if "init_cover_loop" in node_ids:
+        return wizard_definition, False
+    required = {
+        "covers_policy_mode",
+        "covers_policy",
+        "covers_policy_override_prepare",
+        "covers_policy_url",
+    }
+    if not required.issubset(node_ids):
+        return wizard_definition, False
+
+    cover_nodes: list[dict[str, object]] = [
+        {
+            "step_id": "init_cover_loop",
+            "op": {
+                "primitive_id": "data.set",
+                "primitive_version": 1,
+                "inputs": {},
+                "writes": [
+                    {"to_path": "$.state.vars.cover_loop.index", "value": 0},
+                    {
+                        "to_path": "$.state.vars.cover_loop.confirmed",
+                        "value": {"expr": "$.state.vars.phase1.cover.by_source_relative_path"},
+                    },
+                ],
+            },
+        },
+        {
+            "step_id": "cover_mode_item",
+            "op": {
+                "primitive_id": "ui.prompt_select",
+                "primitive_version": 1,
+                "inputs": {
+                    "label": "Cover",
+                    "prompt": "[book] Choose cover mode",
+                    "help": "Choose cover source for the current book.",
+                    "hint_expr": {
+                        "expr": (
+                            "$.state.vars.phase1.cover.per_source_hints[$.state.vars.cover_loop.index]"
+                        )
+                    },
+                    "examples_expr": {
+                        "expr": (
+                            "$.state.vars.phase1.cover.per_source_allowed_modes"
+                            "[$.state.vars.cover_loop.index]"
+                        )
+                    },
+                    "prefill_expr": {
+                        "expr": (
+                            "$.state.vars.cover_loop.confirmed"
+                            "[$.state.vars.phase1.select_books.selected_source_relative_paths"
+                            "[$.state.vars.cover_loop.index]].kind"
+                        )
+                    },
+                    "default_expr": {
+                        "expr": (
+                            "$.state.vars.cover_loop.confirmed"
+                            "[$.state.vars.phase1.select_books.selected_source_relative_paths"
+                            "[$.state.vars.cover_loop.index]].kind"
+                        )
+                    },
+                },
+                "writes": [
+                    {
+                        "to_path": "$.state.answers.cover_mode_item.value",
+                        "value": {"expr": "$.op.outputs.selection"},
+                    }
+                ],
+            },
+        },
+        {
+            "step_id": "cover_mode_item_url",
+            "op": {
+                "primitive_id": "ui.prompt_text",
+                "primitive_version": 1,
+                "inputs": {
+                    "label": "Cover URL or file path",
+                    "prompt": "[book] Cover URL or file path (Enter=skip)",
+                    "help": "Leave empty to skip cover override for current book.",
+                    "prefill_expr": {
+                        "expr": (
+                            "$.state.vars.cover_loop.confirmed"
+                            "[$.state.vars.phase1.select_books.selected_source_relative_paths"
+                            "[$.state.vars.cover_loop.index]].url"
+                        )
+                    },
+                    "default_expr": {
+                        "expr": (
+                            "$.state.vars.cover_loop.confirmed"
+                            "[$.state.vars.phase1.select_books.selected_source_relative_paths"
+                            "[$.state.vars.cover_loop.index]].url"
+                        )
+                    },
+                    "examples": ["https://example.com/cover.jpg"],
+                },
+                "writes": [
+                    {
+                        "to_path": "$.state.answers.cover_mode_item_url.value",
+                        "value": {"expr": "$.op.outputs.value"},
+                    }
+                ],
+            },
+        },
+        {
+            "step_id": "store_cover_item",
+            "op": {
+                "primitive_id": "data.set",
+                "primitive_version": 1,
+                "inputs": {},
+                "writes": [
+                    {
+                        "to_path": "$.state.answers.store_cover_item.mode",
+                        "value": {"expr": "$.state.answers.cover_mode_item.value"},
+                    },
+                    {
+                        "to_path": "$.state.answers.store_cover_item.url",
+                        "value": "",
+                    },
+                    {
+                        "to_path": "$.state.vars.cover_loop.index",
+                        "value": {"expr": "$.state.vars.cover_loop.index + 1"},
+                    },
+                ],
+            },
+        },
+        {
+            "step_id": "cover_loop_check",
+            "op": {
+                "primitive_id": "data.set",
+                "primitive_version": 1,
+                "inputs": {},
+                "writes": [],
+            },
+        },
+    ]
+
+    migrated_nodes: list[dict[str, object]] = []
+    inserted = False
+    for node in nodes:
+        migrated_nodes.append(deepcopy(node))
+        if str(node.get("step_id") or "") == "covers_policy_mode":
+            for cover_node in cover_nodes:
+                migrated_nodes.append(deepcopy(cover_node))
+            inserted = True
+    if not inserted:
+        return wizard_definition, False
+
+    edges = _as_dict_list(wizard_definition.get("edges"))
+    cover_step_ids = {
+        "init_cover_loop",
+        "cover_mode_item",
+        "cover_mode_item_url",
+        "store_cover_item",
+        "cover_loop_check",
+    }
+    migrated_edges: list[dict[str, object]] = []
+    for edge in edges:
+        from_step = str(edge.get("from") or "")
+        to_step = str(edge.get("to") or "")
+        if from_step in cover_step_ids or to_step in cover_step_ids:
+            continue
+        migrated_edges.append(deepcopy(edge))
+
+    def ensure_edge(*, from_step: str, to_step: str, condition_expr: str | None) -> None:
+        if _has_edge(
+            migrated_edges,
+            from_step=from_step,
+            to_step=to_step,
+            condition_expr=condition_expr,
+        ):
+            return
+        edge: dict[str, object] = {"from": from_step, "to": to_step}
+        if condition_expr is not None:
+            edge["condition_expr"] = {"expr": condition_expr}
+        migrated_edges.append(edge)
+
+    ensure_edge(
+        from_step="covers_policy_mode",
+        to_step="init_cover_loop",
+        condition_expr="$.state.vars.human.covers_policy.mode == 'per_book'",
+    )
+    ensure_edge(from_step="init_cover_loop", to_step="cover_mode_item", condition_expr=None)
+    ensure_edge(
+        from_step="cover_mode_item",
+        to_step="cover_mode_item_url",
+        condition_expr="$.state.answers.cover_mode_item.value == 'url'",
+    )
+    ensure_edge(from_step="cover_mode_item", to_step="store_cover_item", condition_expr=None)
+    ensure_edge(from_step="cover_mode_item_url", to_step="store_cover_item", condition_expr=None)
+    ensure_edge(from_step="store_cover_item", to_step="cover_loop_check", condition_expr=None)
+    ensure_edge(
+        from_step="cover_loop_check",
+        to_step="cover_mode_item",
+        condition_expr=(
+            "$.state.vars.cover_loop.index "
+            "< len($.state.vars.phase1.select_books.selected_source_relative_paths)"
+        ),
+    )
+    ensure_edge(
+        from_step="cover_loop_check",
+        to_step="covers_policy",
+        condition_expr=(
+            "$.state.vars.cover_loop.index "
+            ">= len($.state.vars.phase1.select_books.selected_source_relative_paths)"
+        ),
+    )
+
+    migrated = dict(wizard_definition)
+    migrated["nodes"] = migrated_nodes
+    migrated["edges"] = migrated_edges
+    return migrated, True
+
+
+def _normalize_v3_cover_loop_nodes(
+    wizard_definition: dict[str, object],
+) -> tuple[dict[str, object], bool]:
+    if wizard_definition.get("version") != 3:
+        return wizard_definition, False
+
+    nodes = _as_dict_list(wizard_definition.get("nodes"))
+    changed = False
+    normalized_nodes: list[dict[str, object]] = []
+    for node in nodes:
+        step_id = str(node.get("step_id") or "")
+        normalized = deepcopy(node)
+        op = _as_str_object_dict(normalized.get("op"))
+        inputs = _as_str_object_dict(op.get("inputs"))
+        if step_id == "cover_mode_item":
+            if "prefill_expr" in inputs:
+                del inputs["prefill_expr"]
+                changed = True
+            if "default_expr" in inputs:
+                del inputs["default_expr"]
+                changed = True
+            if inputs.get("default_value") != "skip":
+                inputs["default_value"] = "skip"
+                changed = True
+            op["inputs"] = inputs
+            normalized["op"] = op
+        elif step_id == "cover_mode_item_url":
+            if "prefill_expr" in inputs:
+                del inputs["prefill_expr"]
+                changed = True
+            if "default_expr" in inputs:
+                del inputs["default_expr"]
+                changed = True
+            if inputs.get("default_value") != "":
+                inputs["default_value"] = ""
+                changed = True
+            op["inputs"] = inputs
+            normalized["op"] = op
+        elif step_id == "store_cover_item":
+            writes_any = op.get("writes")
+            writes = _as_dict_list(writes_any)
+            normalized_writes: list[dict[str, object]] = []
+            for write in writes:
+                to_path = str(write.get("to_path") or "")
+                if to_path == "$.state.answers.store_cover_item.url":
+                    if write.get("value") != "":
+                        changed = True
+                    normalized_writes.append({"to_path": to_path, "value": ""})
+                    continue
+                normalized_writes.append(write)
+            if normalized_writes:
+                op["writes"] = normalized_writes
+                normalized["op"] = op
+        normalized_nodes.append(normalized)
+
+    if not changed:
+        return wizard_definition, False
+    migrated = dict(wizard_definition)
+    migrated["nodes"] = normalized_nodes
+    return migrated, True
+
+
+def _migrate_v3_phase1_loops(
+    wizard_definition: dict[str, object],
+) -> tuple[dict[str, object], bool]:
+    if wizard_definition.get("version") != 3:
+        return wizard_definition, False
+
+    shipped_default = build_default_wizard_definition_v3()
+    migrated_any = False
+    migrated = dict(wizard_definition)
+
+    migrated, migrated_author = _migrate_v3_loop_step(
+        migrated,
+        old_step_id="effective_author",
+        loop_step_ids=(
+            "init_author_loop",
+            "effective_author_item",
+            "store_author_item",
+            "author_loop_check",
+        ),
+        replaced_edge_from_step="metadata_validate_initial",
+        replaced_expr_old="$.state.answers.effective_author.author",
+        replaced_expr_new="$.state.answers.store_author_item.author",
+        shipped_default=shipped_default,
+    )
+    migrated_any = migrated_any or migrated_author
+
+    migrated, migrated_title = _migrate_v3_loop_step(
+        migrated,
+        old_step_id="effective_title",
+        loop_step_ids=(
+            "init_title_loop",
+            "effective_title_item",
+            "store_title_item",
+            "title_loop_check",
+        ),
+        replaced_edge_from_step="metadata_validate_after_author",
+        replaced_expr_old="$.state.answers.effective_title.title",
+        replaced_expr_new="$.state.answers.store_title_item.title",
+        shipped_default=shipped_default,
+    )
+    migrated_any = migrated_any or migrated_title
+
+    migrated, migrated_cover = _migrate_v3_cover_loop(migrated)
+    migrated_any = migrated_any or migrated_cover
+
+    migrated, normalized_cover = _normalize_v3_cover_loop_nodes(migrated)
+    migrated_any = migrated_any or normalized_cover
+
+    return migrated, migrated_any
 
 
 # The default workflow definition is Python-defined and is used only for
@@ -155,6 +596,14 @@ def load_or_bootstrap_wizard_definition(
         if not _is_str_object_dict(wd_any):
             raise ValueError("WizardDefinition must be an object")
         wd = wd_any
+
+        wd, migrated = _migrate_v3_phase1_loops(wd)
+        if migrated:
+            wd_any = canonicalize_wizard_definition(wd)
+            if not _is_str_object_dict(wd_any):
+                raise ValueError("WizardDefinition must be an object")
+            wd = wd_any
+            save_wizard_definition_with_history(fs, wd)
 
         ver = wd.get("version")
         if ver == 2:

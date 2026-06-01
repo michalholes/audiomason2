@@ -8,7 +8,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import TypeGuard, cast
 
-from plugins.file_io.service import FileService
+from plugins.file_io.service import ArchiveService, FileService, RootName
 
 from .fingerprints import sha256_hex
 from .phase1_cover_flow import build_phase1_cover_projection
@@ -34,6 +34,34 @@ def _as_str_list(value: object) -> list[str]:
     if not _is_object_list(value):
         return []
     return [item for item in value if isinstance(item, str)]
+
+
+_PHASE1_AUDIO_SUFFIXES = {".m4a", ".m4b", ".mp3", ".opus"}
+_ARCHIVE_SUFFIXES = (
+    ".tar.bz2",
+    ".tar.gz",
+    ".tar",
+    ".tgz",
+    ".zip",
+    ".rar",
+    ".7z",
+)
+
+
+def _is_audio_rel_path(rel: str) -> bool:
+    rel_lower = rel.lower()
+    return any(rel_lower.endswith(suffix) for suffix in _PHASE1_AUDIO_SUFFIXES)
+
+
+def _looks_like_archive_label(label: str) -> bool:
+    lower = label.lower()
+    return any(lower.endswith(suffix) for suffix in _ARCHIVE_SUFFIXES)
+
+
+def _archive_segment_match(*, rel_path: str, archive_label: str) -> bool:
+    if rel_path.startswith(archive_label + "/"):
+        return True
+    return f"/{archive_label}/" in rel_path
 
 
 def _item_sort_key(item: dict[str, str]) -> tuple[str, str]:
@@ -149,29 +177,268 @@ def _collect_scoped_entries(
     *,
     discovery: list[dict[str, object]],
     state: dict[str, object],
-) -> tuple[str, list[str], list[str]]:
+) -> tuple[str, list[str], list[str], list[tuple[str, str]]]:
     source_any = state.get("source")
     source = dict(source_any) if _is_str_object_dict(source_any) else {}
     source_prefix = _normalize_rel_path(str(source.get("relative_path") or ""))
 
-    dirs: list[str] = []
-    files: list[str] = []
+    dirs_all: list[str] = []
+    audio_files: list[str] = []
+    bundle_files: list[tuple[str, str]] = []
+
+    def _is_nonempty_file(size: object) -> bool:
+        if isinstance(size, bool):
+            return False
+        if isinstance(size, int):
+            return size > 0
+        return True
+
+    def _is_ancestor_dir(*, dir_rel: str, file_rel: str) -> bool:
+        if not dir_rel:
+            return True
+        return file_rel == dir_rel or file_rel.startswith(dir_rel + "/")
+
     for item in discovery:
         if not _is_str_object_dict(item):
             continue
         rel_any = item.get("relative_path")
         if not isinstance(rel_any, str):
             continue
-        rel = _strip_source_prefix(
-            rel_path=_normalize_rel_path(rel_any),
-            source_prefix=source_prefix,
-        )
+        rel_full = _normalize_rel_path(rel_any)
+        rel = _strip_source_prefix(rel_path=rel_full, source_prefix=source_prefix)
         kind = str(item.get("kind") or "")
         if kind == "dir":
-            dirs.append(rel)
+            dirs_all.append(rel)
         elif kind in {"file", "bundle"}:
-            files.append(rel)
-    return source_prefix, dirs, files
+            if not _is_nonempty_file(item.get("size")):
+                continue
+            if kind == "bundle":
+                bundle_files.append((rel, rel_full))
+            elif _is_audio_rel_path(rel):
+                audio_files.append(rel)
+
+    content_files = [*audio_files, *[scoped for scoped, _ in bundle_files]]
+
+    dirs = [
+        rel
+        for rel in dirs_all
+        if any(_is_ancestor_dir(dir_rel=rel, file_rel=file_rel) for file_rel in content_files)
+    ]
+    return source_prefix, dirs, audio_files, bundle_files
+
+
+def _source_root_name(state: dict[str, object]) -> RootName | None:
+    source = _as_str_object_dict(state.get("source"))
+    root_text = str(source.get("root") or "")
+    if not root_text:
+        return None
+    try:
+        return RootName(root_text)
+    except ValueError:
+        return None
+
+
+def _archive_stem(label: str) -> str:
+    lower = label.lower()
+    for suffix in sorted(_ARCHIVE_SUFFIXES, key=len, reverse=True):
+        if lower.endswith(suffix):
+            return label[: -len(suffix)]
+    return label
+
+
+def _archive_parent_scope_parts(*, entry: str, bundle_label: str) -> list[str]:
+    parts = [part for part in entry.split("/") if part]
+    parent_parts = parts[:-1]
+    stem = _archive_stem(bundle_label).strip().lower()
+    if stem and len(parent_parts) >= 2 and parent_parts[0].strip().lower() == stem:
+        return parent_parts[1:]
+    return parent_parts
+
+
+def _archive_pair_labels(
+    *,
+    bundle_label: str,
+    parent_parts: list[str],
+    entry_audio_stem: str,
+    bundle_author_hint: str,
+) -> tuple[str, str, list[str]]:
+    if len(parent_parts) >= 2:
+        author_key = parent_parts[0]
+        book_key = parent_parts[1]
+        return author_key, book_key, [author_key, book_key]
+    if len(parent_parts) == 1:
+        label = parent_parts[0]
+        author_key = bundle_author_hint.strip() or _author_hint_from_label(label).strip() or label
+        return author_key, label, [label]
+    stem = _archive_stem(bundle_label).strip()
+    book_key = entry_audio_stem.strip() or stem or bundle_label
+    author_key = bundle_author_hint.strip() or _author_hint_from_label(book_key).strip() or book_key
+    return author_key, book_key, []
+
+
+def _audio_entry_stem(entry: str) -> str:
+    parts = [part for part in entry.split("/") if part]
+    if not parts:
+        return ""
+    filename = parts[-1]
+    lower = filename.lower()
+    for suffix in sorted(_PHASE1_AUDIO_SUFFIXES, key=len, reverse=True):
+        if lower.endswith(suffix):
+            return filename[: -len(suffix)]
+    name, _sep, _suffix = filename.rpartition(".")
+    return name or filename
+
+
+def _author_hint_from_label(label: str) -> str:
+    text = " ".join(part for part in str(label).replace("_", " ").split() if part)
+    if not text:
+        return ""
+    if " - " in text:
+        left = text.split(" - ", 1)[0].strip()
+        if left:
+            return left
+    if "," in text:
+        parts = [part.strip() for part in text.split(",", 1)]
+        if len(parts) == 2 and parts[0] and parts[1]:
+            return f"{parts[1]} {parts[0]}".strip()
+    return ""
+
+
+def _label_key(label: str) -> str:
+    normalized = " ".join(part for part in str(label).replace("_", " ").split() if part)
+    return normalized.lower()
+
+
+def _bundle_author_hint(*, bundle_label: str, entries: list[str]) -> str:
+    scores: dict[str, int] = {}
+    labels: dict[str, str] = {}
+    for entry in sorted(entries):
+        if not _is_audio_rel_path(entry):
+            continue
+        parent_parts = _archive_parent_scope_parts(entry=entry, bundle_label=bundle_label)
+        entry_audio_stem = _audio_entry_stem(entry)
+
+        hint = ""
+        if len(parent_parts) >= 2:
+            hint = parent_parts[0].strip()
+        elif len(parent_parts) == 1:
+            hint = _author_hint_from_label(parent_parts[0]).strip()
+        else:
+            hint = _author_hint_from_label(entry_audio_stem).strip()
+
+        if not hint:
+            continue
+        key = _label_key(hint)
+        if not key:
+            continue
+        scores[key] = scores.get(key, 0) + 1
+        labels.setdefault(key, hint)
+
+    if not scores:
+        return ""
+
+    def _score_key(candidate: str) -> tuple[int, str, str]:
+        return (-scores[candidate], labels.get(candidate, ""), candidate)
+
+    ranked_keys = sorted(scores, key=_score_key)
+    best_key = ranked_keys[0]
+    return labels.get(best_key, "")
+
+
+def _archive_pairs_for_bundle(
+    *,
+    bundle_rel: str,
+    bundle_label: str,
+    entries: list[str],
+) -> set[tuple[str, str, str]]:
+    pairs: set[tuple[str, str, str]] = set()
+    bundle_author_hint = _bundle_author_hint(bundle_label=bundle_label, entries=entries)
+    for entry in sorted(entries):
+        if not _is_audio_rel_path(entry):
+            continue
+        parent_parts = _archive_parent_scope_parts(entry=entry, bundle_label=bundle_label)
+        entry_audio_stem = _audio_entry_stem(entry)
+        author_key, book_key, scope_parts = _archive_pair_labels(
+            bundle_label=bundle_label,
+            parent_parts=parent_parts,
+            entry_audio_stem=entry_audio_stem,
+            bundle_author_hint=bundle_author_hint,
+        )
+        source_rel = bundle_rel
+        if scope_parts:
+            source_rel = _normalize_rel_path(f"{bundle_rel}/{'/'.join(scope_parts)}")
+        pairs.add(
+            (
+                author_key,
+                book_key,
+                source_rel,
+            )
+        )
+    return pairs
+
+
+def _bundle_pairs_from_archive(
+    *,
+    bundle_rel: str,
+    bundle_full_rel: str,
+    bundle_label: str,
+    state: dict[str, object],
+    fs: object | None,
+) -> set[tuple[str, str, str]]:
+    if not isinstance(fs, FileService):
+        return set()
+    if not _looks_like_archive_label(bundle_label):
+        return set()
+    source_root = _source_root_name(state)
+    if source_root is None:
+        return set()
+    archive_service = ArchiveService(fs)
+    try:
+        plan = archive_service.plan_unpack(
+            source_root,
+            bundle_full_rel,
+            RootName.STAGE,
+            "import/phase1_archive_probe",
+            autodetect=True,
+            preserve_tree=True,
+            flatten=False,
+        )
+    except Exception:
+        return set()
+    entries = [_normalize_rel_path(entry) for entry in plan.entries]
+    return _archive_pairs_for_bundle(
+        bundle_rel=bundle_rel,
+        bundle_label=bundle_label,
+        entries=entries,
+    )
+
+
+def _pairs_for_bundle_files(
+    *,
+    bundle_files: list[tuple[str, str]],
+    state: dict[str, object],
+    fs: object | None,
+) -> set[tuple[str, str, str]]:
+    pairs: set[tuple[str, str, str]] = set()
+    for rel, full_rel in bundle_files:
+        parts = [part for part in rel.split("/") if part]
+        if not parts:
+            continue
+        bundle_name = parts[-1]
+        archive_pairs = _bundle_pairs_from_archive(
+            bundle_rel=rel,
+            bundle_full_rel=full_rel,
+            bundle_label=bundle_name,
+            state=state,
+            fs=fs,
+        )
+        if archive_pairs:
+            pairs.update(archive_pairs)
+            continue
+        fallback_label = _archive_stem(bundle_name).strip() or bundle_name
+        author_key = parts[0] if len(parts) >= 2 else fallback_label
+        pairs.add((author_key, fallback_label, rel))
+    return pairs
 
 
 def _scoped_depth(*, rel_path: str, is_file: bool) -> int:
@@ -262,9 +529,15 @@ def _discovery_pairs(
     *,
     discovery: list[dict[str, object]],
     state: dict[str, object],
+    fs: object | None = None,
 ) -> tuple[list[tuple[str, str, str]], str]:
-    source_prefix, dirs, files = _collect_scoped_entries(discovery=discovery, state=state)
+    source_prefix, dirs, files, bundle_files = _collect_scoped_entries(
+        discovery=discovery,
+        state=state,
+    )
     scope_kind = _scope_kind(source_prefix=source_prefix, dirs=dirs, files=files)
+    if not dirs and not files and not bundle_files:
+        return [], scope_kind
     if scope_kind in {"root", "container"}:
         pairs = _pairs_for_multilevel_scope(dirs=dirs, files=files)
     elif scope_kind == "author":
@@ -275,6 +548,14 @@ def _discovery_pairs(
         )
     else:
         pairs = _pairs_for_book_scope(source_prefix)
+
+    pairs.update(
+        _pairs_for_bundle_files(
+            bundle_files=bundle_files,
+            state=state,
+            fs=fs,
+        )
+    )
     return sorted(pairs), scope_kind
 
 
@@ -282,6 +563,7 @@ def _book_pairs(
     *,
     discovery: list[dict[str, object]],
     state: dict[str, object],
+    fs: object | None = None,
 ) -> tuple[
     dict[str, list[str]],
     dict[str, dict[str, str]],
@@ -289,7 +571,7 @@ def _book_pairs(
     list[str],
     str,
 ]:
-    pairs, scope_kind = _discovery_pairs(discovery=discovery, state=state)
+    pairs, scope_kind = _discovery_pairs(discovery=discovery, state=state, fs=fs)
 
     authors: dict[str, dict[str, str]] = {}
     books: dict[str, dict[str, str]] = {}
@@ -298,6 +580,11 @@ def _book_pairs(
 
     for author_key, book_key, source_relative_path in pairs:
         display_label = author_key if author_key == book_key else f"{author_key} / {book_key}"
+        if _looks_like_archive_label(author_key) and _archive_segment_match(
+            rel_path=source_relative_path,
+            archive_label=author_key,
+        ):
+            display_label = book_key
         author_id = "author:" + sha256_hex(f"a|{author_key}".encode())[:16]
         book_id = "book:" + sha256_hex(f"b|{author_key}|{book_key}".encode())[:16]
         authors.setdefault(author_id, {"item_id": author_id, "label": author_key})
@@ -331,10 +618,12 @@ def build_phase1_source_projection(
     *,
     discovery: list[dict[str, object]],
     state: dict[str, object],
+    fs: object | None = None,
 ) -> dict[str, object]:
     author_to_books, book_meta, author_ids, book_ids, scope_kind = _book_pairs(
         discovery=discovery,
         state=state,
+        fs=fs,
     )
 
     allow_autofill = scope_kind in {"root", "author", "book"}
@@ -411,6 +700,11 @@ def build_phase1_source_projection(
                 for book_id in selected_book_ids
                 if isinstance(book_meta.get(book_id), dict)
             ],
+            "selected_book_label_list": [
+                book_meta.get(book_id, {}).get("book_label", "")
+                for book_id in selected_book_ids
+                if isinstance(book_meta.get(book_id), dict)
+            ],
         },
     }
 
@@ -433,7 +727,11 @@ def build_phase1_projection(
     state: dict[str, object],
     fs: object | None = None,
 ) -> dict[str, object]:
-    source_projection = build_phase1_source_projection(discovery=discovery, state=state)
+    source_projection = build_phase1_source_projection(
+        discovery=discovery,
+        state=state,
+        fs=fs,
+    )
     metadata_projection = build_phase1_metadata_projection(
         source_projection=source_projection,
         state=state,

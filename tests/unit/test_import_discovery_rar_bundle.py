@@ -33,5 +33,6 @@ def test_discovery_classifies_rar_as_bundle() -> None:
             "root": "inbox",
             "relative_path": "sp.rar",
             "kind": "bundle",
+            "size": None,
         }
     ]

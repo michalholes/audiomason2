@@ -299,7 +299,7 @@ def exception_envelope(exc: Exception) -> dict[str, object]:
 
 def parse_selection_expr(expr: str, *, max_index: int | None) -> list[int]:
     text = expr.strip().lower()
-    if text == "all":
+    if text in {"all", "a"}:
         if max_index is None:
             # Caller must provide max_index to expand "all".
             raise ValueError("selection 'all' requires a known max_index")

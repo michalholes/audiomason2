@@ -226,7 +226,42 @@ def _build_cover_summary(
             continue
         kinds = ",".join(str(candidate.get("kind") or "") for candidate in candidates)
         parts.append(f"{source_relative_path}: {len(candidates)} [{kinds}]")
-    return "Cover autodetection: " + "; ".join(parts) if parts else "Cover autodetection: none"
+    if not parts:
+        return "Cover autodetection: none"
+    lines = [f"- {part}" for part in parts]
+    return "Cover autodetection:\n" + "\n".join(lines)
+
+
+def _allowed_modes_for_candidates(candidates: list[dict[str, str]]) -> list[str]:
+    kinds = {str(candidate.get("kind") or "") for candidate in candidates}
+    allowed = ["skip", "url"]
+    if "embedded" in kinds:
+        allowed.insert(0, "embedded")
+    if "file" in kinds:
+        insert_at = 1 if "embedded" in kinds else 0
+        allowed.insert(insert_at, "file")
+    return allowed
+
+
+def _cover_loop_confirmed_by_source(state: dict[str, object]) -> dict[str, dict[str, str]]:
+    vars_state = _as_str_object_dict(state.get("vars"))
+    cover_loop = _as_str_object_dict(vars_state.get("cover_loop"))
+    confirmed_any = cover_loop.get("confirmed")
+    confirmed = _as_str_object_dict(confirmed_any)
+    out: dict[str, dict[str, str]] = {}
+    for source_relative_path, value in confirmed.items():
+        source = str(source_relative_path or "").strip()
+        if not source:
+            continue
+        choice = _as_str_object_dict(value)
+        kind = str(choice.get("kind") or "").strip().lower()
+        if kind not in {"skip", "url", "file", "embedded"}:
+            kind = "skip"
+        item: dict[str, str] = {"kind": kind}
+        if kind == "url":
+            item["url"] = str(choice.get("url") or "")
+        out[source] = item
+    return out
 
 
 def _first_matching_candidate(
@@ -245,6 +280,7 @@ def _resolve_choice_by_source(
     selected_paths: list[str],
     per_source_candidates: list[dict[str, object]],
     answer: dict[str, object],
+    state: dict[str, object],
 ) -> tuple[dict[str, dict[str, str]], str, str, dict[str, str]]:
     candidates_by_source: dict[str, list[dict[str, str]]] = {}
     for item in per_source_candidates:
@@ -259,6 +295,8 @@ def _resolve_choice_by_source(
     answer_choice_any = answer.get("choice")
     answer_choice = dict(answer_choice_any) if _is_str_object_dict(answer_choice_any) else {}
     requested_kind = str(answer_choice.get("kind") or answer.get("mode") or "").strip().lower()
+    if not requested_kind and len(selected_paths) > 1:
+        requested_kind = "per_book"
     requested_url = str(answer.get("url") or answer_choice.get("url") or "")
     requested_candidate_id = str(
         answer_choice.get("candidate_id") or answer.get("candidate_id") or ""
@@ -290,6 +328,39 @@ def _resolve_choice_by_source(
                 by_source[source_relative_path] = {"kind": "skip"}
         choice = by_source.get(requested_source_relative_path, {"kind": "skip"})
         return by_source, str(choice.get("kind") or "skip"), "", choice
+
+    if requested_kind == "per_book":
+        overrides = _cover_loop_confirmed_by_source(state)
+        for source_relative_path in selected_paths:
+            requested = _as_str_object_dict(overrides.get(source_relative_path))
+            mode = str(requested.get("kind") or "skip").strip().lower()
+            if mode == "url":
+                url = str(requested.get("url") or "")
+                by_source[source_relative_path] = (
+                    {"kind": "url", "url": url} if url else {"kind": "skip"}
+                )
+                continue
+            if mode in {"file", "embedded"}:
+                matched = _first_matching_candidate(
+                    candidates=candidates_by_source.get(source_relative_path, []),
+                    requested_kind=mode,
+                )
+                if matched is None:
+                    by_source[source_relative_path] = {"kind": "skip"}
+                else:
+                    by_source[source_relative_path] = {
+                        "kind": "candidate",
+                        "candidate_id": str(matched.get("candidate_id") or ""),
+                        "source_relative_path": source_relative_path,
+                    }
+                continue
+            by_source[source_relative_path] = {"kind": "skip"}
+        first_choice = (
+            by_source.get(selected_paths[0], {"kind": "skip"})
+            if selected_paths
+            else {"kind": "skip"}
+        )
+        return by_source, "per_book", "", first_choice
 
     if requested_kind in {"file", "embedded"}:
         for source_relative_path in selected_paths:
@@ -401,19 +472,33 @@ def build_phase1_cover_projection(
         selected_paths=selected_paths,
         per_source_candidates=per_source_candidates,
         answer=answer,
+        state=state,
     )
     discover_answer = _answer_dict(state, "cover_discover_initial")
-    allowed_modes = ["skip", "url"]
-    candidate_kinds = {
-        str(candidate.get("kind") or "")
-        for candidate in candidates
-        if _is_str_object_dict(candidate)
+    allowed_modes = _allowed_modes_for_candidates(_sanitize_candidates(candidates) or [])
+    if len(selected_paths) > 1 and "per_book" not in allowed_modes:
+        allowed_modes.append("per_book")
+    per_source_allowed_modes: list[list[str]] = []
+    per_source_hints: list[str] = []
+    per_source_lookup = {
+        str(item.get("source_relative_path") or ""): dict(item)
+        for item in per_source_candidates
+        if _is_str_object_dict(item)
     }
-    if "embedded" in candidate_kinds:
-        allowed_modes.insert(0, "embedded")
-    if "file" in candidate_kinds:
-        insert_at = 1 if "embedded" in candidate_kinds else 0
-        allowed_modes.insert(insert_at, "file")
+    for source_relative_path in selected_paths:
+        item = _as_str_object_dict(per_source_lookup.get(source_relative_path))
+        item_candidates = _sanitize_candidates(item.get("candidates")) or []
+        per_source_allowed_modes.append(_allowed_modes_for_candidates(item_candidates))
+        item_error = _sanitize_error_dict(item.get("error"))
+        if item_error:
+            message = str(item_error.get("message") or item_error.get("type") or "failed")
+            per_source_hints.append(f"{source_relative_path}: failed ({message})")
+            continue
+        if not item_candidates:
+            per_source_hints.append(f"{source_relative_path}: none")
+            continue
+        kinds = ",".join(str(candidate.get("kind") or "") for candidate in item_candidates)
+        per_source_hints.append(f"{source_relative_path}: {len(item_candidates)} [{kinds}]")
     return {
         "mode": mode,
         "url": url,
@@ -424,6 +509,8 @@ def build_phase1_cover_projection(
         "has_single_candidate": len(candidates) == 1,
         "by_source_relative_path": by_source_relative_path,
         "allowed_modes": allowed_modes,
+        "per_source_allowed_modes": per_source_allowed_modes,
+        "per_source_hints": per_source_hints,
         "discovery_summary": _build_cover_summary(
             per_source_candidates=per_source_candidates,
             error_any=discover_answer.get("error"),

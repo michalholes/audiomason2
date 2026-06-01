@@ -59,6 +59,15 @@ DEFAULT_FIELD_MAP: dict[str, str] = {
 _ROOT_AUDIO_AUTHOR = "__ROOT_AUDIO__"
 _ROOT_AUDIO_TITLE = "Untitled"
 _ROOT_SENTINELS = {"", "(root)"}
+_ARCHIVE_SUFFIXES = (
+    ".tar.bz2",
+    ".tar.gz",
+    ".tar",
+    ".tgz",
+    ".zip",
+    ".rar",
+    ".7z",
+)
 _TRAILING_TAG_RE = re.compile(r"(?:\s*(?:\([^)]*\)|\[[^]]*\]))+\s*$")
 _DURATION_SUFFIX_RE = re.compile(r"\s*\(\d+h\d+m(?:\d+s)?\)\s*$", re.IGNORECASE)
 
@@ -113,11 +122,101 @@ def _answer_dict(state: dict[str, object], key: str) -> dict[str, object]:
     return _as_str_object_dict(value)
 
 
+def _author_overrides_by_book(
+    *,
+    source_projection: dict[str, object],
+    state: dict[str, object],
+    selected_book_ids: list[str],
+) -> dict[str, str]:
+    vars_state = _as_str_object_dict(state.get("vars"))
+    author_loop = _as_str_object_dict(vars_state.get("author_loop"))
+    confirmed = _as_str_object_dict(author_loop.get("confirmed"))
+    if not confirmed:
+        return {}
+
+    selected_books_set = set(selected_book_ids)
+    author_to_books_any = source_projection.get("author_to_books")
+    author_to_books = _as_str_object_dict(author_to_books_any)
+    selected_authors = _as_str_object_dict(source_projection.get("select_authors"))
+    selected_author_ids = _as_str_list(selected_authors.get("selected_ids"))
+
+    overrides: dict[str, str] = {}
+    for author_id in selected_author_ids:
+        override = str(confirmed.get(author_id) or "").strip()
+        if not override:
+            continue
+        book_ids = _as_str_list(author_to_books.get(author_id))
+        for book_id in book_ids:
+            if book_id in selected_books_set:
+                overrides[book_id] = override
+    return overrides
+
+
+def _title_overrides_by_book(
+    *,
+    source_projection: dict[str, object],
+    state: dict[str, object],
+    selected_book_ids: list[str],
+) -> dict[str, str]:
+    vars_state = _as_str_object_dict(state.get("vars"))
+    title_loop = _as_str_object_dict(vars_state.get("title_loop"))
+    confirmed = _as_str_object_dict(title_loop.get("confirmed"))
+    if not confirmed:
+        return {}
+
+    selected_books = _as_str_object_dict(source_projection.get("select_books"))
+    selected_ids = _as_str_list(selected_books.get("selected_ids"))
+    selected_books_set = set(selected_book_ids)
+
+    overrides: dict[str, str] = {}
+    for book_id in selected_ids:
+        if book_id not in selected_books_set:
+            continue
+        override = str(confirmed.get(book_id) or "").strip()
+        if override:
+            overrides[book_id] = override
+    return overrides
+
+
 def _normalize_root_audio_value(*, value: object, fallback: str) -> str:
     text = str(value or "").strip()
     if text in _ROOT_SENTINELS:
         return fallback
     return text or fallback
+
+
+def _looks_like_archive_label(label: str) -> bool:
+    lower = label.lower()
+    return any(lower.endswith(suffix) for suffix in _ARCHIVE_SUFFIXES)
+
+
+def _archive_virtual_author_title(
+    *,
+    source_relative_path: str,
+) -> tuple[str | None, str | None]:
+    parts = [part for part in str(source_relative_path).replace("\\", "/").split("/") if part]
+    archive_index = -1
+    for index, part in enumerate(parts):
+        if _looks_like_archive_label(part):
+            archive_index = index
+            break
+    if archive_index < 0 or archive_index + 1 >= len(parts):
+        return None, None
+    first_inside = parts[archive_index + 1]
+    second_inside = parts[archive_index + 2] if archive_index + 2 < len(parts) else ""
+
+    if second_inside:
+        author_hint = _normalize_source_author_label(first_inside)
+        title_hint = _normalize_source_title_label(author=author_hint, value=second_inside)
+        return (author_hint or None, title_hint or None)
+
+    single = _normalize_source_title_label(author="", value=first_inside)
+    if " - " in single:
+        left, right = single.split(" - ", 1)
+        author_hint = _normalize_source_author_label(left)
+        title_hint = _normalize_source_title_label(author=author_hint, value=right)
+        return (author_hint or None, title_hint or None)
+    return None, (single or None)
 
 
 _VALIDATION_CACHE: dict[tuple[str, str], tuple[dict[str, object], dict[str, object]]] = {}
@@ -379,18 +478,39 @@ def build_phase1_metadata_projection(
     selected = _as_str_object_dict(source_projection.get("select_books"))
     selected_ids = _as_str_list(selected.get("selected_ids"))
     selected_paths = _as_str_list(selected.get("selected_source_relative_paths"))
+    author_overrides_by_book = _author_overrides_by_book(
+        source_projection=source_projection,
+        state=state,
+        selected_book_ids=selected_ids,
+    )
+    title_overrides_by_book = _title_overrides_by_book(
+        source_projection=source_projection,
+        state=state,
+        selected_book_ids=selected_ids,
+    )
 
     validated_books: dict[str, dict[str, object]] = {}
     for book_id in selected_ids:
         source_book = _as_str_object_dict(source_book_meta.get(book_id))
-        normalized_source_author = _normalize_source_author_label(source_book.get("author_label"))
+        source_relative_path = str(source_book.get("source_relative_path") or "")
+        source_author_label = str(source_book.get("author_label") or "")
+        archive_author_hint, archive_title_hint = _archive_virtual_author_title(
+            source_relative_path=source_relative_path
+        )
+        source_author_input: object = source_book.get("author_label")
+        if _looks_like_archive_label(source_author_label) and archive_author_hint:
+            source_author_input = archive_author_hint
+        normalized_source_author = _normalize_source_author_label(source_author_input)
         source_author = _normalize_root_audio_value(
             value=normalized_source_author,
             fallback=_ROOT_AUDIO_AUTHOR,
         )
+        source_title_input: object = source_book.get("book_label")
+        if _looks_like_archive_label(source_author_label) and archive_title_hint:
+            source_title_input = archive_title_hint
         normalized_source_title = _normalize_source_title_label(
             author=source_author,
-            value=source_book.get("book_label"),
+            value=source_title_input,
         )
         source_title = _normalize_root_audio_value(
             value=normalized_source_title,
@@ -406,7 +526,7 @@ def build_phase1_metadata_projection(
                 if source_author == source_title
                 else f"{source_author} / {source_title}"
             ),
-            "source_relative_path": str(source_book.get("source_relative_path") or ""),
+            "source_relative_path": source_relative_path,
             "validation": {},
         }
 
@@ -417,7 +537,9 @@ def build_phase1_metadata_projection(
     author_answer = _answer_dict(state, "store_author_item")
     if not author_answer.get("author"):
         author_answer = _answer_dict(state, "effective_author")
-    title_answer = _answer_dict(state, "effective_title")
+    title_answer = _answer_dict(state, "store_title_item")
+    if not title_answer.get("title"):
+        title_answer = _answer_dict(state, "effective_title")
     merged_answer = _answer_dict(state, "effective_author_title")
 
     author_override_raw = author_answer.get("author")
@@ -431,7 +553,11 @@ def build_phase1_metadata_projection(
     title_override_present = title_override_raw is not None
     explicit_validation, explicit_validation_step, _ = _explicit_validation_from_state(state)
 
-    if explicit_validation is not None:
+    if (
+        explicit_validation is not None
+        and not author_overrides_by_book
+        and not title_overrides_by_book
+    ):
         requested_author = _normalize_root_audio_value(
             value=(author_override_raw if author_override_present else source_author),
             fallback=source_author,
@@ -472,24 +598,40 @@ def build_phase1_metadata_projection(
                 ),
                 "validation": dict(explicit_validation),
             }
-    elif author_override_present or title_override_present:
+    elif (
+        author_overrides_by_book
+        or title_overrides_by_book
+        or author_override_present
+        or title_override_present
+    ):
+        explicit_per_item_override = bool(author_overrides_by_book or title_overrides_by_book)
         for book_id in selected_ids:
             current = dict(validated_books.get(book_id) or {})
-            requested_author_source = (
-                author_override_raw if author_override_present else current.get("author_label")
-            )
+            requested_author_source: object | None = author_overrides_by_book.get(book_id)
+            if requested_author_source is None:
+                requested_author_source = (
+                    author_override_raw if author_override_present else current.get("author_label")
+                )
             requested_author = _normalize_root_audio_value(
                 value=requested_author_source,
                 fallback=str(current.get("author_label") or _ROOT_AUDIO_AUTHOR),
             )
+            requested_title_source: object | None = title_overrides_by_book.get(book_id)
+            if requested_title_source is None:
+                requested_title_source = (
+                    title_override_raw if title_override_present else current.get("book_label")
+                )
             requested_title = _normalize_root_audio_value(
-                value=(title_override_raw if title_override_present else current.get("book_label")),
+                value=requested_title_source,
                 fallback=str(current.get("book_label") or _ROOT_AUDIO_TITLE),
             )
             validation, canonical_author, canonical_title = _validated_author_title(
                 author=requested_author,
                 title=requested_title,
             )
+            if explicit_per_item_override:
+                canonical_author = requested_author
+                canonical_title = requested_title
             validated_books[book_id] = {
                 **current,
                 "author_label": canonical_author,

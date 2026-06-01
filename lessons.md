@@ -77,3 +77,133 @@
 - affected workflow step or files: cover metadata extraction boundary in `plugins/cover_handler/plugin.py` (`ID3`, `MP4` calls).
 - safety class: instruction-only
 - scope: inside current issue scope
+
+## 2026-06-01
+
+### Optimization 12: Auto-migrate stale v3 wizard artifacts that still use `effective_author`
+- impact: Prevents repeated manual cleanup/debug cycles when users keep older `wizard_definition.json`; sessions self-heal to per-author loop behavior on load.
+- affected workflow step or files: WizardDefinition load/bootstrap path in `plugins/import/wizard_definition_model.py` (v3 compatibility migration before validation/dispatch).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 13: Migrate stale `effective_title` to per-book title loop at load time
+- impact: Avoids repeated support loops where title edits collapse into one shared prompt; old authored/runtime v3 artifacts self-heal to per-book prompts without manual reset.
+- affected workflow step or files: v3 compatibility migration and default flow seed in `plugins/import/wizard_definition_model.py` and `plugins/import/dsl/default_wizard_v3_source.json`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 14: Keep per-item manual overrides authoritative despite metadata suggestions
+- impact: Prevents repeated user-facing churn where explicitly entered author/title values appear uneditable because canonical suggestions silently overwrite them during per-item loops.
+- affected workflow step or files: per-item override branch in `plugins/import/phase1_metadata_flow.py` (`author_overrides_by_book` / `title_overrides_by_book`).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 15: Reuse discovery file sizes to drop zero-byte audio books before selection
+- impact: Prevents wasted import runs and failed processing jobs by filtering invalid (0B audio-only) books at PHASE 1 selection time without expensive probing.
+- affected workflow step or files: discovery payload (`plugins/import/discovery.py`) and source projection filtering (`plugins/import/phase1_source_intake.py`).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 16: Re-run automatic v3 steps after PHASE 1 authority refresh
+- impact: Avoids stale prompt interactions where a just-submitted selection changes `autofill_if` truth for the next prompt (for example, select source -> single remaining book), but the wizard still asks due to pre-refresh state.
+- affected workflow step or files: v3 submit path in `plugins/import/engine_step_submit.py` (refresh `vars.phase1` before and after a follow-up `run_automatic_steps(...)` pass).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 17: Derive archive author/book pairs from internal audio paths
+- impact: Prevents archive filename labels (for example `sp.rar`) from leaking into PHASE 1 metadata suggestions by projecting bundle selections from internal directory structure first.
+- affected workflow step or files: archive source projection in `plugins/import/phase1_source_intake.py` (`_archive_pairs_for_bundle`, wrapper-folder stripping by archive stem, and non-introspected bundle fallback labels).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 18: Use root-level audio filename stem as archive fallback label
+- impact: Removes ambiguous generic source labels (for example `sp`) when archives contain audio files directly at root; keeps selection labels tied to actual content.
+- affected workflow step or files: archive fallback labeling in `plugins/import/phase1_source_intake.py` (`_audio_entry_stem` used by `_archive_pair_labels`).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 19: Keep CLI selection aliases and runtime parser in lockstep
+- impact: Prevents user-facing validation failures where prompts advertise shorthand input (`a` for all) but runtime rejects it as out-of-range.
+- affected workflow step or files: selection expression parser and submit validation in `plugins/import/engine_util.py` and `plugins/import/engine_step_submit.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 20: Reuse persisted PHASE 1 authority when computing plan
+- impact: Prevents `invalid selected_book_ids` errors after valid selections when planner fallback lacks archive introspection context (for example bundle-derived books).
+- affected workflow step or files: planner invocation in `plugins/import/engine.py` (pass `state.vars.phase1` as `session_authority` to `plugins/import/plan.py`).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 21: Infer one dominant author for single-level archive catalogs
+- impact: Reduces repetitive author confirmations by grouping archive books under one inferred
+  author when entry names show a consistent author hint.
+- affected workflow step or files: archive projection helpers in
+  `plugins/import/phase1_source_intake.py` (`_bundle_author_hint`, `_author_hint_from_label`,
+  and single-level `_archive_pair_labels` handling).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 22: Render cover autodetection as per-book multiline summary
+- impact: Prevents unreadable flat hint strings during multi-book imports by presenting
+  deterministic one-line entries per selected source/book.
+- affected workflow step or files: cover summary formatter in
+  `plugins/import/phase1_cover_flow.py` (`_build_cover_summary`).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 23: Add explicit per-book cover decision loop to PHASE 1
+- impact: Enables independent cover decisions per selected book (`file`, `embedded`, `skip`,
+  `url`) instead of forcing one global cover mode for the entire batch.
+- affected workflow step or files: cover projection and loop sync in
+  `plugins/import/phase1_cover_flow.py` and `plugins/import/engine_step_submit.py`, plus
+  runtime WizardDefinition migration in `plugins/import/wizard_definition_model.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 24: Avoid unsupported nested ExprRef indexing in v3 prompt nodes
+- impact: Prevents runtime `INVARIANT_VIOLATION` (`unexpected_token`) when per-book cover mode
+  is selected, by keeping prompt input expressions within supported interpreter grammar.
+- affected workflow step or files: v3 cover-loop node normalization in
+  `plugins/import/wizard_definition_model.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 25: Do not require URL answer on non-URL cover modes
+- impact: Prevents `INVARIANT_VIOLATION` (`missing_key`) after selecting `skip`, `file`, or
+  `embedded` in per-book cover loop by removing unconditional reads of URL-only answers.
+- affected workflow step or files: `store_cover_item` normalization in
+  `plugins/import/wizard_definition_model.py` and URL fallback handling in
+  `plugins/import/engine_step_submit.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 26: Primitive-aware replay payload mapping for deterministic wizard debugging
+- impact: Prevents replay-time `VALIDATION_ERROR` churn by enforcing exact payload keys per
+  primitive (`selection` for `ui.prompt_select`, `value` for `ui.prompt_text`, `confirmed` for
+  `ui.prompt_confirm`) and using `start_processing(confirm=true)` as the authoritative finalize
+  path.
+- affected workflow step or files: import replay/debug workflow and guidance in `AGENTS.md`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 27: Replace strict ranking lambdas with typed key helpers
+- impact: Reduces strict `Any` churn in sort-key expressions by keeping key callables explicitly
+  typed and reusable.
+- affected workflow step or files: archive author ranking in
+  `plugins/import/phase1_source_intake.py` (`_bundle_author_hint`).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 28: Keep import test fixtures aligned with audio-only discovery filters
+- impact: Avoids broad false-negative test clusters when PHASE 1 intake accepts only audio
+  suffixes; fixture-only updates restore parity without runtime code changes.
+- affected workflow step or files: import selection and parity tests using fixture trees in
+  `tests/test_import_runtime_v3_parity.py`,
+  `tests/test_import_ui_step_projection_route.py`,
+  `tests/test_import_web_runtime_v3_prompt_metadata.py`,
+  `tests/test_issue214_import_plan_from_selection.py`,
+  `tests/unit/test_import_finalize_success_artifacts_issue130.py`,
+  `tests/unit/test_import_spec_regressions_issue217.py`, and
+  `tests/unit/test_import_wizard_spec_alignment.py`.
+- safety class: instruction-only
+- scope: inside current issue scope

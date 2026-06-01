@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, TypeGuard, cast
 
 from plugins.file_io.service.types import RootName
 
-from .dsl.interpreter_v3 import submit_current_step
+from .dsl.interpreter_v3 import run_automatic_steps, submit_current_step
 from .engine_actions_v3 import is_v3_effective_model
 from .engine_conflicts import (
     apply_conflict_policy,
@@ -153,7 +153,7 @@ def _validate_v3_selection_payload(
     selection = payload.get("selection")
     discovery = _load_v3_discovery(engine=engine, session_id=session_id)
     if not discovery:
-        if selection in (None, "", [], "all"):
+        if selection in (None, "", [], "all", "a", "A"):
             return
         raise StepSubmissionError("selection out of range")
 
@@ -228,6 +228,183 @@ def _needs_v3_plan_refresh(state: dict[str, object]) -> bool:
     )
 
 
+def _refresh_v3_phase1_authority(
+    *,
+    effective_model: dict[str, object],
+    state: dict[str, object],
+    discovery_any: object,
+    fs: object,
+) -> dict[str, object]:
+    if not phase1_session_authority_applies(effective_model=effective_model):
+        return state
+    if not _is_object_list(discovery_any):
+        return state
+    discovery = [dict(item) for item in discovery_any if _is_str_object_dict(item)]
+    vars_state = _as_str_object_dict(state.get("vars"))
+    vars_state["phase1"] = build_phase1_projection(
+        discovery=discovery,
+        state=state,
+        fs=fs,
+    )
+    state["vars"] = vars_state
+    return state
+
+
+def _sync_v3_author_loop_confirmed(*, state: dict[str, object], step_id: str) -> dict[str, object]:
+    if step_id not in {"effective_author_item", "store_author_item"}:
+        return state
+
+    answers = _as_str_object_dict(state.get("answers"))
+    stored_answer = _as_str_object_dict(answers.get("store_author_item"))
+    stored_author = str(stored_answer.get("author") or "").strip()
+
+    vars_state = _as_str_object_dict(state.get("vars"))
+    author_loop = _as_str_object_dict(vars_state.get("author_loop"))
+    index_any = author_loop.get("index")
+    if not isinstance(index_any, int) or isinstance(index_any, bool):
+        return state
+    selected_index = index_any - 1
+    if selected_index < 0:
+        return state
+
+    phase1 = _as_str_object_dict(vars_state.get("phase1"))
+    select_authors = _as_str_object_dict(phase1.get("select_authors"))
+    selected_ids_any = select_authors.get("selected_ids")
+    selected_ids = (
+        [item for item in selected_ids_any if isinstance(item, str)]
+        if _is_object_list(selected_ids_any)
+        else []
+    )
+    if selected_index >= len(selected_ids):
+        return state
+
+    if not stored_author:
+        labels_any = select_authors.get("selected_author_label_list")
+        labels = (
+            [item for item in labels_any if isinstance(item, str)]
+            if _is_object_list(labels_any)
+            else []
+        )
+        if selected_index < len(labels):
+            stored_author = str(labels[selected_index]).strip()
+    if not stored_author:
+        return state
+
+    selected_author_id = selected_ids[selected_index]
+    confirmed = _as_str_object_dict(author_loop.get("confirmed"))
+    confirmed[selected_author_id] = stored_author
+    author_loop["confirmed"] = confirmed
+    vars_state["author_loop"] = author_loop
+    state["vars"] = vars_state
+    return state
+
+
+def _sync_v3_title_loop_confirmed(*, state: dict[str, object], step_id: str) -> dict[str, object]:
+    if step_id not in {"effective_title_item", "store_title_item"}:
+        return state
+
+    answers = _as_str_object_dict(state.get("answers"))
+    stored_answer = _as_str_object_dict(answers.get("store_title_item"))
+    stored_title = str(stored_answer.get("title") or "").strip()
+
+    vars_state = _as_str_object_dict(state.get("vars"))
+    title_loop = _as_str_object_dict(vars_state.get("title_loop"))
+    index_any = title_loop.get("index")
+    if not isinstance(index_any, int) or isinstance(index_any, bool):
+        return state
+    selected_index = index_any - 1
+    if selected_index < 0:
+        return state
+
+    phase1 = _as_str_object_dict(vars_state.get("phase1"))
+    select_books = _as_str_object_dict(phase1.get("select_books"))
+    selected_ids_any = select_books.get("selected_ids")
+    selected_ids = (
+        [item for item in selected_ids_any if isinstance(item, str)]
+        if _is_object_list(selected_ids_any)
+        else []
+    )
+    if selected_index >= len(selected_ids):
+        return state
+
+    if not stored_title:
+        labels_any = select_books.get("selected_book_label_list")
+        labels = (
+            [item for item in labels_any if isinstance(item, str)]
+            if _is_object_list(labels_any)
+            else []
+        )
+        if selected_index < len(labels):
+            stored_title = str(labels[selected_index]).strip()
+    if not stored_title:
+        return state
+
+    selected_book_id = selected_ids[selected_index]
+    confirmed = _as_str_object_dict(title_loop.get("confirmed"))
+    confirmed[selected_book_id] = stored_title
+    title_loop["confirmed"] = confirmed
+    vars_state["title_loop"] = title_loop
+    state["vars"] = vars_state
+    return state
+
+
+def _sync_v3_cover_loop_confirmed(*, state: dict[str, object], step_id: str) -> dict[str, object]:
+    if step_id not in {"cover_mode_item", "cover_mode_item_url", "store_cover_item"}:
+        return state
+
+    current_step_id = str(state.get("current_step_id") or "")
+    if step_id == "cover_mode_item" and current_step_id == "cover_mode_item_url":
+        return state
+
+    answers = _as_str_object_dict(state.get("answers"))
+    store_answer = _as_str_object_dict(answers.get("store_cover_item"))
+    raw_mode = store_answer.get("mode")
+    if raw_mode is None:
+        raw_mode = _as_str_object_dict(answers.get("cover_mode_item")).get("value")
+    mode = str(raw_mode or "").strip().lower()
+    if mode not in {"skip", "url", "file", "embedded"}:
+        mode = "skip"
+
+    raw_url = store_answer.get("url")
+    url = str(raw_url or "").strip()
+    if mode == "url" and not url:
+        fallback_url = _as_str_object_dict(answers.get("cover_mode_item_url")).get("value")
+        url = str(fallback_url or "").strip()
+
+    vars_state = _as_str_object_dict(state.get("vars"))
+    cover_loop = _as_str_object_dict(vars_state.get("cover_loop"))
+    index_any = cover_loop.get("index")
+    if not isinstance(index_any, int) or isinstance(index_any, bool):
+        return state
+    selected_index = index_any - 1
+    if selected_index < 0:
+        return state
+
+    phase1 = _as_str_object_dict(vars_state.get("phase1"))
+    select_books = _as_str_object_dict(phase1.get("select_books"))
+    selected_paths_any = select_books.get("selected_source_relative_paths")
+    selected_paths = (
+        [item for item in selected_paths_any if isinstance(item, str)]
+        if _is_object_list(selected_paths_any)
+        else []
+    )
+    if selected_index >= len(selected_paths):
+        return state
+
+    source_relative_path = selected_paths[selected_index]
+    confirmed = _as_str_object_dict(cover_loop.get("confirmed"))
+    if mode == "url":
+        confirmed[source_relative_path] = {"kind": "url", "url": url}
+    elif mode in {"file", "embedded"}:
+        confirmed[source_relative_path] = {"kind": mode}
+    else:
+        confirmed[source_relative_path] = {"kind": "skip"}
+    cover_loop["confirmed"] = confirmed
+    vars_state["cover_loop"] = cover_loop
+    state["vars"] = vars_state
+    return state
+
+
 def submit_step_impl(
     *,
     engine: ImportWizardEngine,
@@ -286,20 +463,38 @@ def submit_step_impl(
                 session_id=session_id,
                 state=next_state,
             )
+            next_state = _sync_v3_author_loop_confirmed(state=next_state, step_id=step_id)
+            next_state = _sync_v3_title_loop_confirmed(state=next_state, step_id=step_id)
+            next_state = _sync_v3_cover_loop_confirmed(state=next_state, step_id=step_id)
             session_dir = f"import/sessions/{session_id}"
             fs = engine.get_file_service()
             discovery_any = read_json(fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
-            if phase1_session_authority_applies(
-                effective_model=effective_model
-            ) and _is_object_list(discovery_any):
-                discovery = [dict(item) for item in discovery_any if _is_str_object_dict(item)]
-                vars_state = _as_str_object_dict(next_state.get("vars"))
-                vars_state["phase1"] = build_phase1_projection(
-                    discovery=discovery,
-                    state=next_state,
-                    fs=fs,
-                )
-                next_state["vars"] = vars_state
+            next_state = _refresh_v3_phase1_authority(
+                effective_model=effective_model,
+                state=next_state,
+                discovery_any=discovery_any,
+                fs=fs,
+            )
+
+            next_state = run_automatic_steps(
+                effective_model=effective_model,
+                state=next_state,
+                session_id=session_id,
+            )
+            next_state = sync_v3_legacy_state(
+                engine=engine,
+                session_id=session_id,
+                state=next_state,
+            )
+            next_state = _sync_v3_author_loop_confirmed(state=next_state, step_id=step_id)
+            next_state = _sync_v3_title_loop_confirmed(state=next_state, step_id=step_id)
+            next_state = _sync_v3_cover_loop_confirmed(state=next_state, step_id=step_id)
+            next_state = _refresh_v3_phase1_authority(
+                effective_model=effective_model,
+                state=next_state,
+                discovery_any=discovery_any,
+                fs=fs,
+            )
             next_state["updated_at"] = iso_utc_now()
             engine.persist_state(session_id, next_state)
             if _needs_v3_plan_refresh(next_state):

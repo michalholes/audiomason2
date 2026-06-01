@@ -61,8 +61,8 @@ def _write_inbox_books(roots: dict[str, Path], rel_dir: str) -> None:
     base = roots["inbox"] / rel_dir if rel_dir else roots["inbox"]
     (base / "AuthorA" / "Book1").mkdir(parents=True, exist_ok=True)
     (base / "AuthorA" / "Book2").mkdir(parents=True, exist_ok=True)
-    (base / "AuthorA" / "Book1" / "file1.txt").write_text("x", encoding="utf-8")
-    (base / "AuthorA" / "Book2" / "file2.txt").write_text("x", encoding="utf-8")
+    (base / "AuthorA" / "Book1" / "file1.mp3").write_text("x", encoding="utf-8")
+    (base / "AuthorA" / "Book2" / "file2.mp3").write_text("x", encoding="utf-8")
 
 
 def _disable_optional_steps() -> dict[str, object]:

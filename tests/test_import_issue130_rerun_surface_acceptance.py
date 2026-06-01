@@ -70,7 +70,7 @@ def test_rerun_and_resume_read_session_finalize_surface_only(tmp_path: Path, mon
 
     book_dir = roots["inbox"] / "AuthorA" / "Book1"
     book_dir.mkdir(parents=True, exist_ok=True)
-    (book_dir / "track.txt").write_text("x", encoding="utf-8")
+    (book_dir / "track.mp3").write_text("x", encoding="utf-8")
 
     state = engine.create_session(
         "inbox",

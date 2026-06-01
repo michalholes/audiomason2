@@ -57,9 +57,9 @@ def _make_engine(tmp_path: Path) -> ImportWizardEngine:
 
 def _write_inbox_tree(tmp_path: Path) -> None:
     for rel_path, content in (
-        ("A/Book1/a.txt", "x"),
-        ("A/Book2/b.txt", "y"),
-        ("B/Book3/c.txt", "z"),
+        ("A/Book1/a.mp3", "x"),
+        ("A/Book2/b.mp3", "y"),
+        ("B/Book3/c.mp3", "z"),
     ):
         path = tmp_path / "inbox" / rel_path
         path.parent.mkdir(parents=True, exist_ok=True)

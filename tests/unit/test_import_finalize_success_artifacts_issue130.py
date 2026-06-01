@@ -62,7 +62,7 @@ def _write_inbox_books(roots: dict[str, Path]) -> None:
     for book in ("Book1", "Book2"):
         book_dir = roots["inbox"] / "AuthorA" / book
         book_dir.mkdir(parents=True, exist_ok=True)
-        (book_dir / "track.txt").write_text(book, encoding="utf-8")
+        (book_dir / "track.mp3").write_text(book, encoding="utf-8")
 
 
 def _mutate_state_for_finalize(roots: dict[str, Path], session_id: str, *, policy: str) -> None:

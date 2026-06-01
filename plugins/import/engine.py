@@ -709,6 +709,8 @@ class ImportWizardEngine:
         src = _as_str_object_dict(state.get("source"))
         src_root = str(src.get("root") or "")
         src_rel = str(src.get("relative_path") or "")
+        vars_doc = _as_str_object_dict(state.get("vars"))
+        session_authority = _as_str_object_dict(vars_doc.get("phase1"))
         plan = compute_plan(
             session_id=session_id,
             root=src_root,
@@ -716,6 +718,7 @@ class ImportWizardEngine:
             discovery=discovery,
             inputs=_as_str_object_dict(state.get("answers")),
             selected_book_ids=_as_str_list(state.get("selected_book_ids")),
+            session_authority=session_authority,
         )
         atomic_write_json(self._fs, RootName.WIZARDS, f"{session_dir}/plan.json", plan)
 

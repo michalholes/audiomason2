@@ -324,9 +324,9 @@ def _state_for(step: dict, *, status: str = "in_progress") -> dict:
 
 def _write_selection_tree(tmp_path: Path) -> None:
     for rel_path, content in (
-        ("A/Book1/a.txt", "x"),
-        ("A/Book2/b.txt", "y"),
-        ("B/Book3/c.txt", "z"),
+        ("A/Book1/a.mp3", "x"),
+        ("A/Book2/b.mp3", "y"),
+        ("B/Book3/c.mp3", "z"),
     ):
         path = tmp_path / "inbox" / rel_path
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -391,12 +391,12 @@ def test_import_wizard_v3_builds_prompt_model_from_step_ui() -> None:
 
 def test_import_wizard_v3_fetches_projection_for_non_select_prompt_once() -> None:
     step = _prompt_step(
-        step_id="effective_title",
+        step_id="effective_title_item",
         primitive_id="ui.prompt_text",
         ui={"label": "Title", "prompt": "Enter title", "prefill": "Seed"},
     )
     projected = _prompt_step(
-        step_id="effective_title",
+        step_id="effective_title_item",
         primitive_id="ui.prompt_text",
         ui={"label": "Title", "prompt": "Enter title", "prefill": "Runtime"},
     )
@@ -654,19 +654,19 @@ process.stdout.write(JSON.stringify({
 
 def test_import_wizard_v3_stale_projection_guard_requires_active_status() -> None:
     step = _prompt_step(
-        step_id="effective_title",
+        step_id="effective_title_item",
         primitive_id="ui.prompt_text",
         ui={"label": "Title", "prefill": "Seed"},
     )
     projected = _prompt_step(
-        step_id="effective_title",
+        step_id="effective_title_item",
         primitive_id="ui.prompt_text",
         ui={"label": "Title", "prefill": "Runtime"},
     )
     result = _run_v3_dom(
         {
             "fetch_responses": [{"body": projected}],
-            "live": {"session_id": "sess-1", "current_step_id": "effective_title"},
+            "live": {"session_id": "sess-1", "current_step_id": "effective_title_item"},
             "state": _state_for(step),
         },
         """

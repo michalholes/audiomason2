@@ -1,99 +1,168 @@
-# Codex repository guidance
+# CLAUDE.md
 
-This file governs Codex runs started from this repository root.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Repository role
+## Governance
 
-- This repository is an implementation target repository.
-- For audiomason2-targeted execution, the target worktree is `/home/pi/audiomason2`.
-- Keep source changes inside this repository unless the issue pack explicitly says the issue targets a different repo.
+Two authority files govern all work in this repository:
 
-## Local terminology
+- **`governance/governance_local.jsonl`** — cross-repo rules (anti-monolith, docs-gate, specification discipline, code quality, bug discipline). Read this before making any changes.
+- **`governance/specification.jsonl`** — authoritative specification of what this repo does, must do, and must not do. The single source of truth for this codebase.
 
-- `Amp` means the patch runner command `python3 scripts/am_patch.py ...` used for this workflow.
-- `PatchHub` means the runner/artifact workspace rooted at `/home/pi/patchhub`.
-- `PHB` means PatchHub.
-- `AM2` means the broader AudioMason2 project context only. It does not widen repository scope beyond the current target repo.
-- `issue pack` means the selected latest `instructions_<ISSUE>_v<N>.zip` under `/home/pi/patchhub/patches`.
-- `overlay` means the latest `patched_issue<ISSUE>_*.zip` artifact for the same issue.
-- These aliases are local execution shorthand only. Authority remains in repository governance files and the selected issue-pack normative sources.
+## What to read before making changes
 
-## Patch and Amp execution
+**Step 1 — always, for every task:** read `governance_local.jsonl` in full (24 rules, ~3 KB). These are the cross-repo constraints that apply unconditionally.
 
-- Write patch artifacts to `/home/pi/patchhub/patches` as `issue_<ISSUE>_v<N>.zip`.
-- Use one concise ASCII commit message and keep it byte-identical anywhere it is repeated.
-- For audiomason2-targeted execution, run Amp from `/home/pi/patchhub`:
-  `python3 scripts/am_patch.py ISSUE_ID "commit message" patches/issue_<ISSUE>_v<N>.zip --target-repo-name audiomason2`
+**Step 2 — before touching any file:** query the relevant subset of `governance/specification.jsonl` using `spec_navigator.py`. Do not read the full spec — it has 521 rules.
 
-## Post-Amp loop
+```bash
+# See available domain tags
+python3 governance/spec_navigator.py governance/specification.jsonl --list-tags
 
-- If Amp fails, stay in the same issue, inspect only the latest `patched_issue<ISSUE>_*.zip` overlay, the latest relevant Amp logs under `/home/pi/patchhub/patches`, and the minimal additional files strictly required to diagnose the failure, then produce the next patch version and rerun Amp.
-- If Amp succeeds, do not stop immediately. Perform a bounded correctness review against:
-  - the issue intent,
-  - the selected instructions pack,
-  - the files changed by the latest patch,
-  - and any files explicitly implicated by the success log, overlay, or direct dependency inspection.
-- After Amp success, broad repository re-audits are forbidden unless a concrete defect signal requires scope expansion.
-- If you find a remaining logical defect, produce the next patch version in the same issue and run Amp again.
-- Stop only when the issue is truly complete after Amp success and bounded correctness review, or when you hit a hard blocker that requires an explicit user decision.
+# Query by the domain tags that match your task
+python3 governance/spec_navigator.py governance/specification.jsonl --tags PLUGIN REGISTRY
+python3 governance/spec_navigator.py governance/specification.jsonl --tags FILE_IO
+python3 governance/spec_navigator.py governance/specification.jsonl --tags ARCH
+```
 
-## Optimization findings
+**Which tags to use:** look at what the file you are changing imports and does, then pick the matching tags:
+- Code in `plugins/` or using `PluginRegistry`/`PluginLoader` → `PLUGIN`, `REGISTRY`
+- Code touching file system or using file_io plugin → `FILE_IO`
+- Core architectural changes → `ARCH`
+- Configuration → `CONFIG`
+- Web/API endpoints → `ENDPOINT`
 
-- If you identify a concrete optimization that would materially reduce issue-turn count, repeated inspection, repeated Amp reruns, unnecessary patch versions, or other execution waste, you MUST report it to the user.
-- Report only material optimizations. Ignore trivial style preferences and micro-optimizations.
-- Use a short `OPTIMIZATION FINDINGS` block with:
-  - impact
-  - affected workflow step or files
-  - safety class: `instruction-only` | `runtime-only` | `requires-governance`
-  - whether it is inside or outside the current issue scope
-- Do not implement workflow or contract changes outside the current issue scope unless the authoritative issue pack explicitly permits them.
+Available tags: `ARCH`, `ARTIFACT`, `CONFIG`, `CORE`, `ENDPOINT`, `ERROR`, `FILE_IO`, `LAYOUT`, `PLUGIN`, `REGISTRY`, `UI`
 
-## Issue pack lookup
+## Key rules to internalize from `governance_local.jsonl`:
+- Any change to `src/`, `plugins/`, or `docs/` requires a new file under `docs/change_fragments/`
+- Files ≥ 1300 LOC must not grow at all; files ≥ 900 LOC have restricted growth
+- No catchall filenames (`utils.py`, `helpers.py`, etc.) or directories
+- A single change must not touch 3+ ownership areas (`src`, `plugins`, `badguys`, `scripts`, `tests`, `docs`)
+- Specification changes must be committed before implementation changes
 
-- Look only in `/home/pi/patchhub/patches` for `instructions_<ISSUE>_v<N>.zip`.
-- Select the highest available `N`.
-- If no pack exists, or if the latest pack is ambiguous or unreadable, stop and report the blocker.
-- Treat `HANDOFF.md` and `constraint_pack.json` inside the selected pack as the normative issue-pack sources.
+## After every change
 
-## Working set discipline
+When the implementation is complete, run Amp to validate all gates (ruff, mypy, pytest, compile, docs, monolith) and commit:
 
-- Before the first Amp run, derive a minimal working set from:
-  - `HANDOFF.md`,
-  - `constraint_pack.json`,
-  - files explicitly named by the instructions pack,
-  - files directly targeted for modification,
-  - and only the immediate dependency anchors needed to implement the change correctly.
-- Do not broad-scan directories or read unrelated files for context.
-- Do not open the whole repository to orient yourself.
-- If a needed file is not already in the working set, add it only when there is a concrete reason:
-  - direct import or call dependency,
-  - explicit symbol reference,
-  - explicit handoff requirement,
-  - Amp log evidence,
-  - overlay evidence,
-  - or a correctness-review defect signal.
-- Any scope expansion must remain minimal and must be justified by inspected evidence.
-- Build one concise local working summary from the selected issue pack and reuse it during the run instead of repeatedly rereading the full pack.
-- The local working summary is an ephemeral aid only. `HANDOFF.md` and `constraint_pack.json` remain the sole normative issue-pack sources.
-- Do not reread the full selected issue pack after the local working summary is created unless an ambiguity, blocker, overlay signal, or Amp log evidence requires reinspection of the normative source.
-- Do not search the wider governance corpus merely to decode local execution aliases already defined in this file.
+```bash
+python3 /home/pi/gitrepos/patchhub/scripts/am_patch.py -s "your commit message"
+```
 
-## Execution discipline
+Amp detects the repo root from cwd, runs all gates, commits and pushes on success. If a gate fails, fix it and rerun. Task is not done until Amp passes.
 
-- Stay within the current repository unless the instructions pack explicitly says the issue targets a different repo. If the pack implies a multi-repo change, stop and report that the issue must be split.
-- Use only:
-  - the selected issue pack,
-  - the current repository state,
-  - the latest Amp overlay/logs,
-  - and the files directly needed under the working-set discipline.
-- Do not read repository-local patch manuals or unrelated historical patch artifacts unless the issue pack explicitly requires it.
-- Do not mine old `issue_*.zip` files for format examples.
-- Before the first Amp run, verify that the patch artifact includes every modified file, including add-file hunks for new files.
-- Prefer the smallest correct patch over broad cleanup, opportunistic refactors, or speculative consistency passes.
-- Do not widen scope for style-only cleanup, naming cleanup, incidental deduplication, or unrelated local improvements.
-- During repair, prefer file-local fixes first. Only escalate beyond the minimal implicated files when logs, overlay state, or direct dependency inspection prove it is necessary.
+## Commands
 
-## Cleanup
+```bash
+# Install with dev dependencies
+pip install -e ".[dev]"
 
-- Remove scratch files, temporary extracted artifacts, ad hoc helper patches, and other non-normative debris before stopping.
-- Keep only normative outputs: issue patch zips under `/home/pi/patchhub/patches`, relevant Amp logs/overlays, and the repository changes that belong to the issue.
+# Run all tests
+pytest
+
+# Run a single test file
+pytest tests/path/to/test_file.py
+
+# Run a single test
+pytest tests/path/to/test_file.py::test_name
+
+# Lint
+ruff check src/ plugins/ badguys/ tests/
+
+# Type check
+mypy src/
+
+# Run Amp (patch runner) — from /home/pi/gitrepos/patchhub
+python3 scripts/am_patch.py ISSUE_ID "commit message" patches/issue_<ISSUE>_v<N>.zip --target-repo-name audiomason2
+```
+
+## Debugging interactive import flow (deterministic replay)
+
+When `./audiomason import` is hard to debug interactively, replay the same flow
+through engine APIs using a recorded answer list. This exercises the same
+step/state transitions as the CLI renderer.
+
+- Use dynamic imports for import plugin modules (`import` is a Python keyword):
+  `importlib.import_module("plugins.import.engine")`.
+- Start session with explicit user-facing semantics:
+  `start_user_facing_session(..., intent="new")`.
+- For each current step, submit payload by primitive type:
+  - `ui.prompt_select` -> `{"selection": ...}`
+  - `ui.prompt_text` -> `{"value": ...}`
+  - `ui.prompt_confirm` -> `{"confirmed": true|false}`
+- Drive the loop by `state["current_step_id"]` after each `submit_step(...)`.
+- Do not call `finalize()` (legacy unsupported); call
+  `start_processing(session_id, {"confirm": True})` and capture its JSON output.
+
+Example skeleton:
+
+```bash
+PYTHONPATH=src python3 - <<'PY'
+import importlib
+import json
+from pathlib import Path
+
+from audiomason.core.config import ConfigResolver
+from audiomason.core.logging import VerbosityLevel, set_verbosity
+
+set_verbosity(VerbosityLevel.QUIET)
+
+engine_mod = importlib.import_module("plugins.import.engine")
+start_mod = importlib.import_module("plugins.import.engine_session_start_boundary")
+ImportWizardEngine = engine_mod.ImportWizardEngine
+start_user_facing_session = start_mod.start_user_facing_session
+
+answers = json.loads(Path("/tmp/opencode/import_replay_answers.json").read_text())
+resolver = ConfigResolver(cli_args={})
+engine = ImportWizardEngine(resolver=resolver)
+state = start_user_facing_session(
+    engine=engine,
+    root="inbox",
+    relative_path="",
+    mode="stage",
+    intent="new",
+)
+session_id = str(state.get("session_id") or "")
+
+for answer in answers:
+    step_id = str(state.get("current_step_id") or "")
+    payload = dict(answer["payload"])
+    state = engine.submit_step(session_id, step_id, payload)
+    if "error" in state:
+        print(json.dumps(state, indent=2, sort_keys=True))
+        raise SystemExit(1)
+
+print(json.dumps(engine.start_processing(session_id, {"confirm": True}), indent=2, sort_keys=True))
+PY
+```
+
+## Architecture
+
+AudioMason2 is a plugin-based audiobook processing pipeline.
+
+**`src/audiomason/core/`** — framework kernel:
+- `pipeline.py` / `orchestration.py` — pipeline execution and phase orchestration
+- `plugin_registry.py` / `loader.py` — plugin discovery and loading
+- `interfaces.py` — base interfaces all plugins implement
+- `process_contract_authority.py` / `process_contract_runtime.py` — process job contract enforcement
+- `events.py` / `log_bus.py` — event and log routing between core and plugins
+
+**`src/audiomason/api/`** — public API surface (config, plugin queries)
+
+**`plugins/<name>/`** — each plugin is self-contained: `plugin.py` (logic), `plugin.yaml` (manifest). Plugins must not import from other plugins. Each plugin owns its area exclusively.
+
+**`badguys/`** — integration test suite runner. Executes recipe-based test suites against the live system.
+
+**`docs/change_fragments/`** — one file per change that touches `src/`, `plugins/`, or `docs/`. Never edit `docs/changes.md` directly.
+
+## Ownership areas
+
+| Area | Path |
+|---|---|
+| `src` | `src/` |
+| `plugins` | `plugins/` |
+| `scripts` | `scripts/` |
+| `tests` | `tests/` |
+| `docs` | `docs/` |
+
+A single change must not span 3+ of these areas.

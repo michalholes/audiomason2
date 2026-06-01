@@ -124,15 +124,12 @@ def _authority_book_meta(
     authority_book_meta = _as_nested_str_object_dict(authority_book_meta_any)
     source_book_meta: dict[str, dict[str, object]] = {}
     if authority_book_meta:
-        source_projection = build_phase1_source_projection(
-            discovery=discovery,
-            state={
-                "source": {"root": root, "relative_path": relative_path},
-                "selected_book_ids": list(selected_book_ids),
-            },
-        )
-        source_meta_any = source_projection.get("book_meta")
-        source_book_meta = _as_nested_str_object_dict(source_meta_any)
+        source_book_meta = {
+            book_id: {
+                "source_relative_path": str(meta.get("source_relative_path") or ""),
+            }
+            for book_id, meta in authority_book_meta.items()
+        }
         return authority_book_meta, source_book_meta
 
     phase1_state: dict[str, object] = {

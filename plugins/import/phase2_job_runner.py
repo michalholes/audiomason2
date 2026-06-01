@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Protocol, TypeGuard, cast
 
-from plugins.file_io.import_runtime import normalize_relative_path, publish_staged
+from plugins.file_io.import_runtime import normalize_relative_path, publish_staged, stage_source
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
@@ -103,6 +103,15 @@ class _Id3TaggerPlugin(Protocol):
 
 _AUDIO_SUFFIXES = {".m4a", ".m4b", ".mp3", ".opus"}
 _CHAPTER_SUFFIXES = {".m4a", ".m4b"}
+_ARCHIVE_SUFFIXES = (
+    ".tar.bz2",
+    ".tar.gz",
+    ".tar",
+    ".tgz",
+    ".zip",
+    ".rar",
+    ".7z",
+)
 
 
 def _parse_job_requests_path(text: str) -> tuple[RootName, str]:
@@ -121,6 +130,26 @@ def _remove_path(path: Path) -> None:
         shutil.rmtree(path)
         return
     path.unlink()
+
+
+def _is_archive_segment(text: str) -> bool:
+    lower = text.lower()
+    return any(lower.endswith(suffix) for suffix in _ARCHIVE_SUFFIXES)
+
+
+def _split_virtual_archive_source_rel(source_rel: str) -> tuple[str, str] | None:
+    parts = [part for part in normalize_relative_path(source_rel).split("/") if part]
+    for index, part in enumerate(parts):
+        if not _is_archive_segment(part):
+            continue
+        if index + 1 >= len(parts):
+            return None
+        archive_rel = "/".join(parts[: index + 1])
+        inside_rel = "/".join(parts[index + 1 :])
+        if inside_rel:
+            return archive_rel, inside_rel
+        return None
+    return None
 
 
 def _iter_audio_sources(source_path: Path) -> list[Path]:
@@ -273,9 +302,14 @@ def _execute_plan(plugin: object, plan: object) -> object:
 
 async def _run_audio_import(
     *,
+    fs: FileService,
     plugin_loader: _PluginLoader,
+    source_root: RootName,
+    source_rel: str,
     source_path: Path,
     work_path: Path,
+    job_id: str,
+    action_index: int,
     capability: dict[str, object],
 ) -> None:
     plugin_raw = plugin_loader.get_plugin("audio_processor")
@@ -293,10 +327,44 @@ async def _run_audio_import(
         plugin.split_chapters = bool(options["split_chapters"])
 
     work_path.mkdir(parents=True, exist_ok=True)
+    staged_source_rel: str | None = None
+    effective_source_path = source_path
+    virtual_archive = _split_virtual_archive_source_rel(source_rel)
+    if virtual_archive is not None:
+        archive_rel, archive_inside_rel = virtual_archive
+        staged_source_rel = normalize_relative_path(
+            f"import/process_runtime/{job_id}/{action_index:04d}/_source"
+        )
+        stage_source(
+            fs,
+            source_root=source_root,
+            source_relative_path=archive_rel,
+            work_relative_path=staged_source_rel,
+        )
+        extracted_root = materialize_local_path(fs, RootName.STAGE, staged_source_rel)
+        effective_source_path = extracted_root / Path(
+            *[part for part in archive_inside_rel.split("/") if part]
+        )
+    elif source_path.is_file() and source_path.suffix.lower() not in _AUDIO_SUFFIXES:
+        staged_source_rel = normalize_relative_path(
+            f"import/process_runtime/{job_id}/{action_index:04d}/_source"
+        )
+        stage_source(
+            fs,
+            source_root=source_root,
+            source_relative_path=source_rel,
+            work_relative_path=staged_source_rel,
+        )
+        effective_source_path = materialize_local_path(fs, RootName.STAGE, staged_source_rel)
+    if not effective_source_path.exists():
+        effective_source_path_norm = normalize_relative_path(str(effective_source_path))
+        raise ValueError(f"source path missing after staging: {effective_source_path_norm}")
     try:
-        for source_file in _iter_audio_sources(source_path):
+        for source_file in _iter_audio_sources(effective_source_path):
             relative_parent = (
-                source_file.relative_to(source_path).parent if source_path.is_dir() else Path()
+                source_file.relative_to(effective_source_path).parent
+                if effective_source_path.is_dir()
+                else Path()
             )
             output_dir = work_path / relative_parent
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -313,6 +381,8 @@ async def _run_audio_import(
             if isinstance(execute_result, Awaitable):
                 await execute_result
     finally:
+        if staged_source_rel is not None:
+            fs.delete_path(RootName.STAGE, staged_source_rel, missing_ok=True)
         plugin.bitrate = original_bitrate
         plugin.loudnorm = original_loudnorm
         plugin.split_chapters = original_split_chapters
@@ -496,9 +566,14 @@ async def run_phase2_job_requests(
             kind = str(capability.get("kind") or "")
             if kind == "audio.import":
                 await _run_audio_import(
+                    fs=fs,
                     plugin_loader=plugin_loader,
+                    source_root=source_root,
+                    source_rel=source_rel,
                     source_path=source_path,
                     work_path=work_path,
+                    job_id=job_id,
+                    action_index=action_index,
                     capability=capability,
                 )
                 _apply_rename_authority(work_path=work_path, action=action)

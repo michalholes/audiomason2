@@ -13,6 +13,16 @@ from plugins.file_io.import_runtime import normalize_relative_path
 
 from .fingerprints import fingerprint_json
 
+_ARCHIVE_SUFFIXES = (
+    ".tar.bz2",
+    ".tar.gz",
+    ".tar",
+    ".tgz",
+    ".zip",
+    ".rar",
+    ".7z",
+)
+
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
     if not isinstance(value, dict):
@@ -63,6 +73,19 @@ def _string_dict(value: object) -> dict[str, str]:
         if key_text and item_text:
             out[key_text] = item_text
     return out
+
+
+def _is_archive_segment(text: str) -> bool:
+    lower = text.lower()
+    return any(lower.endswith(suffix) for suffix in _ARCHIVE_SUFFIXES)
+
+
+def _is_virtual_archive_source_rel(source_relative_path: str) -> bool:
+    parts = [part for part in normalize_relative_path(source_relative_path).split("/") if part]
+    for index, part in enumerate(parts):
+        if _is_archive_segment(part) and index + 1 < len(parts):
+            return True
+    return False
 
 
 def _metadata_field_map(inputs: dict[str, object]) -> dict[str, str]:
@@ -163,6 +186,9 @@ def _rename_authority_for_action(
 ) -> dict[str, object]:
     audio_processing = _policy_dict(inputs, "audio_processing")
     if bool(audio_processing.get("split_chapters", False)):
+        return {"mode": "keep_generated", "extension": ".mp3"}
+    source_rel = normalize_relative_path(str(item.get("source_relative_path") or ""))
+    if _is_virtual_archive_source_rel(source_rel):
         return {"mode": "keep_generated", "extension": ".mp3"}
 
     outputs_any = item.get("rename_outputs")

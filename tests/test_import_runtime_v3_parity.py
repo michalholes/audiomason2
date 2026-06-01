@@ -514,7 +514,7 @@ def test_autofill_path_is_backend_driven_for_cli_and_web(tmp_path: Path) -> None
 
 
 def _write_selection_tree(tmp_path: Path) -> None:
-    for rel_path in ("A/Book1/a.txt", "B/Book2/b.txt"):
+    for rel_path in ("A/Book1/a.mp3", "B/Book2/b.mp3"):
         path = tmp_path / "inbox" / rel_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("x", encoding="utf-8")
@@ -565,7 +565,7 @@ def test_cli_and_web_share_scoped_author_prompt_select_display_items(
     tmp_path: Path,
 ) -> None:
     engine, _resolver = _make_engine(tmp_path)
-    for rel_path in ("A/Book1/a.txt", "A/Book2/b.txt"):
+    for rel_path in ("A/Book1/a.mp3", "A/Book2/b.mp3"):
         path = tmp_path / "inbox" / rel_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("x", encoding="utf-8")

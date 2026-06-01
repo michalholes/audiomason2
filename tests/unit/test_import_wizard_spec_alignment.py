@@ -128,8 +128,8 @@ def test_select_books_ok_auto_advances_past_plan_preview(tmp_path: Path) -> None
     root = roots["inbox"] / "AuthorA"
     (root / "Book1").mkdir(parents=True, exist_ok=True)
     (root / "Book2").mkdir(parents=True, exist_ok=True)
-    ((root / "Book1") / "a.txt").write_text("x", encoding="utf-8")
-    ((root / "Book2") / "b.txt").write_text("y", encoding="utf-8")
+    ((root / "Book1") / "a.mp3").write_text("x", encoding="utf-8")
+    ((root / "Book2") / "b.mp3").write_text("y", encoding="utf-8")
 
     state = engine.create_session(
         "inbox",
@@ -200,9 +200,9 @@ def test_hidden_steps_auto_advance_without_extra_submit_calls(tmp_path: Path) ->
     assert state.get("current_step_id") == "effective_author_item"
 
     state = engine.submit_step(session_id, "effective_author_item", {"value": "Author A"})
-    assert state.get("current_step_id") == "effective_title"
+    assert state.get("current_step_id") == "effective_title_item"
 
-    state = engine.submit_step(session_id, "effective_title", {"value": "Book A"})
+    state = engine.submit_step(session_id, "effective_title_item", {"value": "Book A"})
     assert state.get("current_step_id") == "covers_policy_mode"
 
     trace = [entry["step_id"] for entry in state["trace"]]
@@ -219,7 +219,10 @@ def test_hidden_steps_auto_advance_without_extra_submit_calls(tmp_path: Path) ->
         "store_author_item",
         "author_loop_check",
         "metadata_validate_after_author",
-        "effective_title",
+        "init_title_loop",
+        "effective_title_item",
+        "store_title_item",
+        "title_loop_check",
         "metadata_validate_after_title",
         "effective_author_title",
         "filename_policy_author",

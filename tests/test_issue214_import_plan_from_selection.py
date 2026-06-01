@@ -48,11 +48,11 @@ def _make_engine(tmp_path: Path):
 def _write_inbox_tree(roots: dict[str, Path]) -> None:
     d = roots["inbox"] / "A" / "Book1"
     d.mkdir(parents=True, exist_ok=True)
-    (d / "a.txt").write_text("x", encoding="utf-8")
+    (d / "track01.mp3").write_text("x", encoding="utf-8")
 
     d = roots["inbox"] / "B" / "Book2"
     d.mkdir(parents=True, exist_ok=True)
-    (d / "b.txt").write_text("y", encoding="utf-8")
+    (d / "track01.mp3").write_text("y", encoding="utf-8")
 
 
 def _write_inbox_audio_tree(roots: dict[str, Path]) -> None:
@@ -145,7 +145,7 @@ def test_plan_uses_canonical_target_and_persisted_rename_outputs(tmp_path: Path)
     state = engine.submit_step(session_id, "select_authors", {"selection": "1"})
     state = engine.submit_step(session_id, "select_books", {"selection": "1"})
     state = engine.submit_step(session_id, "effective_author_item", {"value": "Canonical Author"})
-    state = engine.submit_step(session_id, "effective_title", {"value": "Canonical Book"})
+    state = engine.submit_step(session_id, "effective_title_item", {"value": "Canonical Book"})
 
     plan = engine.compute_plan(session_id)
     selected = plan.get("selected_books") or []

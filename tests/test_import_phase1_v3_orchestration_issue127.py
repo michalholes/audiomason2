@@ -193,9 +193,12 @@ def test_multi_book_author_and_title_edit_apply_per_book(
     assert state["current_step_id"] == "effective_author_item"
 
     state = engine.submit_step(session_id, "effective_author_item", {"value": "Canonical Author"})
-    assert state["current_step_id"] == "effective_title"
+    assert state["current_step_id"] == "effective_title_item"
 
-    state = engine.submit_step(session_id, "effective_title", {"value": "Canonical Title"})
+    state = engine.submit_step(session_id, "effective_title_item", {"value": "Canonical Title"})
+    assert state["current_step_id"] == "effective_title_item"
+
+    state = engine.submit_step(session_id, "effective_title_item", {"value": "Canonical Title"})
     assert state["current_step_id"] == "covers_policy_mode"
 
     authority_by_book = state["vars"]["phase1"]["metadata"]["authority_by_book"]
@@ -203,6 +206,80 @@ def test_multi_book_author_and_title_edit_apply_per_book(
     authors = {book["author_label"] for book in authority_by_book.values()}
     assert titles == {"Canonical Title"}
     assert authors == {"Canonical Author"}
+
+
+def test_multi_author_loop_keeps_per_author_overrides(tmp_path: Path) -> None:
+    engine, roots = _make_engine(tmp_path)
+    _write_book(roots["inbox"], "AuthorOne", "Book1")
+    _write_book(roots["inbox"], "AuthorTwo", "Book2")
+
+    state = engine.create_session("inbox", "", mode="stage")
+    session_id = str(state["session_id"])
+
+    if state["current_step_id"] == "select_authors":
+        state = engine.submit_step(session_id, "select_authors", {"selection": "all"})
+        assert state["current_step_id"] == "select_books"
+    else:
+        assert state["current_step_id"] == "select_books"
+
+    state = engine.submit_step(session_id, "select_books", {"selection": "all"})
+    assert state["current_step_id"] == "effective_author_item"
+
+    state = engine.submit_step(session_id, "effective_author_item", {"value": "Author One Canon"})
+    assert state["current_step_id"] == "effective_author_item"
+
+    state = engine.submit_step(session_id, "effective_author_item", {"value": "Author Two Canon"})
+    assert state["current_step_id"] == "effective_title_item"
+
+    state = engine.submit_step(session_id, "effective_title_item", {"value": "Book One Canon"})
+    assert state["current_step_id"] == "effective_title_item"
+
+    state = engine.submit_step(session_id, "effective_title_item", {"value": "Book Two Canon"})
+    assert state["current_step_id"] == "covers_policy_mode"
+
+    authority_by_book = state["vars"]["phase1"]["metadata"]["authority_by_book"]
+    authors = {book["author_label"] for book in authority_by_book.values()}
+    titles = {book["book_label"] for book in authority_by_book.values()}
+    assert authors == {"Author One Canon", "Author Two Canon"}
+    assert titles == {"Book One Canon", "Book Two Canon"}
+
+
+def test_per_item_author_title_edits_are_authoritative_over_validation_suggestions(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    engine, roots = _make_engine(tmp_path)
+    _write_book(roots["inbox"], "A1", "B1")
+    _write_book(roots["inbox"], "A2", "B2")
+    _install_phase1_metadata_callable(
+        monkeypatch,
+        result=lambda *, author, title: {
+            "provider": "metadata_openlibrary",
+            "author": {"value": author, "canonical": "SERVER_AUTHOR", "valid": True},
+            "book": {"value": title, "canonical": "SERVER_TITLE", "valid": True},
+        },
+    )
+
+    state = engine.create_session("inbox", "", mode="stage")
+    session_id = str(state["session_id"])
+    if state["current_step_id"] == "select_authors":
+        state = engine.submit_step(session_id, "select_authors", {"selection": "all"})
+    state = engine.submit_step(session_id, "select_books", {"selection": "all"})
+
+    state = engine.submit_step(session_id, "effective_author_item", {"value": "User Author One"})
+    state = engine.submit_step(session_id, "effective_author_item", {"value": "User Author Two"})
+    state = engine.submit_step(session_id, "effective_title_item", {"value": "User Book One"})
+    state = engine.submit_step(session_id, "effective_title_item", {"value": "User Book Two"})
+
+    authority_by_book = state["vars"]["phase1"]["metadata"]["authority_by_book"]
+    assert {book["author_label"] for book in authority_by_book.values()} == {
+        "User Author One",
+        "User Author Two",
+    }
+    assert {book["book_label"] for book in authority_by_book.values()} == {
+        "User Book One",
+        "User Book Two",
+    }
 
 
 def test_metadata_projection_applies_multi_book_title_override_per_book(tmp_path: Path) -> None:
@@ -300,7 +377,7 @@ def test_multi_book_author_edit_keeps_distinct_titles_until_title_step(
     state = engine.submit_step(session_id, "select_books", {"selection": "all"})
     state = engine.submit_step(session_id, "effective_author_item", {"value": "Canonical Author"})
 
-    assert state["current_step_id"] == "effective_title"
+    assert state["current_step_id"] == "effective_title_item"
     authority_by_book = state["vars"]["phase1"]["metadata"]["authority_by_book"]
     assert {book["author_label"] for book in authority_by_book.values()} == {"Canonical Author"}
     assert {book["book_label"] for book in authority_by_book.values()} == {"Book1", "Book2"}
