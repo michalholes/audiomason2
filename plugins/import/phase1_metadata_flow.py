@@ -6,6 +6,7 @@ ASCII-only.
 from __future__ import annotations
 
 import re
+import time
 import unicodedata
 from copy import deepcopy
 from typing import TypeGuard, cast
@@ -70,6 +71,27 @@ _ARCHIVE_SUFFIXES = (
 )
 _TRAILING_TAG_RE = re.compile(r"(?:\s*(?:\([^)]*\)|\[[^]]*\]))+\s*$")
 _DURATION_SUFFIX_RE = re.compile(r"\s*\(\d+h\d+m(?:\d+s)?\)\s*$", re.IGNORECASE)
+_TITLE_TOKEN_RE = re.compile(r"[^a-z0-9]+")
+_TITLE_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "at",
+    "do",
+    "i",
+    "in",
+    "k",
+    "konci",
+    "na",
+    "of",
+    "po",
+    "s",
+    "the",
+    "u",
+    "v",
+    "ve",
+    "z",
+}
 
 
 def _ascii_fold(text: str) -> str:
@@ -79,6 +101,31 @@ def _ascii_fold(text: str) -> str:
 
 def _cleanup_whitespace(text: str) -> str:
     return " ".join(part for part in str(text).replace("_", " ").split() if part)
+
+
+def _title_tokens_for_overlap(value: str) -> set[str]:
+    folded = _ascii_fold(_cleanup_whitespace(value)).lower()
+    tokens = {
+        token for token in _TITLE_TOKEN_RE.split(folded) if token and token not in _TITLE_STOPWORDS
+    }
+    return tokens
+
+
+def _prefer_source_title_if_translation(*, requested_title: str, suggested_title: str) -> str:
+    requested = _cleanup_whitespace(requested_title)
+    suggested = _cleanup_whitespace(suggested_title)
+    if not requested or not suggested:
+        return suggested or requested
+    requested_tokens = _title_tokens_for_overlap(requested)
+    suggested_tokens = _title_tokens_for_overlap(suggested)
+    if not requested_tokens or not suggested_tokens:
+        return suggested
+    shared = len(requested_tokens & suggested_tokens)
+    base = max(len(requested_tokens), len(suggested_tokens))
+    overlap_ratio = float(shared) / float(base)
+    if overlap_ratio < 0.45:
+        return requested
+    return suggested
 
 
 def _strip_trailing_tags(text: str) -> str:
@@ -113,6 +160,22 @@ def _normalize_source_title_label(*, author: str, value: object) -> str:
             folded = folded[len(folded_author) + 3 :].strip()
         elif folded.lower().startswith(lower_author + "/"):
             folded = folded[len(folded_author) + 1 :].strip()
+        else:
+            author_tokens = [token for token in folded_author.split() if token]
+            if len(author_tokens) >= 2:
+                first = author_tokens[0]
+                last = author_tokens[-1]
+                initial = first[:1]
+                prefix_patterns = (
+                    f"{last} {initial} ",
+                    f"{last}, {initial} ",
+                    f"{last} {first} ",
+                )
+                lowered = folded.lower()
+                for prefix in prefix_patterns:
+                    if lowered.startswith(prefix.lower()):
+                        folded = folded[len(prefix) :].strip()
+                        break
     return _cleanup_whitespace(folded)
 
 
@@ -127,29 +190,39 @@ def _author_overrides_by_book(
     source_projection: dict[str, object],
     state: dict[str, object],
     selected_book_ids: list[str],
-) -> dict[str, str]:
+) -> tuple[dict[str, str], dict[str, bool]]:
     vars_state = _as_str_object_dict(state.get("vars"))
     author_loop = _as_str_object_dict(vars_state.get("author_loop"))
     confirmed = _as_str_object_dict(author_loop.get("confirmed"))
     if not confirmed:
-        return {}
+        return {}, {}
 
     selected_books_set = set(selected_book_ids)
     author_to_books_any = source_projection.get("author_to_books")
     author_to_books = _as_str_object_dict(author_to_books_any)
     selected_authors = _as_str_object_dict(source_projection.get("select_authors"))
     selected_author_ids = _as_str_list(selected_authors.get("selected_ids"))
+    selected_author_labels = _as_str_list(selected_authors.get("selected_author_label_list"))
+
+    default_by_author_id: dict[str, str] = {}
+    for index, author_id in enumerate(selected_author_ids):
+        if index < len(selected_author_labels):
+            default_by_author_id[author_id] = str(selected_author_labels[index]).strip()
 
     overrides: dict[str, str] = {}
+    manual_by_book: dict[str, bool] = {}
     for author_id in selected_author_ids:
         override = str(confirmed.get(author_id) or "").strip()
         if not override:
             continue
+        default_author = str(default_by_author_id.get(author_id) or "").strip()
+        manual_override = bool(default_author) and override != default_author
         book_ids = _as_str_list(author_to_books.get(author_id))
         for book_id in book_ids:
             if book_id in selected_books_set:
                 overrides[book_id] = override
-    return overrides
+                manual_by_book[book_id] = manual_override
+    return overrides, manual_by_book
 
 
 def _title_overrides_by_book(
@@ -157,25 +230,34 @@ def _title_overrides_by_book(
     source_projection: dict[str, object],
     state: dict[str, object],
     selected_book_ids: list[str],
-) -> dict[str, str]:
+) -> tuple[dict[str, str], dict[str, bool]]:
     vars_state = _as_str_object_dict(state.get("vars"))
     title_loop = _as_str_object_dict(vars_state.get("title_loop"))
     confirmed = _as_str_object_dict(title_loop.get("confirmed"))
     if not confirmed:
-        return {}
+        return {}, {}
 
     selected_books = _as_str_object_dict(source_projection.get("select_books"))
     selected_ids = _as_str_list(selected_books.get("selected_ids"))
+    selected_labels = _as_str_list(selected_books.get("selected_book_label_list"))
     selected_books_set = set(selected_book_ids)
 
+    default_by_book_id: dict[str, str] = {}
+    for index, book_id in enumerate(selected_ids):
+        if index < len(selected_labels):
+            default_by_book_id[book_id] = str(selected_labels[index]).strip()
+
     overrides: dict[str, str] = {}
+    manual_by_book: dict[str, bool] = {}
     for book_id in selected_ids:
         if book_id not in selected_books_set:
             continue
         override = str(confirmed.get(book_id) or "").strip()
         if override:
             overrides[book_id] = override
-    return overrides
+            default_title = str(default_by_book_id.get(book_id) or "").strip()
+            manual_by_book[book_id] = bool(default_title) and override != default_title
+    return overrides, manual_by_book
 
 
 def _normalize_root_audio_value(*, value: object, fallback: str) -> str:
@@ -222,17 +304,47 @@ def _archive_virtual_author_title(
 _VALIDATION_CACHE: dict[tuple[str, str], tuple[dict[str, object], dict[str, object]]] = {}
 
 
+def _validation_cache_key(author: str, title: str) -> tuple[str, str]:
+    author_key = " ".join(str(author).split()).casefold()
+    title_key = " ".join(str(title).split()).casefold()
+    return (author_key, title_key)
+
+
+def _has_validation_signal(
+    *,
+    author_result: dict[str, object],
+    book_result: dict[str, object],
+) -> bool:
+    if bool(author_result.get("valid")) or bool(book_result.get("valid")):
+        return True
+
+    author_suggestion = str(author_result.get("suggestion") or "").strip()
+    author_canonical = str(author_result.get("canonical") or "").strip()
+    if author_suggestion or author_canonical:
+        return True
+
+    for key in ("canonical", "suggestion"):
+        candidate = book_result.get(key)
+        if _is_str_object_dict(candidate):
+            book_author = str(candidate.get("author") or "").strip()
+            book_title = str(candidate.get("title") or "").strip()
+            if book_author or book_title:
+                return True
+    return False
+
+
 class _OpenLibraryValidateCallable:
     def cache_clear(self) -> None:
         _VALIDATION_CACHE.clear()
 
     def __call__(self, author: str, title: str) -> tuple[dict[str, object], dict[str, object]]:
-        key = (author, title)
+        key = _validation_cache_key(author, title)
         cached = _VALIDATION_CACHE.get(key)
         if cached is not None:
             return dict(cached[0]), dict(cached[1])
         author_validation, book_validation = validate_author_title(author, title)
-        _VALIDATION_CACHE[key] = (dict(author_validation), dict(book_validation))
+        if _has_validation_signal(author_result=author_validation, book_result=book_validation):
+            _VALIDATION_CACHE[key] = (dict(author_validation), dict(book_validation))
         return dict(author_validation), dict(book_validation)
 
 
@@ -240,7 +352,14 @@ _openlibrary_validate = _OpenLibraryValidateCallable()
 
 
 def _validated_author_title(*, author: str, title: str) -> tuple[dict[str, object], str, str]:
-    author_validation, book_validation = _openlibrary_validate(author, title)
+    author_validation: dict[str, object] = dict()
+    book_validation: dict[str, object] = dict()
+    for attempt in range(3):
+        author_validation, book_validation = _openlibrary_validate(author, title)
+        if _has_validation_signal(author_result=author_validation, book_result=book_validation):
+            break
+        if attempt < 2:
+            time.sleep(0.2)
 
     canonical_author = str(author_validation.get("canonical") or author)
     suggestion_author = author_validation.get("suggestion")
@@ -264,6 +383,10 @@ def _validated_author_title(*, author: str, title: str) -> tuple[dict[str, objec
     canonical_title = _normalize_root_audio_value(
         value=canonical_title,
         fallback=_ROOT_AUDIO_TITLE,
+    )
+    canonical_title = _prefer_source_title_if_translation(
+        requested_title=title,
+        suggested_title=canonical_title,
     )
 
     return (
@@ -320,6 +443,10 @@ def _canonicalize_validation_payload(
     canonical_title = _normalize_root_audio_value(
         value=canonical_title,
         fallback=_ROOT_AUDIO_TITLE,
+    )
+    canonical_title = _prefer_source_title_if_translation(
+        requested_title=fallback_title,
+        suggested_title=canonical_title,
     )
     return validation, canonical_author, canonical_title
 
@@ -478,12 +605,18 @@ def build_phase1_metadata_projection(
     selected = _as_str_object_dict(source_projection.get("select_books"))
     selected_ids = _as_str_list(selected.get("selected_ids"))
     selected_paths = _as_str_list(selected.get("selected_source_relative_paths"))
-    author_overrides_by_book = _author_overrides_by_book(
+    (
+        author_overrides_by_book,
+        manual_author_overrides_by_book,
+    ) = _author_overrides_by_book(
         source_projection=source_projection,
         state=state,
         selected_book_ids=selected_ids,
     )
-    title_overrides_by_book = _title_overrides_by_book(
+    (
+        title_overrides_by_book,
+        manual_title_overrides_by_book,
+    ) = _title_overrides_by_book(
         source_projection=source_projection,
         state=state,
         selected_book_ids=selected_ids,
@@ -542,15 +675,18 @@ def build_phase1_metadata_projection(
         title_answer = _answer_dict(state, "effective_title")
     merged_answer = _answer_dict(state, "effective_author_title")
 
-    author_override_raw = author_answer.get("author")
+    explicit_author_override_raw = author_answer.get("author")
+    explicit_title_override_raw = title_answer.get("title")
+
+    author_override_raw = explicit_author_override_raw
     if author_override_raw is None:
         author_override_raw = merged_answer.get("author")
-    title_override_raw = title_answer.get("title")
+    title_override_raw = explicit_title_override_raw
     if title_override_raw is None:
         title_override_raw = merged_answer.get("title")
 
-    author_override_present = author_override_raw is not None
-    title_override_present = title_override_raw is not None
+    author_override_present = explicit_author_override_raw is not None
+    title_override_present = explicit_title_override_raw is not None
     explicit_validation, explicit_validation_step, _ = _explicit_validation_from_state(state)
 
     if (
@@ -575,14 +711,14 @@ def build_phase1_metadata_projection(
             explicit_validation_step == "metadata_validate_after_author"
             and not title_override_present
         )
-        target_ids = selected_ids
+        target_ids: set[str] = set(selected_ids)
         if (
             explicit_validation_step == "metadata_validate_initial"
             and not author_override_present
             and not title_override_present
             and selected_ids
         ):
-            target_ids = [selected_ids[0]]
+            target_ids = {selected_ids[0]}
         for book_id in target_ids:
             current = dict(validated_books.get(book_id) or {})
             current_title = str(current.get("book_label") or _ROOT_AUDIO_TITLE)
@@ -604,32 +740,70 @@ def build_phase1_metadata_projection(
         or author_override_present
         or title_override_present
     ):
-        explicit_per_item_override = bool(author_overrides_by_book or title_overrides_by_book)
+        target_ids = set(selected_ids)
+        vars_state = _as_str_object_dict(state.get("vars"))
+        title_loop = _as_str_object_dict(vars_state.get("title_loop"))
+        title_index_any = title_loop.get("index")
+        if (
+            isinstance(title_index_any, int)
+            and not isinstance(title_index_any, bool)
+            and 0 <= title_index_any < len(selected_ids)
+        ):
+            target_ids = {selected_ids[title_index_any]}
+        elif (
+            author_overrides_by_book
+            and not title_overrides_by_book
+            and not title_override_present
+            and selected_ids
+        ):
+            # During author loop (before title loop starts), avoid network validation
+            # fan-out across all selected books. Validate only the first book for
+            # prompt quality; propagate deterministic overrides to the rest.
+            target_ids = {selected_ids[0]}
+
         for book_id in selected_ids:
             current = dict(validated_books.get(book_id) or {})
             requested_author_source: object | None = author_overrides_by_book.get(book_id)
             if requested_author_source is None:
-                requested_author_source = (
-                    author_override_raw if author_override_present else current.get("author_label")
-                )
+                if author_overrides_by_book:
+                    requested_author_source = current.get("author_label")
+                else:
+                    requested_author_source = (
+                        author_override_raw
+                        if author_override_present
+                        else current.get("author_label")
+                    )
             requested_author = _normalize_root_audio_value(
                 value=requested_author_source,
                 fallback=str(current.get("author_label") or _ROOT_AUDIO_AUTHOR),
             )
             requested_title_source: object | None = title_overrides_by_book.get(book_id)
             if requested_title_source is None:
-                requested_title_source = (
-                    title_override_raw if title_override_present else current.get("book_label")
-                )
+                if title_overrides_by_book:
+                    requested_title_source = current.get("book_label")
+                else:
+                    requested_title_source = (
+                        title_override_raw if title_override_present else current.get("book_label")
+                    )
             requested_title = _normalize_root_audio_value(
                 value=requested_title_source,
                 fallback=str(current.get("book_label") or _ROOT_AUDIO_TITLE),
             )
-            validation, canonical_author, canonical_title = _validated_author_title(
-                author=requested_author,
-                title=requested_title,
+            should_validate = book_id in target_ids
+            if should_validate:
+                validation, canonical_author, canonical_title = _validated_author_title(
+                    author=requested_author,
+                    title=requested_title,
+                )
+            else:
+                validation = _as_str_object_dict(current.get("validation"))
+                canonical_author = requested_author
+                canonical_title = requested_title
+            manual_override = bool(
+                manual_author_overrides_by_book.get(book_id)
+                or manual_title_overrides_by_book.get(book_id)
             )
-            if explicit_per_item_override:
+            if manual_override:
                 canonical_author = requested_author
                 canonical_title = requested_title
             validated_books[book_id] = {

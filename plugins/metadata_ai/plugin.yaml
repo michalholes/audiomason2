@@ -1,0 +1,49 @@
+name: metadata_ai
+version: 1.0.0
+description: "AI-backed metadata author/title validation"
+author: "AudioMason2"
+license: MIT
+
+entrypoint: plugin:MetadataAIPlugin
+
+interfaces:
+  - IProvider
+
+hooks: []
+
+dependencies:
+  python: ">=3.11"
+
+config_schema:
+  enabled:
+    type: boolean
+    default: false
+    description: "Enable AI author/title validation in import phase1"
+  endpoint:
+    type: string
+    default: ""
+    description: "OpenAI-compatible chat completion endpoint"
+  provider:
+    type: string
+    default: ""
+    description: "Provider name used to build provider/model id"
+  model:
+    type: string
+    default: ""
+    description: "Model name used for author/title validation"
+  api_key:
+    type: string
+    default: ""
+    description: "API key for the AI endpoint"
+  timeout_seconds:
+    type: number
+    default: 2.0
+    description: "HTTP request timeout in seconds"
+  max_response_bytes:
+    type: integer
+    default: 262144
+    description: "Maximum HTTP response size in bytes"
+
+test_level: basic
+
+wizard_callable_manifest_pointer: wizard_callable_manifest.json

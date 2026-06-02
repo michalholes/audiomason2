@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from importlib import import_module
 from pathlib import Path
+from typing import Any, cast
 
 from audiomason.core.config import ConfigResolver
 
@@ -11,6 +12,26 @@ RootName = import_module("plugins.file_io.service").RootName
 ensure_default_models = import_module("plugins.import.defaults").ensure_default_models
 read_json = import_module("plugins.import.storage").read_json
 atomic_write_json = import_module("plugins.import.storage").atomic_write_json
+
+
+def _fast_validated_author_title(
+    *,
+    author: str,
+    title: str,
+) -> tuple[dict[str, object], str, str]:
+    return (
+        {
+            "provider": "metadata_openlibrary",
+            "author": {"valid": False, "canonical": None, "suggestion": author},
+            "book": {
+                "valid": False,
+                "canonical": None,
+                "suggestion": {"author": author, "title": title},
+            },
+        },
+        author,
+        title,
+    )
 
 
 def _make_engine(tmp_path: Path):
@@ -135,20 +156,34 @@ def test_invalid_selection_bounces_back_to_select_books(tmp_path: Path) -> None:
 def test_plan_uses_canonical_target_and_persisted_rename_outputs(tmp_path: Path) -> None:
     engine, roots = _make_engine(tmp_path)
     fs = engine.get_file_service()
+    phase1_metadata = cast(Any, import_module("plugins.import.phase1_metadata_flow"))
+    original_validated = phase1_metadata._validated_author_title
+    phase1_metadata._validated_author_title = _fast_validated_author_title
 
     _write_inbox_audio_tree(roots)
     ensure_default_models(fs)
 
-    state = engine.create_session("inbox", "", mode="stage")
-    session_id = str(state["session_id"])
+    try:
+        state = engine.create_session("inbox", "", mode="stage")
+        session_id = str(state["session_id"])
 
-    state = engine.submit_step(session_id, "select_authors", {"selection": "1"})
-    state = engine.submit_step(session_id, "select_books", {"selection": "1"})
-    state = engine.submit_step(session_id, "effective_author_item", {"value": "Canonical Author"})
-    state = engine.submit_step(session_id, "effective_title_item", {"value": "Canonical Book"})
+        state = engine.submit_step(session_id, "select_authors", {"selection": "1"})
+        state = engine.submit_step(session_id, "select_books", {"selection": "1"})
+        state = engine.submit_step(
+            session_id,
+            "effective_author_item",
+            {"value": "Canonical Author"},
+        )
+        state = engine.submit_step(
+            session_id,
+            "effective_title_item",
+            {"value": "Canonical Book"},
+        )
 
-    plan = engine.compute_plan(session_id)
-    selected = plan.get("selected_books") or []
-    assert len(selected) == 1
-    assert selected[0]["proposed_target_relative_path"] == "Canonical Author/Canonical Book"
-    assert selected[0]["rename_outputs"] == ["01.mp3", "02.mp3"]
+        plan = engine.compute_plan(session_id)
+        selected = plan.get("selected_books") or []
+        assert len(selected) == 1
+        assert selected[0]["proposed_target_relative_path"] == "Canonical Author/Canonical Book"
+        assert selected[0]["rename_outputs"] == ["01.mp3", "02.mp3"]
+    finally:
+        phase1_metadata._validated_author_title = original_validated

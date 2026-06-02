@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "operations": [
+    {
+      "operation_id": "metadata.ai_title_validate",
+      "method_name": "build_ai_title_validation_job",
+      "execution_mode": "job"
+    }
+  ]
+}

@@ -555,16 +555,29 @@ class ArchiveService:
         """List archive entries without extracting.
 
         Preference order:
-        - 7z (works for many formats, including rar)
         - unrar (rar-only)
+        - 7z (works for many formats, including rar)
 
         Raises FileError if no suitable external lister is available.
         """
+        entries: list[str] = []
+        if fmt == ArchiveFormat.RAR and shutil.which("unrar"):
+            # 'unrar vb' prints bare file names, one per line.
+            cmd = ["unrar", "vb", str(abs_path)]
+            res = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            for line in res.stdout.splitlines():
+                s = line.strip()
+                if not s:
+                    continue
+                p = s.replace("\\\\", "/").lstrip("/")
+                if p and not p.endswith("/"):
+                    entries.append(p)
+            return _stable_sorted(entries)
+
         if shutil.which("7z"):
             # 7z -slt produces stable key/value blocks separated by blank lines.
             cmd = ["7z", "l", "-slt", str(abs_path)]
             res = subprocess.run(cmd, check=True, capture_output=True, text=True)
-            entries: list[str] = []
             cur_path: str | None = None
             cur_attr: str | None = None
 
@@ -594,20 +607,6 @@ class ArchiveService:
                     cur_attr = s.split("=", 1)[1].strip()
                     continue
             _flush()
-            return _stable_sorted(entries)
-
-        if fmt == ArchiveFormat.RAR and shutil.which("unrar"):
-            # 'unrar vb' prints bare file names, one per line.
-            cmd = ["unrar", "vb", str(abs_path)]
-            res = subprocess.run(cmd, check=True, capture_output=True, text=True)
-            entries = []
-            for line in res.stdout.splitlines():
-                s = line.strip()
-                if not s:
-                    continue
-                p = s.replace("\\\\", "/").lstrip("/")
-                if p and not p.endswith("/"):
-                    entries.append(p)
             return _stable_sorted(entries)
 
         raise FileError(
@@ -779,10 +778,10 @@ class ArchiveService:
 
     def _pick_external_unpack_tool(self, fmt: ArchiveFormat) -> str:
         # Currently only for RAR/7Z.
-        if shutil.which("7z"):
-            return "7z"
         if fmt == ArchiveFormat.RAR and shutil.which("unrar"):
             return "unrar"
+        if shutil.which("7z"):
+            return "7z"
         raise FileError(f"No external backend found for {fmt.value}; install 7z or unrar")
 
     def _flatten_dir(self, base: Path, *, collision: CollisionPolicy) -> list[Path]:

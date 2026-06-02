@@ -96,6 +96,39 @@ def _install_phase1_metadata_callable(
     )
 
 
+def _install_fast_phase1_validation(monkeypatch) -> None:
+    phase1_metadata = import_module("plugins.import.phase1_metadata_flow")
+
+    def _validated_author_title(
+        *,
+        author: str,
+        title: str,
+    ) -> tuple[dict[str, object], str, str]:
+        return (
+            {
+                "provider": "metadata_openlibrary",
+                "author": {
+                    "valid": False,
+                    "canonical": None,
+                    "suggestion": author,
+                },
+                "book": {
+                    "valid": False,
+                    "canonical": None,
+                    "suggestion": {"author": author, "title": title},
+                },
+            },
+            author,
+            title,
+        )
+
+    monkeypatch.setattr(
+        phase1_metadata,
+        "_validated_author_title",
+        _validated_author_title,
+    )
+
+
 def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, dict[str, Path]]:
     roots = {
         name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
@@ -189,6 +222,8 @@ def test_multi_book_author_and_title_edit_apply_per_book(
     else:
         assert state["current_step_id"] == "select_books"
 
+    _install_fast_phase1_validation(monkeypatch)
+
     state = engine.submit_step(session_id, "select_books", {"selection": "all"})
     assert state["current_step_id"] == "effective_author_item"
 
@@ -208,10 +243,14 @@ def test_multi_book_author_and_title_edit_apply_per_book(
     assert authors == {"Canonical Author"}
 
 
-def test_multi_author_loop_keeps_per_author_overrides(tmp_path: Path) -> None:
+def test_multi_author_loop_keeps_per_author_overrides(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     engine, roots = _make_engine(tmp_path)
     _write_book(roots["inbox"], "AuthorOne", "Book1")
     _write_book(roots["inbox"], "AuthorTwo", "Book2")
+    _install_fast_phase1_validation(monkeypatch)
 
     state = engine.create_session("inbox", "", mode="stage")
     session_id = str(state["session_id"])
@@ -259,6 +298,7 @@ def test_per_item_author_title_edits_are_authoritative_over_validation_suggestio
             "book": {"value": title, "canonical": "SERVER_TITLE", "valid": True},
         },
     )
+    _install_fast_phase1_validation(monkeypatch)
 
     state = engine.create_session("inbox", "", mode="stage")
     session_id = str(state["session_id"])
@@ -282,8 +322,12 @@ def test_per_item_author_title_edits_are_authoritative_over_validation_suggestio
     }
 
 
-def test_metadata_projection_applies_multi_book_title_override_per_book(tmp_path: Path) -> None:
+def test_metadata_projection_applies_multi_book_title_override_per_book(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     del tmp_path
+    _install_fast_phase1_validation(monkeypatch)
     phase1_metadata = import_module("plugins.import.phase1_metadata_flow")
 
     projection = phase1_metadata.build_phase1_metadata_projection(
@@ -369,6 +413,7 @@ def test_multi_book_author_edit_keeps_distinct_titles_until_title_step(
             "book": {"value": title, "canonical": title, "valid": True},
         },
     )
+    _install_fast_phase1_validation(monkeypatch)
 
     state = engine.create_session("inbox", "", mode="stage")
     session_id = str(state["session_id"])

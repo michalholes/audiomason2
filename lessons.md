@@ -207,3 +207,109 @@
   `tests/unit/test_import_wizard_spec_alignment.py`.
 - safety class: instruction-only
 - scope: inside current issue scope
+
+## 2026-06-02
+
+### Optimization 29: Azure OpenAI-compatible endpoints require chat-completions path and bare model id
+- impact: Prevents repeated 404 troubleshooting loops by using
+  `.../openai/v1/chat/completions` for direct HTTP calls and sending model as bare id
+  (`gpt-5.4-mini`) instead of provider/model (`human/gpt-5.4-mini`).
+- affected workflow step or files: AI metadata boundary calls in
+  `plugins/metadata_ai/plugin.py` and host config wiring under
+  `plugins.metadata_ai.config.endpoint`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 30: Treat per-item loop default confirmations as non-manual overrides
+- impact: Prevents cross-author contamination in author loops where confirming one
+  author default accidentally overwrote other selected authors and degraded next-step
+  suggestions.
+- affected workflow step or files: PHASE 1 metadata/source projection interplay in
+  `plugins/import/phase1_metadata_flow.py` and
+  `plugins/import/phase1_source_intake.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 31: Drive author/title loop prompt defaults from per-book authority
+- impact: Eliminates stale raw filename prompts after metadata validation by
+  projecting `selected_author_label_list` and `selected_book_label_list` from
+  `authority_by_book` before loop prompts render.
+- affected workflow step or files: PHASE 1 source projection in
+  `plugins/import/phase1_source_intake.py` with authority produced by
+  `plugins/import/phase1_metadata_flow.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 30: Pyright strict inference plus unknown diagnostics is the closest Any guard
+- impact: Reduces false confidence from pyright by forcing stricter collection inference and
+  surfacing unknown-typed expressions at boundaries, even though pyright has no explicit Any
+  diagnostic equivalent to mypy's `disallow_any_*` set.
+- affected workflow step or files: `pyrightconfig.json` strict inference and `reportUnknown*`
+  settings.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 32: Normalize metadata cache keys and persist successful suggestions across runs
+- impact: Prevents repeated raw-title regressions under transient metadata API failures (timeouts/429)
+  by reusing prior successful author/title suggestions even in new CLI processes.
+- affected workflow step or files: metadata boundary cache strategy in
+  `plugins/import/metadata_boundary.py` and PHASE 1 validation cache key normalization in
+  `plugins/import/phase1_metadata_flow.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 33: Keep source-language book titles when suggestion looks like translation
+- impact: Prevents undesired language flips (for example Czech title -> English title)
+  while still accepting same-language canonicalization and typo cleanup.
+- affected workflow step or files: title canonicalization in
+  `plugins/import/phase1_metadata_flow.py` (`_prefer_source_title_if_translation`).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 34: Prefer unrar over 7z for RAR extract/list in mixed-tool environments
+- impact: Prevents false archive failures (`Unsupported Method`) when system `7z` lacks full
+  support for newer RAR methods but `unrar` is available.
+- affected workflow step or files: external archive backend selection in
+  `plugins/file_io/service/archives/service.py` (`_list_entries_external`,
+  `_pick_external_unpack_tool`).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 35: Preserve per-entry archive source path for root-level bundle files
+- impact: Prevents single-book actions from accidentally expanding an entire archive in
+  PHASE 2 when the selected archive item is a root-level file.
+- affected workflow step or files: archive source projection in
+  `plugins/import/phase1_source_intake.py` (`_archive_pairs_for_bundle`).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 36: Stub slow validation only after orchestration state is established
+- impact: Avoids changing early flow decisions and removes repeated validation delays in
+  multi-step import orchestration tests by patching the validator only after session creation.
+- affected workflow step or files: test helpers for import phase 1 orchestration flows,
+  especially `tests/test_import_phase1_v3_orchestration_issue127.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 37: Patch validation in projection-only tests that do not assert lookup behavior
+- impact: Keeps projection-focused import tests fast by bypassing hidden validation calls when
+  the test only checks deterministic projection shaping.
+- affected workflow step or files: `tests/test_import_phase1_v3_orchestration_issue127.py`
+  projection-only cases.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 38: Stub metadata validation in end-to-end import tests that only assert state
+- impact: Prevents slow or flaky acceptance tests by replacing hidden metadata lookup with a
+  deterministic local stub when the test only checks launcher/plan/session state.
+- affected workflow step or files: `tests/test_import_v3_acceptance_end_to_end.py` and
+  `tests/test_issue214_import_plan_from_selection.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 39: Stub validation in auto-advance spec tests that only assert step flow
+- impact: Prevents `pytest-timeout` on long step-flow regressions by avoiding real metadata
+  validation when the test only checks hidden-step advancement and flow shape.
+- affected workflow step or files: `tests/unit/test_import_wizard_spec_alignment.py`.
+- safety class: instruction-only
+- scope: inside current issue scope

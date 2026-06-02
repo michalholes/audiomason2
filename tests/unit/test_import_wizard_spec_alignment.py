@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 from importlib import import_module
 from pathlib import Path
+from typing import Any, cast
 
 from audiomason.core.config import ConfigResolver
 
@@ -81,6 +82,39 @@ def _optional_disable_overrides() -> dict[str, object]:
             "parallelism": {"enabled": False},
         }
     }
+
+
+def _install_fast_phase1_validation(monkeypatch) -> None:
+    phase1_metadata = cast(Any, import_module("plugins.import.phase1_metadata_flow"))
+
+    def _validated_author_title(
+        *,
+        author: str,
+        title: str,
+    ) -> tuple[dict[str, object], str, str]:
+        return (
+            {
+                "provider": "metadata_openlibrary",
+                "author": {
+                    "valid": False,
+                    "canonical": None,
+                    "suggestion": author,
+                },
+                "book": {
+                    "valid": False,
+                    "canonical": None,
+                    "suggestion": {"author": author, "title": title},
+                },
+            },
+            author,
+            title,
+        )
+
+    monkeypatch.setattr(
+        phase1_metadata,
+        "_validated_author_title",
+        _validated_author_title,
+    )
 
 
 def test_flow_model_contains_resolve_conflicts_before_processing(tmp_path: Path) -> None:
@@ -183,12 +217,16 @@ def test_hidden_steps_remain_explicit_non_prompt_nodes(tmp_path: Path) -> None:
     assert steps["audio_processing_enabled"].get("primitive_id") == "ui.prompt_confirm"
 
 
-def test_hidden_steps_auto_advance_without_extra_submit_calls(tmp_path: Path) -> None:
+def test_hidden_steps_auto_advance_without_extra_submit_calls(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     engine, roots = _make_engine(tmp_path)
     _write_inbox_source_dir(roots, "src/Author A/Book A")
     (roots["inbox"] / "src" / "Author A" / "Book A" / "track01.mp3").write_text(
         "x", encoding="utf-8"
     )
+    _install_fast_phase1_validation(monkeypatch)
 
     state = engine.create_session("inbox", "src", mode="stage")
     session_id = str(state.get("session_id") or "")

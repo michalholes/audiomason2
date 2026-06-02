@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from importlib import import_module
 from pathlib import Path
+from typing import Any, cast
 
 from audiomason.core.config import ConfigResolver
 
@@ -12,37 +13,40 @@ run_launcher = import_module("plugins.import.cli_renderer").run_launcher
 ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
 
 
-def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, ConfigResolver, Path]:
+def _make_engine(tmp_path: Path) -> tuple[Any, ConfigResolver, Path]:
     roots = {
         name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
     }
     for root in roots.values():
         root.mkdir(parents=True, exist_ok=True)
-    defaults = {
-        "file_io": {
-            "roots": {
-                "inbox_dir": str(roots["inbox"]),
-                "stage_dir": str(roots["stage"]),
-                "outbox_dir": str(roots["outbox"]),
-                "jobs_dir": str(roots["jobs"]),
-                "config_dir": str(roots["config"]),
-                "wizards_dir": str(roots["wizards"]),
-            }
-        },
-        "output_dir": str(roots["outbox"]),
-        "diagnostics": {"enabled": False},
-        "plugins": {
-            "import": {
-                "cli": {
-                    "launcher_mode": "fixed",
-                    "default_root": "inbox",
-                    "default_path": "src",
-                    "noninteractive": False,
-                    "render": {"confirm_defaults": True, "nav_ui": "prompt"},
+    defaults = cast(
+        dict[str, object],
+        {
+            "file_io": {
+                "roots": {
+                    "inbox_dir": str(roots["inbox"]),
+                    "stage_dir": str(roots["stage"]),
+                    "outbox_dir": str(roots["outbox"]),
+                    "jobs_dir": str(roots["jobs"]),
+                    "config_dir": str(roots["config"]),
+                    "wizards_dir": str(roots["wizards"]),
                 }
-            }
+            },
+            "output_dir": str(roots["outbox"]),
+            "diagnostics": {"enabled": False},
+            "plugins": {
+                "import": {
+                    "cli": {
+                        "launcher_mode": "fixed",
+                        "default_root": "inbox",
+                        "default_path": "src",
+                        "noninteractive": False,
+                        "render": {"confirm_defaults": True, "nav_ui": "prompt"},
+                    }
+                }
+            },
         },
-    }
+    )
     resolver = ConfigResolver(
         cli_args={},
         defaults=defaults,
@@ -58,22 +62,53 @@ def _write_source_tree(tmp_path: Path) -> None:
     (book_dir / "track01.mp3").write_text("x", encoding="utf-8")
 
 
+def _fast_validated_author_title(
+    *,
+    author: str,
+    title: str,
+) -> tuple[dict[str, object], str, str]:
+    return (
+        {
+            "provider": "metadata_openlibrary",
+            "author": {
+                "valid": False,
+                "canonical": None,
+                "suggestion": author,
+            },
+            "book": {
+                "valid": False,
+                "canonical": None,
+                "suggestion": {"author": author, "title": title},
+            },
+        },
+        author,
+        title,
+    )
+
+
 def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path) -> None:
     _write_source_tree(tmp_path)
     engine, resolver, wizards_root = _make_engine(tmp_path)
+    phase1_metadata = cast(Any, import_module("plugins.import.phase1_metadata_flow"))
+
+    original_validated = phase1_metadata._validated_author_title
+    phase1_metadata._validated_author_title = cast(Any, _fast_validated_author_title)
 
     printed: list[str] = []
 
     def _input_fn(prompt: str) -> str:
         return "y" if "Start processing" in prompt else ""
 
-    rc = run_launcher(
-        engine=engine,
-        resolver=resolver,
-        cli_overrides={},
-        input_fn=_input_fn,
-        print_fn=printed.append,
-    )
+    try:
+        rc = run_launcher(
+            engine=engine,
+            resolver=resolver,
+            cli_overrides={},
+            input_fn=_input_fn,
+            print_fn=printed.append,
+        )
+    finally:
+        phase1_metadata._validated_author_title = original_validated
 
     assert rc == 0
 

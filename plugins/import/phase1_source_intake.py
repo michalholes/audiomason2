@@ -74,6 +74,48 @@ def _answer_dict(state: dict[str, object], key: str) -> dict[str, object]:
     return _as_str_object_dict(value)
 
 
+def _canonical_selected_author_labels(
+    *,
+    source_projection: dict[str, object],
+    authority_by_book: dict[str, object],
+) -> list[str]:
+    select_authors = _as_str_object_dict(source_projection.get("select_authors"))
+    selected_author_ids = _as_str_list(select_authors.get("selected_ids"))
+    existing_labels = _as_str_list(select_authors.get("selected_author_label_list"))
+    author_to_books = _as_str_object_dict(source_projection.get("author_to_books"))
+
+    normalized_labels: list[str] = []
+    for index, author_id in enumerate(selected_author_ids):
+        fallback = existing_labels[index] if index < len(existing_labels) else ""
+        candidate = ""
+        for book_id in _as_str_list(author_to_books.get(author_id)):
+            authority_book = _as_str_object_dict(authority_by_book.get(book_id))
+            value = str(authority_book.get("author_label") or "").strip()
+            if value:
+                candidate = value
+                break
+        normalized_labels.append(candidate or fallback)
+    return normalized_labels
+
+
+def _canonical_selected_book_labels(
+    *,
+    source_projection: dict[str, object],
+    authority_by_book: dict[str, object],
+) -> list[str]:
+    select_books = _as_str_object_dict(source_projection.get("select_books"))
+    selected_book_ids = _as_str_list(select_books.get("selected_ids"))
+    existing_labels = _as_str_list(select_books.get("selected_book_label_list"))
+
+    normalized_labels: list[str] = []
+    for index, book_id in enumerate(selected_book_ids):
+        fallback = existing_labels[index] if index < len(existing_labels) else ""
+        authority_book = _as_str_object_dict(authority_by_book.get(book_id))
+        candidate = str(authority_book.get("book_label") or "").strip()
+        normalized_labels.append(candidate or fallback)
+    return normalized_labels
+
+
 def _build_runtime_projection(
     *,
     state: dict[str, object],
@@ -367,6 +409,8 @@ def _archive_pairs_for_bundle(
         source_rel = bundle_rel
         if scope_parts:
             source_rel = _normalize_rel_path(f"{bundle_rel}/{'/'.join(scope_parts)}")
+        else:
+            source_rel = _normalize_rel_path(f"{bundle_rel}/{entry}")
         pairs.add(
             (
                 author_key,
@@ -864,6 +908,25 @@ def build_phase1_projection(
         policy_projection=policy_projection,
         phase2_inputs=phase2_inputs_runtime,
     )
+
+    select_authors_projection = _as_str_object_dict(phase1_projection.get("select_authors"))
+    canonical_labels = _canonical_selected_author_labels(
+        source_projection=source_projection,
+        authority_by_book=authority_by_book,
+    )
+    if canonical_labels:
+        select_authors_projection["selected_author_label_list"] = canonical_labels
+        phase1_projection["select_authors"] = select_authors_projection
+
+    select_books_projection = _as_str_object_dict(phase1_projection.get("select_books"))
+    canonical_book_labels = _canonical_selected_book_labels(
+        source_projection=source_projection,
+        authority_by_book=authority_by_book,
+    )
+    if canonical_book_labels:
+        select_books_projection["selected_book_label_list"] = canonical_book_labels
+        phase1_projection["select_books"] = select_books_projection
+
     return phase1_projection
 
 
