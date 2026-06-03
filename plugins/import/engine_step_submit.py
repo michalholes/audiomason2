@@ -213,19 +213,26 @@ def sync_v3_legacy_state(
     return state
 
 
-def _needs_v3_plan_refresh(state: dict[str, object]) -> bool:
+def _needs_v3_plan_refresh(state: dict[str, object], *, step_id: str) -> bool:
     computed_any = state.get("computed")
-    if _is_str_object_dict(computed_any) and "plan_summary" in computed_any:
-        return False
+    if not (_is_str_object_dict(computed_any) and "plan_summary" in computed_any):
+        return True
 
     trace_any = state.get("trace")
     if not _is_object_list(trace_any):
         return False
 
-    return any(
+    has_plan_preview = any(
         _is_str_object_dict(entry) and entry.get("step_id") == "plan_preview_batch"
         for entry in trace_any
     )
+    if not has_plan_preview:
+        return False
+
+    # After the first preview, refresh plan/conflict fingerprints after every submitted step.
+    # This keeps finalize's preview/current conflict check stable for in-flow edits.
+    del step_id
+    return True
 
 
 def _refresh_v3_phase1_authority(
@@ -497,7 +504,7 @@ def submit_step_impl(
             )
             next_state["updated_at"] = iso_utc_now()
             engine.persist_state(session_id, next_state)
-            if _needs_v3_plan_refresh(next_state):
+            if _needs_v3_plan_refresh(next_state, step_id=step_id):
                 engine.compute_plan(session_id)
                 next_state = engine.load_state(session_id)
             engine.append_decision(

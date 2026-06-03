@@ -313,3 +313,38 @@
 - affected workflow step or files: `tests/unit/test_import_wizard_spec_alignment.py`.
 - safety class: instruction-only
 - scope: inside current issue scope
+
+### Optimization 40: Persist global ID3 values only from explicit user answers
+- impact: Prevents first-selected-book metadata from being applied to all books in PHASE 2
+  when the ID3 step is not explicitly answered.
+- affected workflow step or files: PHASE 1 authority assembly in
+  `plugins/import/phase1_source_intake.py` (`phase2_inputs.id3_policy.values`).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 41: Refresh V3 plan/conflict preview after each accepted submit
+- impact: Prevents false `conflicts_changed` finalize failures caused by stale preview
+  fingerprints when users continue editing author/title/policy steps after first preview.
+- affected workflow step or files: V3 submit path in
+  `plugins/import/engine_step_submit.py` (`_needs_v3_plan_refresh` and post-submit
+  `compute_plan(...)` refresh).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 42: Treat V3 auto-populated ID3 defaults as implicit, not global override
+- impact: Prevents first-book title/author from being stamped onto all batch outputs when
+  `id3_policy` is filled by automatic `data.set` steps.
+- affected workflow step or files: PHASE 1 authority assembly in
+  `plugins/import/phase1_source_intake.py` (`_explicit_id3_values` and
+  `phase2_inputs.id3_policy.values`).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 43: Join scoped source paths to session source root in PHASE 2 requests
+- impact: Prevents `source path missing after staging` failures for imports launched from
+  nested inbox paths by serializing action source paths as root-relative.
+- affected workflow step or files: PHASE 2 request assembly in
+  `plugins/import/job_requests.py` (`_root_relative_source_path` and action source/delete
+  path serialization).
+- safety class: instruction-only
+- scope: inside current issue scope

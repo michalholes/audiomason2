@@ -74,6 +74,26 @@ def _answer_dict(state: dict[str, object], key: str) -> dict[str, object]:
     return _as_str_object_dict(value)
 
 
+def _explicit_id3_values(
+    *,
+    state: dict[str, object],
+    metadata_projection: dict[str, object],
+) -> dict[str, object]:
+    id3_answer = _answer_dict(state, "id3_policy")
+    values = _as_str_object_dict(id3_answer.get("values"))
+    default_values = _as_str_object_dict(metadata_projection.get("values"))
+
+    explicit: dict[str, object] = {}
+    for key, value in values.items():
+        text_value = str(value).strip()
+        if not text_value:
+            continue
+        default_text = str(default_values.get(key) or "").strip()
+        if text_value != default_text:
+            explicit[str(key)] = text_value
+    return explicit
+
+
 def _canonical_selected_author_labels(
     *,
     source_projection: dict[str, object],
@@ -851,6 +871,19 @@ def build_phase1_projection(
                 }
             )
 
+    id3_answer = _answer_dict(state, "id3_policy")
+    id3_values = _explicit_id3_values(
+        state=state,
+        metadata_projection=metadata_projection,
+    )
+    id3_track_start = id3_answer.get("track_start")
+    id3_policy_inputs: dict[str, object] = {
+        "field_map": _as_str_object_dict(metadata_projection.get("field_map")),
+        "values": id3_values,
+    }
+    if id3_track_start is not None and str(id3_track_start).strip():
+        id3_policy_inputs["track_start"] = id3_track_start
+
     phase2_inputs = {
         "covers_policy": {
             "mode": str(cover_projection.get("mode") or "skip"),
@@ -867,10 +900,7 @@ def build_phase1_projection(
             ),
             "has_single_candidate": bool(cover_projection.get("has_single_candidate", False)),
         },
-        "id3_policy": {
-            "field_map": _as_str_object_dict(metadata_projection.get("field_map")),
-            "values": _as_str_object_dict(metadata_projection.get("values")),
-        },
+        "id3_policy": id3_policy_inputs,
         "audio_processing": _as_str_object_dict(policy_projection.get("audio_processing")),
         "publish_policy": _as_str_object_dict(policy_projection.get("publish_policy")),
         "delete_source_policy": _as_str_object_dict(policy_projection.get("delete_source_policy")),

@@ -39,6 +39,18 @@ def _policy_dict(inputs: dict[str, object], key: str) -> dict[str, object]:
     return dict(value) if _is_str_object_dict(value) else {}
 
 
+def _root_relative_source_path(*, source_prefix: str, source_relative_path: str) -> str:
+    base = normalize_relative_path(source_prefix)
+    rel = normalize_relative_path(source_relative_path)
+    if not rel:
+        return base
+    if not base:
+        return rel
+    if rel == base or rel.startswith(base + "/"):
+        return rel
+    return f"{base}/{rel}"
+
+
 def _tag_values_for_action(
     *,
     inputs: dict[str, object],
@@ -134,11 +146,19 @@ def _cover_candidate_for_action(
     inputs: dict[str, object],
     book_id: str,
     source_relative_path: str,
+    source_prefix: str,
 ) -> dict[str, str] | None:
+    scoped_source_rel = normalize_relative_path(source_relative_path)
+    full_source_rel = _root_relative_source_path(
+        source_prefix=source_prefix,
+        source_relative_path=scoped_source_rel,
+    )
+
     choice = _cover_choice(inputs, book_id=book_id)
     if choice.get("kind") != "candidate":
         return None
-    if choice.get("source_relative_path") != source_relative_path:
+    choice_source_rel = normalize_relative_path(str(choice.get("source_relative_path") or ""))
+    if choice_source_rel not in {scoped_source_rel, full_source_rel}:
         return None
 
     covers_policy = _policy_dict(inputs, "covers_policy")
@@ -147,7 +167,8 @@ def _cover_candidate_for_action(
     for source in sources:
         if not _is_str_object_dict(source):
             continue
-        if str(source.get("source_relative_path") or "") != source_relative_path:
+        source_rel = normalize_relative_path(str(source.get("source_relative_path") or ""))
+        if source_rel not in {scoped_source_rel, full_source_rel}:
             continue
         candidates_any = source.get("candidates")
         candidates = candidates_any if _is_object_list(candidates_any) else []
@@ -169,7 +190,8 @@ def _cover_candidate_for_action(
             continue
         if str(candidate.get("candidate_id") or "") != choice.get("candidate_id"):
             continue
-        if str(candidate.get("source_relative_path") or "") != source_relative_path:
+        source_rel = normalize_relative_path(str(candidate.get("source_relative_path") or ""))
+        if source_rel not in {scoped_source_rel, full_source_rel}:
             continue
         return {
             key: str(value) for key, value in candidate.items() if isinstance(value, str) and value
@@ -260,6 +282,8 @@ def _build_capabilities(
     book_id: str,
     root: str,
     source_relative_path: str,
+    source_relative_path_full: str,
+    source_prefix: str,
     target_root: str,
     target_relative_path: str,
     inputs: dict[str, object],
@@ -277,6 +301,7 @@ def _build_capabilities(
         inputs=inputs,
         book_id=book_id,
         source_relative_path=source_relative_path,
+        source_prefix=source_prefix,
     )
     cover_mode = str(cover_choice.get("kind") or "skip")
     if cover_mode == "candidate":
@@ -344,7 +369,7 @@ def _build_capabilities(
                 "kind": "source.delete",
                 "order": 50,
                 "root": root,
-                "relative_path": source_relative_path,
+                "relative_path": source_relative_path_full,
                 "enabled": True,
             }
         )
@@ -394,11 +419,18 @@ def build_job_requests(
         if not _is_str_object_dict(it):
             continue
         book_id = it.get("book_id")
-        src_rel = it.get("source_relative_path")
+        src_rel_any = it.get("source_relative_path")
         tgt_rel = it.get("proposed_target_relative_path")
         if not isinstance(book_id, str) or not book_id:
             continue
-        if not isinstance(src_rel, str) or not isinstance(tgt_rel, str):
+        if not isinstance(src_rel_any, str) or not isinstance(tgt_rel, str):
+            continue
+        src_rel_scoped = normalize_relative_path(src_rel_any)
+        src_rel = _root_relative_source_path(
+            source_prefix=relative_path,
+            source_relative_path=src_rel_scoped,
+        )
+        if not src_rel:
             continue
         authority_meta_any = book_meta.get(book_id)
         authority_meta = dict(authority_meta_any) if _is_str_object_dict(authority_meta_any) else {}
@@ -429,7 +461,9 @@ def build_job_requests(
                 "capabilities": _build_capabilities(
                     book_id=book_id,
                     root=root,
-                    source_relative_path=src_rel,
+                    source_relative_path=src_rel_scoped,
+                    source_relative_path_full=src_rel,
+                    source_prefix=relative_path,
                     target_root=target_root,
                     target_relative_path=tgt_rel,
                     inputs=phase2_inputs,

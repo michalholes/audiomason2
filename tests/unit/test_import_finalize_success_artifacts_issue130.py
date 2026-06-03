@@ -3,38 +3,75 @@ from __future__ import annotations
 import json
 from importlib import import_module
 from pathlib import Path
-from typing import cast
+from typing import Any, Protocol, cast
+
+from pytest import MonkeyPatch
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.diagnostics import build_envelope
 from audiomason.core.events import get_event_bus
 
 ImportPlugin = import_module("plugins.import.plugin").ImportPlugin
-processed_required = import_module("plugins.import.processed_registry_required")
+processed_required: Any = import_module("plugins.import.processed_registry_required")
 read_json = import_module("plugins.import.storage").read_json
 RootName = import_module("plugins.file_io.service").RootName
 
 
-def _make_plugin(tmp_path: Path) -> tuple[object, dict[str, Path]]:
+class _SupportsImportEngine(Protocol):
+    def create_session(
+        self,
+        root: str,
+        relative_path: str,
+        *,
+        mode: str,
+        flow_overrides: dict[str, object],
+    ) -> dict[str, object]: ...
+
+    def submit_step(
+        self,
+        session_id: str,
+        step_id: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]: ...
+
+    def compute_plan(self, session_id: str) -> dict[str, object]: ...
+
+    def start_processing(self, session_id: str, body: dict[str, object]) -> dict[str, object]: ...
+
+    def get_file_service(self) -> _SupportsFileService: ...
+
+
+class _SupportsImportPlugin(Protocol):
+    def get_engine(self) -> _SupportsImportEngine: ...
+
+
+class _SupportsFileService(Protocol):
+    def exists(self, root: object, rel_path: str) -> bool: ...
+
+
+def _make_plugin(tmp_path: Path) -> tuple[_SupportsImportPlugin, dict[str, Path]]:
     roots = {
         name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
     }
     for root in roots.values():
         root.mkdir(parents=True, exist_ok=True)
-    defaults = {
-        "file_io": {
-            "roots": {
-                "inbox_dir": str(roots["inbox"]),
-                "stage_dir": str(roots["stage"]),
-                "outbox_dir": str(roots["outbox"]),
-                "jobs_dir": str(roots["jobs"]),
-                "config_dir": str(roots["config"]),
-                "wizards_dir": str(roots["wizards"]),
-            }
+    defaults = cast(
+        dict[str, object],
+        {
+            "file_io": {
+                "roots": {
+                    "inbox_dir": str(roots["inbox"]),
+                    "stage_dir": str(roots["stage"]),
+                    "outbox_dir": str(roots["outbox"]),
+                    "jobs_dir": str(roots["jobs"]),
+                    "config_dir": str(roots["config"]),
+                    "wizards_dir": str(roots["wizards"]),
+                }
+            },
+            "output_dir": str(roots["outbox"]),
+            "diagnostics": {"enabled": False},
         },
-        "output_dir": str(roots["outbox"]),
-        "diagnostics": {"enabled": False},
-    }
+    )
     resolver = ConfigResolver(
         cli_args=defaults,
         defaults=defaults,
@@ -82,10 +119,18 @@ def _mutate_state_for_finalize(roots: dict[str, Path], session_id: str, *, polic
     state_path.write_text(json.dumps(state), encoding="utf-8")
 
 
-def _start_processing(plugin: object, roots: dict[str, Path], monkeypatch) -> tuple[str, str]:
+def _start_processing(
+    plugin: _SupportsImportPlugin,
+    roots: dict[str, Path],
+    monkeypatch: MonkeyPatch,
+) -> tuple[str, str]:
     engine = plugin.get_engine()
     diag_mod = import_module("plugins.import.engine_diagnostics_required")
-    monkeypatch.setattr(diag_mod, "submit_process_job", lambda **_kw: None)
+
+    def _submit_process_job(**_kw: object) -> None:
+        return None
+
+    monkeypatch.setattr(diag_mod, "submit_process_job", _submit_process_job)
     _write_inbox_books(roots)
     state = engine.create_session(
         "inbox",
@@ -101,15 +146,16 @@ def _start_processing(plugin: object, roots: dict[str, Path], monkeypatch) -> tu
     _ = engine.compute_plan(session_id)
     _mutate_state_for_finalize(roots, session_id, policy="auto")
     started = engine.start_processing(session_id, {"confirm": True})
-    job_ids = started.get("job_ids")
+    job_ids = cast(list[str], started.get("job_ids") or [])
     assert isinstance(job_ids, list) and len(job_ids) == 1
     return session_id, str(job_ids[0])
 
 
 def test_finalize_success_artifacts_and_ignore_registry_are_success_only(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
 ) -> None:
-    cast(object, processed_required)._INSTALLED = False
+    processed_required._INSTALLED = False
     bus = get_event_bus()
     bus.clear()
 
@@ -121,12 +167,10 @@ def test_finalize_success_artifacts_and_ignore_registry_are_success_only(
     book1_log_rel = f"import/sessions/{session_id}/finalize/AuthorA/Book1/processing.log"
     book2_log_rel = f"import/sessions/{session_id}/finalize/AuthorA/Book2/processing.log"
     book1_dry_run_rel = (
-        f"import/sessions/{session_id}/finalize/AuthorA/Book1/"
-        "Canonical Author - Canonical Edition.dryrun.txt"
+        f"import/sessions/{session_id}/finalize/AuthorA/Book1/AuthorA - Book1.dryrun.txt"
     )
     book2_dry_run_rel = (
-        f"import/sessions/{session_id}/finalize/AuthorA/Book2/"
-        "Canonical Author - Canonical Edition.dryrun.txt"
+        f"import/sessions/{session_id}/finalize/AuthorA/Book2/AuthorA - Book2.dryrun.txt"
     )
     ignore_rel = "import/processed/ignore_registry.json"
 
@@ -186,10 +230,10 @@ def test_finalize_success_artifacts_and_ignore_registry_are_success_only(
         "AuthorA/Book2",
     ]
     assert report["books"][0]["authority"]["metadata_tags"]["values"] == {
-        "title": "Canonical Edition",
-        "artist": "Canonical Author",
-        "album": "Canonical Edition",
-        "album_artist": "Canonical Author",
+        "title": "Book1",
+        "artist": "AuthorA",
+        "album": "Book1",
+        "album_artist": "AuthorA",
     }
     assert report["books"][0]["authority"]["metadata_tags"]["field_map"] == {
         "title": "title",
@@ -206,11 +250,11 @@ def test_finalize_success_artifacts_and_ignore_registry_are_success_only(
     line0 = json.loads((roots["wizards"] / book1_log_rel).read_text(encoding="utf-8").strip())
     assert line0["status"] == "succeeded"
     assert line0["source"] == {"root": "inbox", "relative_path": "AuthorA/Book1"}
-    assert line0["authority"]["metadata_tags"]["values"]["title"] == "Canonical Edition"
+    assert line0["authority"]["metadata_tags"]["values"]["title"] == "Book1"
 
     dry_run_text = (roots["wizards"] / book1_dry_run_rel).read_text(encoding="utf-8")
-    assert "title=Canonical Edition" in dry_run_text
-    assert "artist=Canonical Author" in dry_run_text
+    assert "title=Book1" in dry_run_text
+    assert "artist=AuthorA" in dry_run_text
 
     assert ignore_registry == {
         "schema_version": 1,

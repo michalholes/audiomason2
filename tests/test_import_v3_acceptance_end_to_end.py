@@ -138,7 +138,7 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
     assert state["vars"]["phase1"]["policy"]["root_audio_baseline"]["author"] == "__ROOT_AUDIO__"
     assert state["vars"]["phase1"]["policy"]["root_audio_baseline"]["title"] == "Untitled"
     assert job_requests["actions"][0]["source"] == {
-        "relative_path": "Author A/Book A",
+        "relative_path": "src/Author A/Book A",
         "root": "inbox",
     }
     assert job_requests["actions"][0]["authority"]["rename"] == {

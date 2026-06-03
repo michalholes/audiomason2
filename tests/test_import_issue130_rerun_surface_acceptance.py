@@ -3,38 +3,43 @@ from __future__ import annotations
 import json
 from importlib import import_module
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
+
+from pytest import MonkeyPatch
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.diagnostics import build_envelope
 from audiomason.core.events import get_event_bus
 
 ImportPlugin = import_module("plugins.import.plugin").ImportPlugin
-processed_required = import_module("plugins.import.processed_registry_required")
+processed_required: Any = import_module("plugins.import.processed_registry_required")
 read_json = import_module("plugins.import.storage").read_json
 RootName = import_module("plugins.file_io.service").RootName
 
 
-def _make_plugin(tmp_path: Path) -> tuple[object, dict[str, Path]]:
+def _make_plugin(tmp_path: Path) -> tuple[Any, dict[str, Path]]:
     roots = {
         name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
     }
     for root in roots.values():
         root.mkdir(parents=True, exist_ok=True)
-    defaults = {
-        "file_io": {
-            "roots": {
-                "inbox_dir": str(roots["inbox"]),
-                "stage_dir": str(roots["stage"]),
-                "outbox_dir": str(roots["outbox"]),
-                "jobs_dir": str(roots["jobs"]),
-                "config_dir": str(roots["config"]),
-                "wizards_dir": str(roots["wizards"]),
-            }
+    defaults = cast(
+        dict[str, object],
+        {
+            "file_io": {
+                "roots": {
+                    "inbox_dir": str(roots["inbox"]),
+                    "stage_dir": str(roots["stage"]),
+                    "outbox_dir": str(roots["outbox"]),
+                    "jobs_dir": str(roots["jobs"]),
+                    "config_dir": str(roots["config"]),
+                    "wizards_dir": str(roots["wizards"]),
+                }
+            },
+            "output_dir": str(roots["outbox"]),
+            "diagnostics": {"enabled": False},
         },
-        "output_dir": str(roots["outbox"]),
-        "diagnostics": {"enabled": False},
-    }
+    )
     resolver = ConfigResolver(
         cli_args=defaults,
         defaults=defaults,
@@ -58,15 +63,22 @@ def _disable_optional_steps() -> dict[str, object]:
     }
 
 
-def test_rerun_and_resume_read_session_finalize_surface_only(tmp_path: Path, monkeypatch) -> None:
-    cast(object, processed_required)._INSTALLED = False
+def test_rerun_and_resume_read_session_finalize_surface_only(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    processed_required._INSTALLED = False
     bus = get_event_bus()
     bus.clear()
 
     plugin, roots = _make_plugin(tmp_path)
     engine = plugin.get_engine()
     diag_mod = import_module("plugins.import.engine_diagnostics_required")
-    monkeypatch.setattr(diag_mod, "submit_process_job", lambda **_kw: None)
+
+    def _submit_process_job(**_kw: object) -> None:
+        return None
+
+    monkeypatch.setattr(diag_mod, "submit_process_job", _submit_process_job)
 
     book_dir = roots["inbox"] / "AuthorA" / "Book1"
     book_dir.mkdir(parents=True, exist_ok=True)
@@ -127,10 +139,7 @@ def test_rerun_and_resume_read_session_finalize_surface_only(tmp_path: Path, mon
     )
     assert resumed["session_id"] == session_id
     assert resumed["status"] == "succeeded"
-    dry_run_rel = (
-        f"import/sessions/{session_id}/finalize/AuthorA/Book1/"
-        "Canonical Author - Canonical Edition.dryrun.txt"
-    )
+    dry_run_rel = f"import/sessions/{session_id}/finalize/AuthorA/Book1/AuthorA - Book1.dryrun.txt"
     log_rel = f"import/sessions/{session_id}/finalize/AuthorA/Book1/processing.log"
     finalize = resumed["computed"]["finalize"]
     assert finalize["job_id"] == job_id
@@ -143,7 +152,7 @@ def test_rerun_and_resume_read_session_finalize_surface_only(tmp_path: Path, mon
     assert finalize["status"] == "succeeded"
 
     dry_run_text = (roots["wizards"] / dry_run_rel).read_text(encoding="utf-8")
-    assert "title=Canonical Edition" in dry_run_text
+    assert "title=Book1" in dry_run_text
 
     rerun = engine.start_processing(session_id, {"confirm": True})
     assert rerun["job_ids"] == [job_id]
