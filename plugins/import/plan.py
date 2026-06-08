@@ -10,9 +10,6 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 from typing import TypeGuard, cast
 
-from .phase1_metadata_flow import build_phase1_metadata_projection
-from .phase1_source_intake import build_phase1_source_projection
-
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
     if not isinstance(value, dict):
@@ -24,10 +21,8 @@ def _as_str_object_dict(value: object) -> dict[str, object]:
     return dict(value) if _is_str_object_dict(value) else {}
 
 
-def _as_nested_str_object_dict(value: object) -> dict[str, dict[str, object]]:
-    if not _is_str_object_dict(value):
-        return {}
-    return {key: _as_str_object_dict(item) for key, item in value.items()}
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
 
 
 def _selected_unit_sort_key(item: dict[str, object]) -> tuple[str, str]:
@@ -59,7 +54,9 @@ def _canonical_target_relative_path(*, authority_meta: dict[str, object] | None)
     author_label = _normalize_rel_path(str(authority.get("author_label") or ""))
     book_label = _normalize_rel_path(str(authority.get("book_label") or ""))
     if not author_label or not book_label:
-        raise PlanSelectionError("canonical target authority missing")
+        raise PlanSelectionError(
+            "canonical target authority missing: vars.phase1.books[book_id].author_label/book_label"
+        )
     return _normalize_rel_path(f"{author_label}/{book_label}")
 
 
@@ -110,43 +107,28 @@ def _rename_outputs_for_unit(
     return [f"{index:02d}.mp3" for index in range(1, count + 1)]
 
 
-def _authority_book_meta(
+def _authority_books(
     *,
-    root: str,
-    relative_path: str,
-    discovery: list[dict[str, object]],
-    inputs: dict[str, object],
-    selected_book_ids: list[str],
     session_authority: dict[str, object] | None,
-) -> tuple[dict[str, dict[str, object]], dict[str, dict[str, object]]]:
+) -> dict[str, dict[str, object]]:
     authority_any = _as_str_object_dict(session_authority)
-    authority_book_meta_any = authority_any.get("authority_book_meta")
-    authority_book_meta = _as_nested_str_object_dict(authority_book_meta_any)
-    source_book_meta: dict[str, dict[str, object]] = {}
-    if authority_book_meta:
-        source_book_meta = {
-            book_id: {
-                "source_relative_path": str(meta.get("source_relative_path") or ""),
-            }
-            for book_id, meta in authority_book_meta.items()
-        }
-        return authority_book_meta, source_book_meta
+    if not authority_any:
+        raise PlanSelectionError("missing session authority: vars.phase1")
 
-    phase1_state: dict[str, object] = {
-        "source": {"root": root, "relative_path": relative_path},
-        "answers": dict(inputs),
-        "selected_book_ids": list(selected_book_ids),
-    }
-    source_projection = build_phase1_source_projection(discovery=discovery, state=phase1_state)
-    source_meta_any = source_projection.get("book_meta")
-    source_book_meta = _as_nested_str_object_dict(source_meta_any)
-    metadata_projection = build_phase1_metadata_projection(
-        source_projection=source_projection,
-        state=phase1_state,
-    )
-    authority_meta_any = metadata_projection.get("authority_by_book")
-    authority_book_meta = _as_nested_str_object_dict(authority_meta_any)
-    return authority_book_meta, source_book_meta
+    books_any = authority_any.get("books")
+    if not _is_object_list(books_any):
+        raise PlanSelectionError("missing session authority: vars.phase1.books")
+
+    books_by_id: dict[str, dict[str, object]] = {}
+    for entry in books_any:
+        row = _as_str_object_dict(entry)
+        book_id = str(row.get("book_id") or "")
+        if not book_id:
+            continue
+        books_by_id[book_id] = row
+    if not books_by_id:
+        raise PlanSelectionError("missing session authority: vars.phase1.books")
+    return books_by_id
 
 
 def _filter_discovery_for_books(
@@ -193,22 +175,16 @@ def compute_plan(
     selected_book_ids: list[str],
     session_authority: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    authority_book_meta, source_book_meta = _authority_book_meta(
-        root=root,
-        relative_path=relative_path,
-        discovery=discovery,
-        inputs=inputs,
-        selected_book_ids=selected_book_ids,
-        session_authority=session_authority,
-    )
+    authority_books = _authority_books(session_authority=session_authority)
 
     selected_units: list[dict[str, object]] = []
     for book_id in selected_book_ids:
-        source_meta = dict(source_book_meta.get(book_id) or {})
-        authority_meta = dict(authority_book_meta.get(book_id) or {})
-        source_rel = _normalize_rel_path(str(source_meta.get("source_relative_path") or ""))
+        authority_meta = dict(authority_books.get(book_id) or {})
+        source_rel = _normalize_rel_path(str(authority_meta.get("source_relative_path") or ""))
         if not authority_meta:
-            raise PlanSelectionError("invalid selected_book_ids")
+            raise PlanSelectionError(
+                "invalid selected_book_ids: book id is missing in vars.phase1.books"
+            )
         display_label = str(authority_meta.get("display_label") or "")
         if not display_label:
             author_label = str(authority_meta.get("author_label") or "")

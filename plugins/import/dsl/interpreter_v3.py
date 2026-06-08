@@ -141,7 +141,11 @@ def resolve_inputs(step: dict[str, object], state: dict[str, object]) -> dict[st
         if primitive_id == "flow.loop" and key == "param_bindings" and _is_object_list(value):
             out[str(key)] = deepcopy(value)
             continue
-        if primitive_id in {"data.filter", "data.map"} and key in {"condition_expr", "value_expr"}:
+        if primitive_id in {"data.filter", "data.map", "data.group_by"} and key in {
+            "condition_expr",
+            "key_expr",
+            "value_expr",
+        }:
             out[str(key)] = deepcopy(value)
             continue
         if phase2:

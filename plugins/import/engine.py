@@ -56,7 +56,6 @@ from .flow_runtime import (
 )
 from .job_requests import planned_units_count
 from .models import CatalogModel, FlowModel, validate_models
-from .phase1_source_intake import build_phase1_projection, phase1_session_authority_applies
 from .plan import PlanSelectionError, compute_plan
 from .preview import preview_action_impl
 from .session_effective_model import load_effective_model_json
@@ -711,13 +710,15 @@ class ImportWizardEngine:
         src_rel = str(src.get("relative_path") or "")
         vars_doc = _as_str_object_dict(state.get("vars"))
         session_authority = _as_str_object_dict(vars_doc.get("phase1"))
+        select_books_authority = _as_str_object_dict(session_authority.get("select_books"))
+        selected_book_ids = _as_str_list(select_books_authority.get("selected_ids"))
         plan = compute_plan(
             session_id=session_id,
             root=src_root,
             relative_path=src_rel,
             discovery=discovery,
             inputs=_as_str_object_dict(state.get("answers")),
-            selected_book_ids=_as_str_list(state.get("selected_book_ids")),
+            selected_book_ids=selected_book_ids,
             session_authority=session_authority,
         )
         atomic_write_json(self._fs, RootName.WIZARDS, f"{session_dir}/plan.json", plan)
@@ -1116,28 +1117,11 @@ class ImportWizardEngine:
             raise FinalizeError("state.json is invalid")
 
         state = ensure_session_state_fields(state_any)
-        discovery_path = f"{session_dir}/discovery.json"
-        if self._fs.exists(RootName.WIZARDS, discovery_path):
-            discovery_any = read_json(self._fs, RootName.WIZARDS, discovery_path)
-            discovery = _as_dict_list(discovery_any)
-            if phase1_session_authority_applies(
-                effective_model=self._load_effective_model(session_id)
-            ):
-                vars_doc = _as_str_object_dict(state.get("vars"))
-                vars_doc["phase1"] = build_phase1_projection(
-                    discovery=discovery,
-                    state=state,
-                    fs=self._fs,
-                )
-                state["vars"] = vars_doc
-
         answers = _as_str_object_dict(state.get("answers"))
         conflict_policy = _as_str_object_dict(answers.get("conflict_policy"))
         conflicts = _as_str_object_dict(state.get("conflicts"))
         conflicts["policy"] = str(conflict_policy.get("mode") or conflicts.get("policy") or "ask")
         state["conflicts"] = conflicts
-
-        self._persist_state(session_id, state)
         return state
 
     def _persist_state(self, session_id: str, state: dict[str, object]) -> None:
@@ -1159,6 +1143,9 @@ class ImportWizardEngine:
     def _effective_model_with_runtime_selection_items(
         self, session_id: str, effective_model: dict[str, object]
     ) -> dict[str, object]:
+        if effective_model.get("flowmodel_kind") == "dsl_step_graph_v3":
+            return effective_model
+
         session_dir = f"import/sessions/{session_id}"
         discovery_path = f"{session_dir}/discovery.json"
 

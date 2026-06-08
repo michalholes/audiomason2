@@ -18,7 +18,6 @@ from .engine_util import emit_required_event, exception_envelope, iso_utc_now
 from .errors import FinalizeError, error_envelope, invariant_violation, validation_error
 from .fingerprints import fingerprint_json
 from .job_requests import build_job_requests, planned_units_count
-from .phase1_source_intake import build_phase1_projection, phase1_session_authority_applies
 from .serialization import canonical_serialize
 from .storage import atomic_write_json, read_json
 
@@ -249,23 +248,6 @@ def start_processing_impl(
         if validation is not None:
             return validation
 
-        effective_model = engine.load_effective_model(session_id)
-        if phase1_session_authority_applies(effective_model=effective_model):
-            session_dir = f"import/sessions/{session_id}"
-            discovery_rel = f"{session_dir}/discovery.json"
-            if engine.file_exists(RootName.WIZARDS, discovery_rel):
-                fs = engine.get_file_service()
-                discovery_any = read_json(fs, RootName.WIZARDS, discovery_rel)
-                discovery = _as_dict_list(discovery_any)
-                if discovery:
-                    vars_doc = _as_str_object_dict(state.get("vars"))
-                    vars_doc["phase1"] = build_phase1_projection(
-                        discovery=discovery,
-                        state=state,
-                        fs=fs,
-                    )
-                    state["vars"] = vars_doc
-                    engine.persist_state(session_id, state)
         vars_doc = _as_str_object_dict(state.get("vars"))
         phase1 = _as_str_object_dict(vars_doc.get("phase1"))
         answers = _as_str_object_dict(state.get("answers"))

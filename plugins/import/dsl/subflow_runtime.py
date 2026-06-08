@@ -263,7 +263,9 @@ def execute_flow_invoke(
     vars_map["subflows"] = subflows
     state["vars"] = vars_map
     try:
-        state = run_graph(dict(library_any), state, session_id)
+        subgraph = dict(library_any)
+        subgraph["libraries"] = libraries
+        state = run_graph(subgraph, state, session_id)
         return_values = resolve_phase2_input_value(
             _as_str_object_dict(library_any.get("returns")),
             state=state,

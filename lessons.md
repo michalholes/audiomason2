@@ -348,3 +348,200 @@
   path serialization).
 - safety class: instruction-only
 - scope: inside current issue scope
+
+## 2026-06-07
+
+### Optimization 44: Unblock call.invoke authority changes by publishing manifest pointer first
+- impact: Reduces refactor deadlocks when introducing new import callable operations by making
+  `resolve_wizard_callable(...)` pass early, before larger flow rewiring starts.
+- affected workflow step or files: import plugin callable publication path in
+  `plugins/import/plugin.yaml`, `plugins/import/wizard_callable_manifest.json`, and
+  `plugins/import/plugin.py` method surface.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 45: Capability-gated detox avoids legacy v3 regressions
+- impact: Lets new workflows drop hidden submit hooks immediately while preserving old frozen
+  sessions, reducing rollout risk and rework from broad compatibility breakage.
+- affected workflow step or files: v3 submit branching in
+  `plugins/import/engine_step_submit.py` via explicit refresh-node detection.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 46: Convert no-op checkpoints into explicit callable refresh nodes
+- impact: Replaces invisible orchestration with traceable DSL steps, reducing ambiguity during
+  replay/debug and making authority drift easier to detect.
+- affected workflow step or files: v3 default graph in
+  `plugins/import/dsl/default_wizard_v3_source.json` (refresh checkpoints switched to
+  `call.invoke` and loop confirmed writes).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 47: Make load/finalize paths consume persisted authority only
+- impact: Removes hidden recompute side effects and prevents authority drift between submit and
+  start-processing phases.
+- affected workflow step or files: read-only session load in `plugins/import/engine.py` and
+  start-processing authority usage in `plugins/import/engine_processing.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 48: Keep resume path read-only and explicit
+- impact: Prevents silent state mutation during session resume, making repair behavior explicit
+  and easier to validate through dedicated flows.
+- affected workflow step or files: session resume boundary in
+  `plugins/import/engine_session_create.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 49: Pre-seed PHASE 1 authority once before v3 initialize_state
+- impact: Avoids first-prompt `missing_key` regressions while preserving detox goals by keeping
+  create-time authority seeding single-pass and removing post-init recompute loops.
+- affected workflow step or files: v3 create path in
+  `plugins/import/engine_session_create.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 50: Switch planning reads to vars.phase1 first with legacy fallback
+- impact: Reduces dependence on stale top-level selection mirrors while keeping compatibility
+  during staged sunset of legacy state fields.
+- affected workflow step or files: selection reads in
+  `plugins/import/engine.py` and `plugins/import/phase1_source_intake.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 51: Scope call.invoke monkeypatches by operation_id in orchestration tests
+- impact: Prevents unstable orchestration tests after explicit
+  `call.invoke(import.phase1_refresh)` nodes made overbroad resolver monkeypatching drift and
+  trigger false failures.
+- affected workflow step or files: phase1 orchestration test patch helpers should intercept only
+  `metadata.phase1_validate`, while delegating all other `operation_id` values to the original
+  resolver.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 52: Freeze zero-new-runtime constraint directly in the remediation plan
+- impact: Prevents authority drift where helper business logic is moved from one Python layer to
+  another instead of into JSON nodes and declared primitive semantics.
+- affected workflow step or files: execution constraints and SB-05/DoD criteria in
+  `import_plugin_json_orchestration_plan.md`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 53: Freeze no-pytest execution policy in plan-level guardrails
+- impact: Prevents churn from stale test expectations during architecture migration by separating
+  implementation authority work from test-suite maintenance.
+- affected workflow step or files: scope constraints and SB-06 verification criteria in
+  `import_plugin_json_orchestration_plan.md`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 54: Remove contradictory gate criteria from Definition of Done
+- impact: Prevents process deadlocks by keeping plan acceptance criteria consistent with explicit
+  no-pytest and no-test-update scope.
+- affected workflow step or files: `Definition of Done` and SB-06 verification bullets in
+  `import_plugin_json_orchestration_plan.md`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 55: Add primitive granularity guardrails before helper sunset
+- impact: Prevents drift where helper business logic is re-centralized into one catchall
+  primitive instead of being split into atomic JSON-driven primitive contracts.
+- affected workflow step or files: primitive constraints and SB-02/SB-05/DoD rules in
+  `import_plugin_json_orchestration_plan.md`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 56: Convert spec-gate findings into explicit SB-05 acceptance criteria
+- impact: Prevents ambiguous implementation drift by turning rule-level findings into concrete
+  removal targets and hard acceptance checks for helper sunset.
+- affected workflow step or files: SB-05 spec status and DoD criteria in
+  `import_plugin_json_orchestration_plan.md`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 57: Seed minimal PHASE 1 state before v3 prompt entry
+- impact: Avoids first-step expression failures after removing custom projection primitives by
+  ensuring `vars.phase1` and loop-confirmed maps exist before `flow.invoke` passthrough refreshes.
+- affected workflow step or files: session creation seed in
+  `plugins/import/engine_session_create.py` and v3 submit sync in
+  `plugins/import/engine_step_submit.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 58: Keep v3 legacy sync strictly mirror-only
+- impact: Prevents business-orchestration drift from creeping back into submit-time Python paths by
+  mirroring only persisted fields (`inputs`, selected id mirrors) instead of deriving from discovery.
+- affected workflow step or files: v3 submit sync and selection validation boundaries in
+  `plugins/import/engine_step_submit.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 59: Use DSL data.map/data.filter refresh nodes for per-selection state sync
+- impact: Avoids hidden Python-side PHASE 1 recompute hooks while keeping selected ids, label lists,
+  source paths, and cover hint arrays aligned after source/book selection edits.
+- affected workflow step or files: v3 `phase1_refresh_pipeline` in
+  `plugins/import/dsl/default_wizard_v3_source.json` with supporting seed keys in
+  `plugins/import/engine_session_create.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 60: Remove unused source.build_catalog primitive to keep authority surface tight
+- impact: Reduces accidental fallback surface and keeps PHASE 1 primitive registry aligned with
+  primitives that are actually used by current import DSL flows.
+- affected workflow step or files: source primitive dispatch and registry in
+  `plugins/import/primitives/__init__.py` and `plugins/import/primitives/source_v1.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 61: Keep no-compat mode fail-fast on authored v3 artifact mismatches
+- impact: Prevents drift from hidden compatibility rewrites by failing fast when
+  authored runtime artifacts diverge from required v3 library contracts.
+- affected workflow step or files: WizardDefinition load behavior discipline in
+  `plugins/import/wizard_definition_model.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 62: Make PHASE 1 authority list-first and derive selection views in DSL
+- impact: Reduces authority drift and fallback churn by keeping `authors[]`/`books[]`
+  as canonical state and deriving prompt/selection projections via deterministic
+  `data.map`/`data.filter`/`data.group_by` nodes.
+- affected workflow step or files: PHASE 1 runtime seed and refresh/default pipelines in
+  `plugins/import/engine_session_create.py` and
+  `plugins/import/dsl/default_wizard_v3_source.json`, plus list-first consumers.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 63: Bootstrap v3 first prompt via explicit pre-entry DSL flow
+- impact: Prevents empty `select_authors` options when Python-side derivation is removed by
+  running deterministic PHASE 1 authority bootstrap from raw discovery before the first prompt.
+- affected workflow step or files: v3 session create path in
+  `plugins/import/engine_session_create.py`, bootstrap wiring and discovery-to-authority
+  transform nodes in `plugins/import/dsl/default_wizard_v3_source.json`, and nested library
+  invocation handling in `plugins/import/dsl/subflow_runtime.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 64: Accept typed selection payloads in source.resolve_selection
+- impact: Prevents false "select one author but keep all books" behavior when prompt payloads are
+  parsed as JSON number/list instead of string expression.
+- affected workflow step or files: PHASE 1 selection resolution primitive in
+  `plugins/import/primitives/data_v1.py` (`source.resolve_selection@1`).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 65: Normalize metadata seed values before phase1 validation calls
+- impact: Prevents early metadata validation failures (`Need author name`) by deriving
+  `phase1.metadata.source_author` and `phase1.metadata.book_title` from current selected labels
+  inside refresh/default pipelines before validation call nodes run.
+- affected workflow step or files: PHASE 1 refresh/default pipelines and metadata validation
+  chain in `plugins/import/dsl/default_wizard_v3_source.json`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 66: Hydrate plugin config before generic call.invoke callable execution
+- impact: Prevents silent fallback to plugin default settings (for example disabled AI plugin)
+  when a JSON `call.invoke` node executes published operations.
+- affected workflow step or files: callable invocation boundary in
+  `plugins/import/primitives/call_v1.py`.
+- safety class: instruction-only
+- scope: inside current issue scope

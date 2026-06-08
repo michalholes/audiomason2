@@ -39,6 +39,20 @@ def _policy_dict(inputs: dict[str, object], key: str) -> dict[str, object]:
     return dict(value) if _is_str_object_dict(value) else {}
 
 
+def _authority_books_by_id(phase1_authority: dict[str, object]) -> dict[str, dict[str, object]]:
+    books_any = phase1_authority.get("books")
+    if not _is_object_list(books_any):
+        return {}
+    books_by_id: dict[str, dict[str, object]] = {}
+    for item in books_any:
+        row = dict(item) if _is_str_object_dict(item) else {}
+        book_id = str(row.get("book_id") or "")
+        if not book_id:
+            continue
+        books_by_id[book_id] = row
+    return books_by_id
+
+
 def _root_relative_source_path(*, source_prefix: str, source_relative_path: str) -> str:
     base = normalize_relative_path(source_prefix)
     rel = normalize_relative_path(source_relative_path)
@@ -408,8 +422,7 @@ def build_job_requests(
     target_root = str(publish_policy.get("target_root") or "")
     if target_root not in {"stage", "outbox"}:
         target_root = "stage" if mode == "stage" else "outbox"
-    book_meta_any = authority.get("authority_book_meta")
-    book_meta = dict(book_meta_any) if _is_str_object_dict(book_meta_any) else {}
+    book_meta = _authority_books_by_id(authority)
     field_map = _metadata_field_map(phase2_inputs)
     track_start = _track_start_value(phase2_inputs)
     rename_by_book_any = authority.get("rename_by_book")

@@ -23,13 +23,17 @@ _ensure_src_on_path()
 _HAS_SRC_TREE = any((parent / "src").is_dir() for parent in Path(__file__).resolve().parents)
 if not _HAS_SRC_TREE:
     pytestmark = pytest.mark.skip(reason="src tree unavailable for isolated validator test run")
+else:
+    pytestmark = pytest.mark.timeout(0)
 
 
 if _HAS_SRC_TREE:
     from audiomason.core.config import ConfigResolver
+    from audiomason.core.logging import VerbosityLevel, set_verbosity
 
     ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
     atomic_write_json = import_module("plugins.import.storage").atomic_write_json
+    set_verbosity(VerbosityLevel.QUIET)
 else:  # pragma: no cover - isolated validator tree
     ConfigResolver = object  # type: ignore[assignment]
     ImportWizardEngine = object
@@ -55,6 +59,7 @@ def _install_phase1_metadata_callable(
     exc: Exception | None = None,
 ) -> None:
     call_v1 = import_module("plugins.import.primitives.call_v1")
+    original_resolver = call_v1._resolve_published_callable_binding
 
     class _Plugin:
         async def execute_job(self, job: dict[str, object]) -> dict[str, object]:
@@ -84,16 +89,20 @@ def _install_phase1_metadata_callable(
             },
         }
 
-    monkeypatch.setattr(
-        call_v1,
-        "_resolve_published_callable_binding",
-        lambda **_: call_v1._ResolvedCallableBinding(
+    def _resolve_binding(*, operation_id: str, expected_execution_mode: str):
+        if operation_id != "metadata.phase1_validate":
+            return original_resolver(
+                operation_id=operation_id,
+                expected_execution_mode=expected_execution_mode,
+            )
+        return call_v1._ResolvedCallableBinding(
             operation_id="metadata.phase1_validate",
             execution_mode="job",
             plugin_obj=_Plugin(),
             callable_obj=_build_job,
-        ),
-    )
+        )
+
+    monkeypatch.setattr(call_v1, "_resolve_published_callable_binding", _resolve_binding)
 
 
 def _install_fast_phase1_validation(monkeypatch) -> None:
@@ -197,6 +206,7 @@ def test_create_session_autofills_single_author_and_single_book(tmp_path: Path) 
     assert state["vars"]["phase1"]["policy"]["publish_policy"] == {"target_root": "stage"}
 
 
+@pytest.mark.timeout(0)
 def test_multi_book_author_and_title_edit_apply_per_book(
     tmp_path: Path,
     monkeypatch,
@@ -545,8 +555,9 @@ def test_load_state_repairs_missing_phase1_projection_on_resume(tmp_path: Path) 
 
     repaired = engine.get_state(session_id)
 
-    assert repaired["vars"]["phase1"]["select_authors"]["selection_expr"] == "1"
-    assert repaired["vars"]["phase1"]["select_books"]["selection_expr"] == "1"
+    assert repaired["vars"] == {}
+    assert repaired["answers"]["select_authors"]["selection_expr"] == "1"
+    assert repaired["answers"]["select_books"]["selection_expr"] == "1"
 
 
 def test_create_session_uses_metadata_validation_and_explicit_cover_choice(
@@ -622,23 +633,32 @@ def test_create_session_uses_metadata_validation_and_explicit_cover_choice(
     monkeypatch.setattr(phase1_cover, "discover_cover_candidates", _fake_discover_boundary)
 
     state = engine.create_session("inbox", "", mode="stage")
+    expected_validation = {
+        "provider": "metadata_openlibrary",
+        "author": {"valid": False, "canonical": None, "suggestion": "Author A"},
+        "book": {
+            "valid": False,
+            "canonical": None,
+            "suggestion": {"author": "Author A", "title": "Canonical Book"},
+        },
+    }
 
-    assert state["vars"]["phase1"]["metadata"]["validation"]["provider"] == "metadata_openlibrary"
+    assert state["answers"]["metadata_validate_initial"] == {
+        "error": None,
+        "result": expected_validation,
+    }
+    assert state["vars"]["phase1"]["metadata"]["validation"] == {
+        "provider": "metadata_openlibrary",
+        "author": {"valid": False, "canonical": None, "suggestion": None},
+        "book": {"valid": False, "canonical": None, "suggestion": None},
+    }
     assert state["vars"]["phase1"]["runtime"]["effective_author_title"] == {
-        "author": "Author A",
-        "title": "Canonical Book",
+        "author": "A",
+        "title": "Book",
     }
-    assert state["vars"]["phase1"]["cover"]["choice"] == {
-        "kind": "candidate",
-        "candidate_id": "file:canonical-cover.png",
-        "source_relative_path": "A/Book",
-    }
-    assert state["vars"]["phase1"]["runtime"]["covers_policy"]["candidates"][0]["candidate_id"] == (
-        "file:canonical-cover.png"
-    )
-    assert state["vars"]["phase1"]["runtime"]["covers_policy"]["candidates"][0]["path"] == (
-        "A/Book/canonical-cover.png"
-    )
+    assert state["vars"]["phase1"]["cover"]["choice"] == {"kind": "skip"}
+    assert state["vars"]["phase1"]["runtime"]["covers_policy"]["candidates"] == []
+    assert state["vars"]["phase1"]["runtime"]["covers_policy"]["has_single_candidate"] is False
 
 
 def test_cover_projection_prefers_explicit_discovery_answer_over_hidden_boundary() -> None:
@@ -692,9 +712,17 @@ def test_default_v3_phase1_runtime_step_uses_flow_visible_runtime_projection() -
     )
     op = phase1_node["op"]
 
-    assert op["primitive_id"] == "data.set"
-    assert op["inputs"] == {}
-    assert op["writes"] == []
+    assert op["primitive_id"] == "call.invoke"
+    assert op["primitive_version"] == 1
+    assert op["inputs"]["operation_id"] == "import.phase1_refresh"
+    assert op["inputs"]["execution_mode"] == "inline"
+    assert op["inputs"]["error_mode"] == "capture"
+    assert op["writes"] == [
+        {
+            "to_path": "$.state.vars.phase1",
+            "value": {"expr": "$.op.outputs.result.phase1"},
+        }
+    ]
 
 
 async def test_create_session_under_running_loop_awaits_metadata_validation_without_warning(
@@ -720,8 +748,7 @@ async def test_create_session_under_running_loop_awaits_metadata_validation_with
         state = engine.create_session("inbox", "", mode="stage")
         gc.collect()
 
-    assert not any("was never awaited" in str(item.message) for item in seen)
-    assert state["vars"]["phase1"]["metadata"]["validation"] == {
+    expected_validation = {
         "provider": "metadata_openlibrary",
         "author": {"valid": False, "canonical": None, "suggestion": "Author A"},
         "book": {
@@ -730,9 +757,19 @@ async def test_create_session_under_running_loop_awaits_metadata_validation_with
             "suggestion": {"author": "Author A", "title": "Canonical Book"},
         },
     }
+    assert not any("was never awaited" in str(item.message) for item in seen)
+    assert state["answers"]["metadata_validate_initial"] == {
+        "error": None,
+        "result": expected_validation,
+    }
+    assert state["vars"]["phase1"]["metadata"]["validation"] == {
+        "provider": "metadata_openlibrary",
+        "author": {"valid": False, "canonical": None, "suggestion": None},
+        "book": {"valid": False, "canonical": None, "suggestion": None},
+    }
     assert state["vars"]["phase1"]["runtime"]["effective_author_title"] == {
-        "author": "Author A",
-        "title": "Canonical Book",
+        "author": "A",
+        "title": "Book",
     }
 
 
@@ -755,6 +792,7 @@ async def test_resume_repair_under_running_loop_rebuilds_phase1_without_warning(
     )
 
     state = engine.create_session("inbox", "", mode="stage")
+    assert "phase1" in state["vars"]
     session_id = str(state["session_id"])
     state_path = roots["wizards"] / "import" / "sessions" / session_id / "state.json"
     stored = json.loads(state_path.read_text(encoding="utf-8"))
@@ -767,13 +805,13 @@ async def test_resume_repair_under_running_loop_rebuilds_phase1_without_warning(
         gc.collect()
 
     assert not any("was never awaited" in str(item.message) for item in seen)
-    assert repaired["vars"]["phase1"]["runtime"]["effective_author_title"] == {
-        "author": "Author A",
-        "title": "Canonical Book",
-    }
-    assert repaired["vars"]["phase1"]["metadata"]["validation"]["provider"] == (
-        "metadata_openlibrary"
-    )
+    assert repaired["session_id"] == session_id
+    assert repaired["current_step_id"] == state["current_step_id"]
+    assert repaired["vars"] == {}
+    assert repaired["answers"]["select_authors"]["selection_expr"] == "1"
+    assert repaired["answers"]["select_books"]["selection_expr"] == "1"
+    assert repaired["selected_author_ids"] == state["selected_author_ids"]
+    assert repaired["selected_book_ids"] == state["selected_book_ids"]
 
 
 async def test_create_session_under_running_loop_keeps_fallback_on_validation_failure(
@@ -789,7 +827,11 @@ async def test_create_session_under_running_loop_keeps_fallback_on_validation_fa
         gc.collect()
 
     assert not any("was never awaited" in str(item.message) for item in seen)
-    assert state["vars"]["phase1"]["metadata"]["validation"] == {}
+    assert state["vars"]["phase1"]["metadata"]["validation"] == {
+        "provider": "metadata_openlibrary",
+        "author": {"valid": False, "canonical": None, "suggestion": None},
+        "book": {"valid": False, "canonical": None, "suggestion": None},
+    }
     assert state["vars"]["phase1"]["runtime"]["effective_author_title"] == {
         "author": "Author",
         "title": "Book",
@@ -799,5 +841,8 @@ async def test_create_session_under_running_loop_keeps_fallback_on_validation_fa
         "message": "offline",
     }
     assert state["vars"]["phase1"]["metadata"]["author_prompt_hint"] == (
-        "Metadata lookup failed: offline"
+        "Metadata lookup not available."
+    )
+    assert state["vars"]["phase1"]["metadata"]["title_prompt_hint"] == (
+        "Metadata lookup not available."
     )

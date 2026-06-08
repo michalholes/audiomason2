@@ -64,6 +64,10 @@ class _KeywordCallable(Protocol):
     def __call__(self, **kwargs: object) -> object: ...
 
 
+class _ConfigurablePlugin(Protocol):
+    def configure(self, config: dict[str, object]) -> None: ...
+
+
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
     if not isinstance(value, dict):
         return False
@@ -140,6 +144,14 @@ def _resolve_published_callable_binding(
         plugin_obj = loader.get_plugin(published.plugin_id)
     except PluginNotFoundError:
         plugin_obj = loader.load_plugin(published.manifest_path.parent, validate=False)
+
+    plugin_config = _as_str_object_dict(registry.get_plugin_config(published.plugin_id))
+    if plugin_config:
+        configure_any = getattr(plugin_obj, "configure", None)
+        if callable(configure_any):
+            configurable = cast(_ConfigurablePlugin, plugin_obj)
+            configurable.configure(dict(plugin_config))
+
     callable_def = RegisteredWizardCallable(
         plugin_id=published.plugin_id,
         plugin_dir=published.manifest_path.parent,
@@ -253,26 +265,25 @@ def execute(
             expected_execution_mode=execution_mode,
         )
         if execution_mode == "inline":
-            return {
-                "result": _execute_inline(
-                    binding=binding,
-                    args=_bind_runtime_args(
-                        callable_obj=binding.callable_obj,
-                        args=args,
-                        state=state,
-                    ),
-                ),
-                "error": None,
-            }
-        return {
-            "result": _execute_job(
+            result = _execute_inline(
                 binding=binding,
                 args=_bind_runtime_args(
                     callable_obj=binding.callable_obj,
                     args=args,
                     state=state,
                 ),
-            ),
+            )
+        else:
+            result = _execute_job(
+                binding=binding,
+                args=_bind_runtime_args(
+                    callable_obj=binding.callable_obj,
+                    args=args,
+                    state=state,
+                ),
+            )
+        return {
+            "result": result,
             "error": None,
         }
     except Exception as exc:

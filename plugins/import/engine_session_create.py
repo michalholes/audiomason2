@@ -17,6 +17,7 @@ from . import discovery as discovery_mod
 from .action_jobs import extract_action_job_requests
 from .defaults import ensure_default_models
 from .detached_runtime import build_detached_runtime_bootstrap
+from .dsl.interpreter_v3 import run_automatic_steps
 from .engine_actions_v3 import build_runtime_flow_model, initialize_state
 from .engine_session_guards import validate_root_and_path
 from .engine_util import (
@@ -26,10 +27,10 @@ from .engine_util import (
     exception_envelope,
     inject_selection_items,
     iso_utc_now,
+    sync_session_cursor,
 )
 from .errors import FinalizeError
 from .fingerprints import fingerprint_json, sha256_hex
-from .phase1_source_intake import build_phase1_projection, phase1_session_authority_applies
 from .storage import (
     atomic_write_json,
     atomic_write_text,
@@ -52,6 +53,80 @@ def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
 
 def _as_str_object_dict(value: object) -> dict[str, object]:
     return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _as_str_list_if_valid(value: object) -> list[str] | None:
+    if not isinstance(value, list):
+        return None
+    values = cast(list[object], value)
+    items = [item for item in values if isinstance(item, str)]
+    if len(items) != len(values):
+        return None
+    return items
+
+
+def _sync_legacy_selection_from_phase1(state: dict[str, object]) -> None:
+    vars_state = _as_str_object_dict(state.get("vars"))
+    phase1_state = _as_str_object_dict(vars_state.get("phase1"))
+
+    select_authors = _as_str_object_dict(phase1_state.get("select_authors"))
+    selected_author_ids = _as_str_list_if_valid(select_authors.get("selected_ids"))
+    if selected_author_ids is not None:
+        state["selected_author_ids"] = selected_author_ids
+
+    select_books = _as_str_object_dict(phase1_state.get("select_books"))
+    selected_book_ids = _as_str_list_if_valid(select_books.get("selected_ids"))
+    if selected_book_ids is not None:
+        state["selected_book_ids"] = selected_book_ids
+
+
+def _build_phase1_runtime_seed(discovery: list[dict[str, object]]) -> dict[str, object]:
+    discovery_items = [dict(item) for item in discovery if _is_str_object_dict(item)]
+    cover_item_modes = ["skip", "file", "embedded", "url"]
+
+    return {
+        "discovery_items": discovery_items,
+        "authors": [],
+        "books": [],
+        "books_by_author": {},
+        "select_authors": {
+            "ordered_ids": [],
+            "selected_ids": [],
+            "selected_author_label_list": [],
+            "selection_expr": "all",
+            "autofill_if": False,
+        },
+        "select_books": {
+            "ordered_ids": [],
+            "filtered_ids": [],
+            "selected_ids": [],
+            "selected_book_label_list": [],
+            "selected_source_relative_paths": [],
+            "selection_expr": "all",
+            "autofill_if": False,
+        },
+        "cover": {
+            "item_modes": list(cover_item_modes),
+            "per_source_allowed_modes": [],
+            "per_source_hints": [],
+        },
+        "runtime": {},
+    }
+
+
+_V3_BOOTSTRAP_STEP_ID = "phase1_bootstrap"
+
+
+def _has_step(effective_model: dict[str, object], *, step_id: str) -> bool:
+    steps_any = effective_model.get("steps")
+    if not isinstance(steps_any, list):
+        return False
+    steps = cast(list[object], steps_any)
+    for step_any in steps:
+        step = _as_str_object_dict(step_any)
+        if str(step.get("step_id") or "") == step_id:
+            return True
+    return False
 
 
 @dataclass(frozen=True)
@@ -121,8 +196,8 @@ def _build_session_start_context(
     discovery = discovery_mod.run_discovery(fs, root=root, relative_path=relative_path)
     discovery_fingerprint = fingerprint_json(discovery)
 
-    authors_items, books_items = derive_selection_items(discovery)
     if effective_model.get("flowmodel_kind") != "dsl_step_graph_v3":
+        authors_items, books_items = derive_selection_items(discovery)
         effective_model = inject_selection_items(
             effective_model=effective_model,
             authors_items=authors_items,
@@ -284,23 +359,7 @@ def resume_session_from_context(
     runtime_fp = engine.runtime_effective_model_fingerprint(ctx.session_id)
     if runtime_fp and loaded_state.get("model_fingerprint") != runtime_fp:
         loaded_state["model_fingerprint"] = runtime_fp
-    if phase1_session_authority_applies(effective_model=ctx.effective_model):
-        vars_state = _as_str_object_dict(loaded_state.get("vars"))
-        vars_state["phase1"] = build_phase1_projection(
-            discovery=ctx.discovery,
-            state=loaded_state,
-            fs=fs,
-        )
-        loaded_state["vars"] = vars_state
-    if ctx.effective_model.get("flowmodel_kind") == "dsl_step_graph_v3":
-        from .engine_step_submit import sync_v3_legacy_state
-
-        loaded_state = sync_v3_legacy_state(
-            engine=engine,
-            session_id=ctx.session_id,
-            state=loaded_state,
-        )
-    engine.persist_state(ctx.session_id, loaded_state)
+    _sync_legacy_selection_from_phase1(loaded_state)
     return loaded_state
 
 
@@ -415,37 +474,28 @@ def create_new_session_from_context(
         "errors": [],
     }
 
-    if phase1_session_authority_applies(effective_model=ctx.effective_model):
-        state["vars"] = {
-            **_runtime_vars(engine=engine),
-            "phase1": build_phase1_projection(
-                discovery=ctx.discovery,
-                state=state,
-                fs=fs,
-            ),
-        }
     if ctx.effective_model.get("flowmodel_kind") == "dsl_step_graph_v3":
-        from .engine_step_submit import sync_v3_legacy_state
-
-        state = initialize_state(
-            state=state,
-            effective_model=ctx.effective_model,
-            session_id=ctx.session_id,
-        )
-        if phase1_session_authority_applies(effective_model=ctx.effective_model):
-            vars_state = _as_str_object_dict(state.get("vars"))
-            vars_state.update(_runtime_vars(engine=engine))
-            vars_state["phase1"] = build_phase1_projection(
-                discovery=ctx.discovery,
+        vars_state = _as_str_object_dict(state.get("vars"))
+        vars_state.setdefault("author_loop", {"index": 0, "confirmed": {}})
+        vars_state.setdefault("title_loop", {"index": 0, "confirmed": {}})
+        vars_state.setdefault("cover_loop", {"index": 0, "confirmed": {}})
+        vars_state["phase1"] = _build_phase1_runtime_seed(ctx.discovery)
+        state["vars"] = vars_state
+        if _has_step(ctx.effective_model, step_id=_V3_BOOTSTRAP_STEP_ID):
+            state["current_step_id"] = _V3_BOOTSTRAP_STEP_ID
+            sync_session_cursor(state, step_id=_V3_BOOTSTRAP_STEP_ID)
+            state = run_automatic_steps(
+                effective_model=ctx.effective_model,
                 state=state,
-                fs=fs,
+                session_id=ctx.session_id,
             )
-            state["vars"] = vars_state
-        state = sync_v3_legacy_state(
-            engine=engine,
-            session_id=ctx.session_id,
-            state=state,
-        )
+        else:
+            state = initialize_state(
+                state=state,
+                effective_model=ctx.effective_model,
+                session_id=ctx.session_id,
+            )
+    _sync_legacy_selection_from_phase1(state)
     atomic_write_json(fs, RootName.WIZARDS, state_path, state)
     engine.append_decision(
         ctx.session_id,
