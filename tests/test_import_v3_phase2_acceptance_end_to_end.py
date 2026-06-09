@@ -5,18 +5,21 @@ from __future__ import annotations
 import json
 from importlib import import_module
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 from audiomason.core.config import ConfigResolver
 
 run_launcher = import_module("plugins.import.cli_renderer").run_launcher
-ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
+ImportWizardEngine: Any = import_module("plugins.import.engine").ImportWizardEngine
 atomic_write_json = import_module("plugins.import.storage").atomic_write_json
 RootName = import_module("plugins.file_io.service.types").RootName
 WIZARD_DEFINITION_REL_PATH = import_module(
     "plugins.import.wizard_definition_model"
 ).WIZARD_DEFINITION_REL_PATH
 
-PHASE2_ACCEPTANCE_PROGRAM = {
+PHASE2_ACCEPTANCE_PROGRAM: dict[str, object] = {
     "version": 3,
     "entry_step_id": "ask_name",
     "libraries": {
@@ -234,13 +237,13 @@ PHASE2_ACCEPTANCE_PROGRAM = {
 }
 
 
-def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, ConfigResolver, Path]:
+def _make_engine(tmp_path: Path) -> tuple[Any, ConfigResolver, Path]:
     roots = {
         name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
     }
     for root in roots.values():
         root.mkdir(parents=True, exist_ok=True)
-    defaults = {
+    defaults: dict[str, object] = {
         "file_io": {
             "roots": {
                 "inbox_dir": str(roots["inbox"]),
@@ -280,7 +283,10 @@ def _write_source_tree(tmp_path: Path) -> None:
     (book_dir / "track01.mp3").write_text("x", encoding="utf-8")
 
 
-def test_phase2_cli_acceptance_smoke_covers_runtime_capability_set(tmp_path: Path) -> None:
+def test_phase2_cli_acceptance_smoke_covers_runtime_capability_set(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _write_source_tree(tmp_path)
     engine, resolver, wizards_root = _make_engine(tmp_path)
     fs = engine.get_file_service()
@@ -291,12 +297,30 @@ def test_phase2_cli_acceptance_smoke_covers_runtime_capability_set(tmp_path: Pat
         PHASE2_ACCEPTANCE_PROGRAM,
     )
 
+    def _stub_compute_plan(session_id: str) -> dict[str, object]:
+        del session_id
+        return {
+            "selected_books": [],
+            "summary": {
+                "selected_books": 0,
+                "files": 0,
+                "dirs": 0,
+                "bundles": 0,
+            },
+        }
+
+    monkeypatch.setattr(engine, "compute_plan", _stub_compute_plan)
+
     printed: list[str] = []
+
+    def _input_fn(_prompt: str) -> str:
+        return "Operator"
+
     rc = run_launcher(
         engine=engine,
         resolver=resolver,
         cli_overrides={},
-        input_fn=lambda _prompt: "Operator",
+        input_fn=_input_fn,
         print_fn=printed.append,
     )
 

@@ -144,11 +144,13 @@ async def test_import_ui_run_wizard_happy_path(page: Page, e2e_web_base_url: str
     await expect(author_value).to_be_visible()
     await expect(author_value).to_have_value("Author A")
     await page.locator("#submit").click()
-
+    await page.locator("#reload").click()
+    await expect(page.locator("#step")).to_contain_text("Title")
     title_value = page.locator('#step [data-v3-payload-key="value"]')
     await expect(title_value).to_be_visible()
     await expect(title_value).to_have_value("Book One")
     await page.locator("#submit").click()
+    await page.locator("#reload").click()
 
     await expect(page.locator("#step")).to_contain_text("Step: stop")
     await expect(page.locator("#step")).to_contain_text("Session status: completed")

@@ -100,7 +100,7 @@ def test_v2_and_v3_sessions_can_coexist_deterministically(tmp_path: Path) -> Non
 
     state_v3 = engine.create_session("inbox", "src")
     assert state_v3["session_id"]
-    assert state_v3["current_step_id"] == "select_authors"
+    assert state_v3["current_step_id"] == "effective_author_item"
 
     state_v3_loaded = engine.get_state(str(state_v3["session_id"]))
     assert state_v3_loaded["effective_model"]["flowmodel_kind"] == "dsl_step_graph_v3"

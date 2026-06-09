@@ -128,16 +128,24 @@ def test_runtime_uses_active_wizard_definition_shape_for_known_step_ids(tmp_path
     fs = engine.get_file_service()
     ensure_default_models(fs)
 
-    source_dir = tmp_path / "inbox" / "src"
-    source_dir.mkdir(parents=True, exist_ok=True)
-    (source_dir / "a.txt").write_text("x", encoding="utf-8")
+    for rel in ["src/AuthorA/Book1", "src/AuthorB/Book2"]:
+        book_dir = tmp_path / "inbox" / rel
+        book_dir.mkdir(parents=True, exist_ok=True)
+        (book_dir / "a.txt").write_text("x", encoding="utf-8")
 
     state = engine.create_session("inbox", "src", mode="stage")
     assert "error" not in state
 
-    step_result = engine.submit_step(
-        str(state["session_id"]),
-        "select_authors",
-        {"selection": "all"},
-    )
+    session_id = str(state["session_id"])
+    current_step_id = str(state.get("current_step_id") or "")
+    if current_step_id == "select_authors":
+        step_result = engine.submit_step(session_id, "select_authors", {"selection": "all"})
+    elif current_step_id == "select_books":
+        step_result = engine.submit_step(session_id, "select_books", {"selection": "all"})
+    else:
+        step_result = engine.submit_step(
+            session_id,
+            current_step_id,
+            {"value": "Author A"},
+        )
     assert "error" not in step_result

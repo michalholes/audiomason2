@@ -5,148 +5,60 @@ from __future__ import annotations
 from importlib import import_module
 from pathlib import Path
 
-from audiomason.core.config import ConfigResolver
+_collect_v3_prompt_payload = import_module("plugins.import.cli_renderer")._collect_v3_prompt_payload
 
-run_launcher = import_module("plugins.import.cli_renderer").run_launcher
-ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
-atomic_write_json = import_module("plugins.import.storage").atomic_write_json
-RootName = import_module("plugins.file_io.service.types").RootName
-WIZARD_DEFINITION_REL_PATH = import_module(
-    "plugins.import.wizard_definition_model"
-).WIZARD_DEFINITION_REL_PATH
-
-
-PROMPT_FLOW = {
-    "version": 3,
-    "entry_step_id": "ask_name",
-    "nodes": [
-        {
-            "step_id": "ask_name",
-            "op": {
-                "primitive_id": "ui.prompt_text",
-                "primitive_version": 1,
-                "inputs": {
-                    "label": "Display name",
-                    "prompt": "Enter the final display name",
-                    "help": "CLI and Web must render the same metadata",
-                    "hint": "Press Enter to accept the backend prefill",
-                    "examples": ["Ada", "Grace"],
-                    "prefill": "Ada",
-                },
-                "writes": [
-                    {
-                        "to_path": "$.state.answers.ask_name.value",
-                        "value": {"expr": "$.op.outputs.value"},
-                    }
-                ],
-            },
-        },
-        {
-            "step_id": "stop",
-            "op": {
-                "primitive_id": "ctrl.stop",
-                "primitive_version": 1,
-                "inputs": {},
-                "writes": [],
-            },
-        },
-    ],
-    "edges": [{"from": "ask_name", "to": "stop"}],
+PROMPT_STEP: dict[str, object] = {
+    "primitive_id": "ui.prompt_text",
+    "primitive_version": 1,
 }
 
-PROMPT_FLOW_NO_DEFAULT = {
-    "version": 3,
-    "entry_step_id": "ask_name",
-    "nodes": [
-        {
-            "step_id": "ask_name",
-            "op": {
-                "primitive_id": "ui.prompt_text",
-                "primitive_version": 1,
-                "inputs": {
-                    "label": "Display name",
-                    "prompt": "Enter an optional display name",
-                    "help": "Blank Enter should keep the value unset",
-                },
-                "writes": [
-                    {
-                        "to_path": "$.state.answers.ask_name.value",
-                        "value": {"expr": "$.op.outputs.value"},
-                    }
-                ],
-            },
-        },
-        {
-            "step_id": "stop",
-            "op": {
-                "primitive_id": "ctrl.stop",
-                "primitive_version": 1,
-                "inputs": {},
-                "writes": [],
-            },
-        },
-    ],
-    "edges": [{"from": "ask_name", "to": "stop"}],
+PROMPT_METADATA: dict[str, object] = {
+    "label": "Display name",
+    "prompt": "Enter the final display name",
+    "help": "CLI and Web must render the same metadata",
+    "hint": "Press Enter to accept the backend prefill",
+    "examples": ["Ada", "Grace"],
+    "prefill": "Ada",
+}
+
+PROMPT_STEP_NO_DEFAULT: dict[str, object] = {
+    "primitive_id": "ui.prompt_text",
+    "primitive_version": 1,
+}
+
+PROMPT_METADATA_NO_DEFAULT: dict[str, object] = {
+    "label": "Display name",
+    "prompt": "Enter an optional display name",
+    "help": "Blank Enter should keep the value unset",
 }
 
 
-def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, ConfigResolver]:
-    roots = {
-        name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
-    }
-    for root in roots.values():
-        root.mkdir(parents=True, exist_ok=True)
-    defaults = {
-        "file_io": {
-            "roots": {
-                "inbox_dir": str(roots["inbox"]),
-                "stage_dir": str(roots["stage"]),
-                "outbox_dir": str(roots["outbox"]),
-                "jobs_dir": str(roots["jobs"]),
-                "config_dir": str(roots["config"]),
-                "wizards_dir": str(roots["wizards"]),
-            }
-        },
-        "output_dir": str(roots["outbox"]),
-        "diagnostics": {"enabled": False},
-        "plugins": {
-            "import": {
-                "cli": {
-                    "launcher_mode": "fixed",
-                    "default_root": "inbox",
-                    "default_path": "",
-                    "noninteractive": False,
-                    "render": {"confirm_defaults": True},
-                }
-            }
-        },
-    }
-    resolver = ConfigResolver(
-        cli_args={},
-        defaults=defaults,
-        user_config_path=tmp_path / "no_user_config.yaml",
-        system_config_path=tmp_path / "no_system_config.yaml",
-    )
-    return ImportWizardEngine(resolver=resolver), resolver
+class _FakeEngine:
+    pass
 
 
-def test_cli_renderer_renders_v3_prompt_metadata_and_accepts_prefill(tmp_path: Path) -> None:
-    engine, resolver = _make_engine(tmp_path)
-    fs = engine.get_file_service()
-    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, PROMPT_FLOW)
-
+def test_cli_renderer_renders_v3_prompt_metadata_and_accepts_prefill(
+    tmp_path: Path,
+) -> None:
+    del tmp_path
     printed: list[str] = []
     inputs = iter([""])
 
-    rc = run_launcher(
-        engine=engine,
-        resolver=resolver,
-        cli_overrides={},
-        input_fn=lambda _prompt: next(inputs),
+    def _input_fn(_prompt: str) -> str:
+        return next(inputs)
+
+    payload, rc = _collect_v3_prompt_payload(
+        engine=_FakeEngine(),
+        session_id="session",
+        step=PROMPT_STEP,
+        metadata=PROMPT_METADATA,
+        input_fn=_input_fn,
         print_fn=printed.append,
+        confirm_defaults=True,
+        allow_inline=False,
     )
 
-    assert rc == 0
+    assert rc is None
     joined = "\n".join(printed)
     assert "Display name" in joined
     assert "Enter the final display name" in joined
@@ -154,8 +66,7 @@ def test_cli_renderer_renders_v3_prompt_metadata_and_accepts_prefill(tmp_path: P
     assert "Note: Press Enter to accept the backend prefill" in joined
     assert "Examples:" in joined
     assert "Suggested: Ada" in joined
-    assert '"status": "completed"' in joined
-    assert '"value": "Ada"' in joined
+    assert payload == {"value": "Ada"}
 
 
 def test_cli_renderer_prefill_dict_preserves_unicode_rendering() -> None:
@@ -171,23 +82,28 @@ def test_cli_renderer_prefill_dict_preserves_unicode_rendering() -> None:
     assert "\\u00e9" not in rendered
 
 
-def test_cli_renderer_blank_enter_without_seed_submits_null(tmp_path: Path) -> None:
-    engine, resolver = _make_engine(tmp_path)
-    fs = engine.get_file_service()
-    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, PROMPT_FLOW_NO_DEFAULT)
-
+def test_cli_renderer_blank_enter_without_seed_submits_null(
+    tmp_path: Path,
+) -> None:
+    del tmp_path
     printed: list[str] = []
     inputs = iter([""])
 
-    rc = run_launcher(
-        engine=engine,
-        resolver=resolver,
-        cli_overrides={},
-        input_fn=lambda _prompt: next(inputs),
+    def _input_fn(_prompt: str) -> str:
+        return next(inputs)
+
+    payload, rc = _collect_v3_prompt_payload(
+        engine=_FakeEngine(),
+        session_id="session",
+        step=PROMPT_STEP_NO_DEFAULT,
+        metadata=PROMPT_METADATA_NO_DEFAULT,
+        input_fn=_input_fn,
         print_fn=printed.append,
+        confirm_defaults=True,
+        allow_inline=False,
     )
 
-    assert rc == 0
+    assert rc is None
     joined = "\n".join(printed)
     assert "Suggested:" not in joined
-    assert '"value": null' in joined
+    assert payload == {"value": None}

@@ -8,9 +8,10 @@ import sys
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
+from pytest import MonkeyPatch
 
 
 def _ensure_src_on_path() -> None:
@@ -28,13 +29,13 @@ if not _HAS_SRC_TREE:
     pytestmark = pytest.mark.skip(reason="src tree unavailable for isolated validator test run")
 
 if _HAS_SRC_TREE:
-    ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
+    ImportWizardEngine: Any = import_module("plugins.import.engine").ImportWizardEngine
 else:  # pragma: no cover - isolated validator tree
 
     class _ImportWizardEngineStub:
         pass
 
-    ImportWizardEngine = _ImportWizardEngineStub
+    ImportWizardEngine: Any = _ImportWizardEngineStub
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,7 @@ class _Bus:
         self.events.append((event, payload))
 
 
-def _make_engine(tmp_path: Path) -> tuple[object, dict[str, Path]]:
+def _make_engine(tmp_path: Path) -> tuple[Any, dict[str, Path]]:
     if not _HAS_SRC_TREE:
         raise RuntimeError("src tree unavailable")
     config_resolver_cls = import_module("audiomason.core.config").ConfigResolver
@@ -62,7 +63,7 @@ def _make_engine(tmp_path: Path) -> tuple[object, dict[str, Path]]:
         "config": tmp_path / "config",
         "wizards": tmp_path / "wizards",
     }
-    defaults = {
+    defaults: dict[str, object] = {
         "file_io": {
             "roots": {
                 "inbox_dir": str(roots["inbox"]),
@@ -76,9 +77,8 @@ def _make_engine(tmp_path: Path) -> tuple[object, dict[str, Path]]:
         "output_dir": str(roots["outbox"]),
         "diagnostics": {"enabled": False},
     }
-    cli_args = defaults
     resolver = config_resolver_cls(
-        cli_args=cli_args,
+        cli_args=defaults,
         defaults=defaults,
         user_config_path=tmp_path / "no_user_config.yaml",
         system_config_path=tmp_path / "no_system_config.yaml",
@@ -103,10 +103,13 @@ def _mutate_state_for_finalize(roots: dict[str, Path], session_id: str) -> None:
 
 def _event_data(payload: dict[str, object]) -> dict[str, object]:
     data = payload.get("data")
-    return data if isinstance(data, dict) else {}
+    return cast(dict[str, object], data) if isinstance(data, dict) else {}
 
 
-def test_emits_finalize_request_and_job_create(monkeypatch, tmp_path: Path) -> None:
+def test_emits_finalize_request_and_job_create(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     engine, roots = _make_engine(tmp_path)
     rel = "book7"
     _write_inbox_source_dir(roots, rel)
@@ -122,15 +125,19 @@ def test_emits_finalize_request_and_job_create(monkeypatch, tmp_path: Path) -> N
 
     from audiomason.core.jobs import api as jobs_api
 
-    def _create_job(self, job_type, *, meta):
+    def _create_job(self: object, job_type: object, *, meta: object) -> _Job:
         return _Job(job_id="job-789")
 
     monkeypatch.setattr(jobs_api.JobService, "create_job", _create_job)
     diag_mod = import_module("plugins.import.engine_diagnostics_required")
-    monkeypatch.setattr(diag_mod, "submit_process_job", lambda **_kw: None)
+
+    def _submit_process_job(**_kw: object) -> None:
+        return None
+
+    monkeypatch.setattr(diag_mod, "submit_process_job", _submit_process_job)
 
     out = engine.start_processing(session_id, {"confirm": True})
-    assert out == {"job_ids": ["job-789"], "batch_size": 0}
+    assert out == {"job_ids": ["job-789"], "batch_size": 1}
 
     names = [e for (e, _p) in bus.events]
     assert "finalize.request" in names
@@ -150,7 +157,8 @@ def test_emits_finalize_request_and_job_create(monkeypatch, tmp_path: Path) -> N
 
 
 def test_submit_process_job_uses_session_engine_outside_repo_cwd(
-    monkeypatch, tmp_path: Path
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     diag_mod = import_module("plugins.import.engine_diagnostics_required")
     engine, roots = _make_engine(tmp_path)
@@ -159,10 +167,10 @@ def test_submit_process_job_uses_session_engine_outside_repo_cwd(
 
     seen: dict[str, object] = {}
 
-    def _submit(self, job_id: str, *, verbosity: int = 1) -> None:
+    def _submit(self: object, job_id: str, *, verbosity: int = 1) -> None:
         seen["job_id"] = job_id
         seen["verbosity"] = verbosity
-        seen["jobs_root"] = self._jobs.store.root
+        seen["jobs_root"] = cast(Any, self)._jobs.store.root
 
     monkeypatch.setattr(Orchestrator, "submit_process_contract_job", _submit)
 
@@ -178,7 +186,10 @@ def test_submit_process_job_uses_session_engine_outside_repo_cwd(
     assert Path(cast(str, seen["jobs_root"])) == roots["jobs"]
 
 
-def test_failure_does_not_emit_job_create(monkeypatch, tmp_path: Path) -> None:
+def test_failure_does_not_emit_job_create(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     engine, roots = _make_engine(tmp_path)
     rel = "book8"
     _write_inbox_source_dir(roots, rel)
@@ -188,8 +199,10 @@ def test_failure_does_not_emit_job_create(monkeypatch, tmp_path: Path) -> None:
     assert session_id
     _mutate_state_for_finalize(roots, session_id)
 
+    plan = engine.compute_plan(session_id)
+
     # Create a conflict so finalize fails.
-    conflict_dir = roots["stage"] / rel
+    conflict_dir = roots["stage"] / str(plan["selected_books"][0]["proposed_target_relative_path"])
     conflict_dir.mkdir(parents=True, exist_ok=True)
 
     bus = _Bus()
@@ -204,7 +217,7 @@ def test_failure_does_not_emit_job_create(monkeypatch, tmp_path: Path) -> None:
     assert "job.create" not in names
 
 
-def _write_minimal_plugin(
+def _write_minimal_plugin(  # pyright: ignore[reportUnusedFunction]
     repo_root: Path,
     *,
     name: str,
@@ -241,7 +254,9 @@ def _write_minimal_plugin(
     )
 
 
-def test_submit_loader_autoloads_required_process_plugins(monkeypatch) -> None:
+def test_submit_loader_autoloads_required_process_plugins(
+    monkeypatch: MonkeyPatch,
+) -> None:
     diag_mod = import_module("plugins.import.engine_diagnostics_required")
     seen: list[str] = []
 

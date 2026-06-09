@@ -108,37 +108,11 @@ def test_phase1_runtime_uses_registry_dispatch_only() -> None:
     interpreter_text = (repo_root / "plugins" / "import" / "dsl" / "interpreter_v3.py").read_text(
         encoding="utf-8"
     )
-    intake_text = (repo_root / "plugins" / "import" / "phase1_source_intake.py").read_text(
+    session_create_text = (repo_root / "plugins" / "import" / "engine_session_create.py").read_text(
         encoding="utf-8"
     )
 
     assert "execute_import_phase1_primitive" not in interpreter_text
     assert "_is_phase1_runtime_primitive" not in interpreter_text
-    assert "build_runtime_snapshot" not in intake_text
+    assert "build_runtime_snapshot" not in session_create_text
     assert "import.phase1_runtime" not in interpreter_text
-
-
-def test_phase1_projection_runtime_refreshes_current_answers() -> None:
-    build_phase1_projection = import_module(
-        "plugins.import.phase1_source_intake"
-    ).build_phase1_projection
-
-    discovery = [
-        {"kind": "dir", "relative_path": "AuthorA/Book1"},
-        {"kind": "file", "relative_path": "AuthorA/Book1/track.mp3"},
-    ]
-    state = {
-        "source": {"root": "inbox", "relative_path": ""},
-        "answers": {
-            "final_summary_confirm": {"confirm_start": True},
-            "conflict_policy": {"mode": "skip"},
-        },
-        "computed": {"plan_summary": {"selected_count": 1}},
-        "conflicts": {"present": False, "items": []},
-    }
-
-    out = build_phase1_projection(discovery=discovery, state=state)
-
-    assert out["runtime"]["final_summary_confirm"] == {"confirm_start": True}
-    assert out["runtime"]["conflict_policy"] == {"mode": "skip"}
-    assert out["runtime"]["plan_preview_batch"]["summary"] == {"selected_count": 1}

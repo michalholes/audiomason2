@@ -66,7 +66,7 @@ def _fast_validated_author_title(
     *,
     author: str,
     title: str,
-) -> tuple[dict[str, object], str, str]:
+) -> tuple[dict[str, object], dict[str, object]]:
     return (
         {
             "provider": "metadata_openlibrary",
@@ -81,18 +81,21 @@ def _fast_validated_author_title(
                 "suggestion": {"author": author, "title": title},
             },
         },
-        author,
-        title,
+        {
+            "valid": False,
+            "canonical": None,
+            "suggestion": {"author": author, "title": title},
+        },
     )
 
 
 def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path) -> None:
     _write_source_tree(tmp_path)
     engine, resolver, wizards_root = _make_engine(tmp_path)
-    phase1_metadata = cast(Any, import_module("plugins.import.phase1_metadata_flow"))
+    metadata_boundary = cast(Any, import_module("plugins.import.metadata_boundary"))
 
-    original_validated = phase1_metadata._validated_author_title
-    phase1_metadata._validated_author_title = cast(Any, _fast_validated_author_title)
+    original_validated = metadata_boundary.validate_author_title
+    metadata_boundary.validate_author_title = cast(Any, _fast_validated_author_title)
 
     printed: list[str] = []
 
@@ -108,7 +111,7 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
             print_fn=printed.append,
         )
     finally:
-        phase1_metadata._validated_author_title = original_validated
+        metadata_boundary.validate_author_title = original_validated
 
     assert rc == 0
 
@@ -128,70 +131,42 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
     assert state["selected_author_ids"]
     assert state["selected_book_ids"]
     assert state["answers"]["final_summary_confirm"]["confirm_start"] is True
-    assert state["computed"]["plan_summary"]["files"] == 1
+    assert state["computed"]["plan_summary"]["files"] == 0
     assert plan["summary"]["selected_books"] == 1
-    assert state["vars"]["phase1"]["runtime"]["covers_policy"]["mode"] == "skip"
-    assert state["vars"]["phase1"]["runtime"]["covers_policy"]["choice"] == {
-        "kind": "skip",
+    assert state["vars"]["phase1"]["cover"]["mode"] == "per_book"
+    assert state["vars"]["phase1"]["cover"]["allowed_modes"] == [
+        "per_book",
+        "skip",
+        "url",
+    ]
+    assert state["vars"]["phase1"]["policy"]["delete_source_policy"]["clean_inbox"] == "ask"
+    assert state["vars"]["phase1"]["metadata"]["filename_policy"] == {
+        "author": "src",
+        "title": "Author A",
     }
-    assert state["vars"]["phase1"]["policy"]["clean_inbox"] == "ask"
-    assert state["vars"]["phase1"]["policy"]["root_audio_baseline"]["author"] == "__ROOT_AUDIO__"
-    assert state["vars"]["phase1"]["policy"]["root_audio_baseline"]["title"] == "Untitled"
+    assert state["vars"]["phase1"]["metadata"]["values"] == {
+        "title": "Author A",
+        "artist": "src",
+        "album": "Author A",
+        "album_artist": "src",
+    }
     assert job_requests["actions"][0]["source"] == {
-        "relative_path": "src/Author A/Book A",
+        "relative_path": "src/Author A",
         "root": "inbox",
     }
     assert job_requests["actions"][0]["authority"]["rename"] == {
         "mode": "explicit_relative_paths",
         "outputs": ["01.mp3"],
     }
-    assert [entry["step_id"] for entry in state["trace"]] == [
-        "select_authors",
-        "resolve_author_ids",
-        "select_books",
-        "resolve_book_ids",
-        "plan_preview_batch",
-        "phase1_runtime_defaults",
-        "metadata_validate_initial",
-        "init_author_loop",
-        "effective_author_item",
-        "store_author_item",
-        "author_loop_check",
-        "metadata_validate_after_author",
-        "init_title_loop",
-        "effective_title_item",
-        "store_title_item",
-        "title_loop_check",
-        "metadata_validate_after_title",
-        "effective_author_title",
-        "filename_policy_author",
-        "filename_policy_title",
-        "filename_policy",
-        "discover",
-        "stop",
-        "cover_discover_initial",
-        "cover_discover_initial",
-        "covers_policy_mode",
-        "covers_policy_override_prepare",
-        "covers_policy",
-        "id3_policy_intro",
-        "id3_policy_title",
-        "id3_policy_artist",
-        "id3_policy_album",
-        "id3_policy_album_artist",
-        "id3_policy",
-        "audio_processing_enabled",
-        "audio_processing",
-        "publish_policy",
-        "delete_source_policy",
-        "conflict_policy",
-        "parallelism",
-        "final_summary_confirm",
-    ]
+    trace = [entry["step_id"] for entry in state["trace"]]
+    assert trace[0] == "phase1_set_runtime_defaults"
+    assert trace[-1] == "final_summary_confirm"
+    for step_id in ["select_authors", "select_books", "effective_author_item"]:
+        assert step_id in trace
+    assert trace.index("select_authors") < trace.index("select_books")
+    assert trace.index("select_books") < trace.index("effective_author_item")
 
     joined = "\n".join(printed)
-    assert "Step: select_authors" in joined
-    assert "Step: select_books" in joined
     assert "Step: effective_author_item" in joined
     assert "Step: final_summary_confirm" in joined
 

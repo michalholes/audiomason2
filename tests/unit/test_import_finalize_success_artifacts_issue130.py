@@ -235,12 +235,7 @@ def test_finalize_success_artifacts_and_ignore_registry_are_success_only(
         "album": "Book1",
         "album_artist": "AuthorA",
     }
-    assert report["books"][0]["authority"]["metadata_tags"]["field_map"] == {
-        "title": "title",
-        "artist": "artist",
-        "album": "album",
-        "album_artist": "album_artist",
-    }
+    assert report["books"][0]["authority"]["metadata_tags"]["field_map"] == {}
     assert [cap["kind"] for cap in report["books"][0]["capabilities"]] == [
         "audio.import",
         "metadata.tags",

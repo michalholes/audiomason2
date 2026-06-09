@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 from importlib import import_module
 from pathlib import Path
+from typing import Any
 
 from audiomason.core.config import ConfigResolver
 
-ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
+ImportWizardEngine: Any = import_module("plugins.import.engine").ImportWizardEngine
 
 
-def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, dict[str, Path]]:
+def _make_engine(tmp_path: Path) -> tuple[Any, dict[str, Path]]:
     roots = {
         "inbox": tmp_path / "inbox",
         "stage": tmp_path / "stage",
@@ -20,7 +21,7 @@ def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, dict[str, Path]]:
         "config": tmp_path / "config",
         "wizards": tmp_path / "wizards",
     }
-    defaults = {
+    defaults: dict[str, object] = {
         "file_io": {
             "roots": {
                 "inbox_dir": str(roots["inbox"]),
@@ -34,9 +35,8 @@ def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, dict[str, Path]]:
         "output_dir": str(roots["outbox"]),
         "diagnostics": {"enabled": False},
     }
-    cli_args = defaults
     resolver = ConfigResolver(
-        cli_args=cli_args,
+        cli_args=defaults,
         defaults=defaults,
         user_config_path=tmp_path / "no_user_config.yaml",
         system_config_path=tmp_path / "no_system_config.yaml",
@@ -53,7 +53,7 @@ def _write_inbox_source_dir(roots: dict[str, Path], rel_dir: str) -> None:
 def _mutate_state_for_finalize(roots: dict[str, Path], session_id: str, *, policy: str) -> None:
     state_path = roots["wizards"] / "import" / "sessions" / session_id / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
-    state.setdefault("inputs", {})["final_summary_confirm"] = {"confirm_start": True}
+    state.setdefault("answers", {})["final_summary_confirm"] = {"confirm_start": True}
     state.setdefault("conflicts", {})["policy"] = policy
     state["status"] = "in_progress"
     state_path.write_text(json.dumps(state), encoding="utf-8")
@@ -69,11 +69,11 @@ def test_conflict_recheck_policy_ask_blocks_job(tmp_path: Path) -> None:
     assert session_id
 
     # Preview conflicts fingerprint during plan computation.
-    _ = engine.compute_plan(session_id)
+    plan = engine.compute_plan(session_id)
     _mutate_state_for_finalize(roots, session_id, policy="ask")
 
-    # Introduce a conflict after preview.
-    conflict_dir = roots["stage"] / rel
+    # Introduce a conflict after preview at the planned target path.
+    conflict_dir = roots["stage"] / str(plan["selected_books"][0]["proposed_target_relative_path"])
     conflict_dir.mkdir(parents=True, exist_ok=True)
 
     out = engine.start_processing(session_id, {"confirm": True})
@@ -93,10 +93,10 @@ def test_conflict_recheck_non_ask_detects_changed_since_preview(tmp_path: Path) 
     session_id = str(state.get("session_id") or "")
     assert session_id
 
-    _ = engine.compute_plan(session_id)
+    plan = engine.compute_plan(session_id)
     _mutate_state_for_finalize(roots, session_id, policy="auto")
 
-    conflict_dir = roots["stage"] / rel
+    conflict_dir = roots["stage"] / str(plan["selected_books"][0]["proposed_target_relative_path"])
     conflict_dir.mkdir(parents=True, exist_ok=True)
 
     out = engine.start_processing(session_id, {"confirm": True})

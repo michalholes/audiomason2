@@ -401,6 +401,16 @@
 - safety class: instruction-only
 - scope: inside current issue scope
 
+## 2026-06-09
+
+### Optimization 50: Parse noisy CLI JSON from the first top-level object
+- impact: Prevents brittle test failures when structured output is mixed with logs by decoding
+  the first top-level JSON object directly instead of scanning for the last brace line.
+- affected workflow step or files: CLI capture tests such as
+  `tests/test_import_cli_wizard_start_conflict_issue168.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
 ### Optimization 50: Switch planning reads to vars.phase1 first with legacy fallback
 - impact: Reduces dependence on stale top-level selection mirrors while keeping compatibility
   during staged sunset of legacy state fields.
@@ -543,5 +553,19 @@
   when a JSON `call.invoke` node executes published operations.
 - affected workflow step or files: callable invocation boundary in
   `plugins/import/primitives/call_v1.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 67: Stub plan computation in isolated prompt smoke tests
+- impact: Keeps prompt-metadata and phase2 acceptance tests focused on rendering by bypassing
+  unrelated session-authority validation during submit.
+- affected workflow step or files: test-only v3 launcher smoke tests that assert prompt text and
+  phase2 trace shape.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 68: Reload after prompt submits in browser smoke tests
+- impact: Prevents false negatives where the backend step advances but the browser still shows the previous render until an explicit refresh.
+- affected workflow step or files: v3 import UI e2e smoke tests that submit prompt steps and verify the next persisted step.
 - safety class: instruction-only
 - scope: inside current issue scope

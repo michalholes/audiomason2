@@ -6,6 +6,9 @@ import json
 import subprocess
 from importlib import import_module
 from pathlib import Path
+from typing import Protocol, cast
+
+import pytest
 
 from audiomason.core.config import ConfigResolver
 
@@ -19,7 +22,17 @@ WIZARD_DEFINITION_REL_PATH = import_module(
 ).WIZARD_DEFINITION_REL_PATH
 
 
-PARITY_FLOW = {
+class ImportWizardEngineLike(Protocol):
+    def get_file_service(self) -> object: ...
+
+    def create_session(self, root: str, path: str, mode: str = ...) -> dict[str, object]: ...
+
+    def get_step_definition(self, session_id: str, step_id: str) -> dict[str, object]: ...
+
+    def compute_plan(self, session_id: str) -> dict[str, object]: ...
+
+
+PARITY_FLOW: dict[str, object] = {
     "version": 3,
     "entry_step_id": "ask_name",
     "nodes": [
@@ -52,7 +65,7 @@ PARITY_FLOW = {
     "edges": [{"from": "ask_name", "to": "stop"}],
 }
 
-AUTOFILL_FLOW = {
+AUTOFILL_FLOW: dict[str, object] = {
     "version": 3,
     "entry_step_id": "seed_name",
     "nodes": [
@@ -120,13 +133,13 @@ AUTOFILL_FLOW = {
 }
 
 
-def _make_engine(tmp_path: Path) -> tuple[object, ConfigResolver]:
+def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngineLike, ConfigResolver]:
     roots = {
         name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
     }
     for root in roots.values():
         root.mkdir(parents=True, exist_ok=True)
-    defaults = {
+    defaults: dict[str, object] = {
         "file_io": {
             "roots": {
                 "inbox_dir": str(roots["inbox"]),
@@ -160,7 +173,7 @@ def _make_engine(tmp_path: Path) -> tuple[object, ConfigResolver]:
     return ImportWizardEngine(resolver=resolver), resolver
 
 
-def _run_v3_renderer(function_name: str, payload: dict[str, object]) -> object:
+def _run_v3_renderer(function_name: str, payload: dict[str, object]) -> dict[str, object]:
     script = """
 const fs = require("fs");
 const vm = require("vm");
@@ -184,6 +197,12 @@ process.stdout.write(JSON.stringify(out));
         check=True,
     )
     return json.loads(proc.stdout)
+
+
+def _write_source_tree(tmp_path: Path) -> None:
+    book_dir = tmp_path / "inbox" / "src" / "Author A" / "Book A"
+    book_dir.mkdir(parents=True, exist_ok=True)
+    (book_dir / "track01.mp3").write_text("x", encoding="utf-8")
 
 
 def _run_import_wizard_runtime_harness() -> dict[str, object]:
@@ -454,38 +473,78 @@ vm.runInContext(source, sandbox, { filename: "import_wizard.js" });
     return json.loads(proc.stdout)
 
 
-def test_cli_and_web_share_same_prompt_metadata_projection(tmp_path: Path) -> None:
+def test_cli_and_web_share_same_prompt_metadata_projection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_source_tree(tmp_path)
     engine, resolver = _make_engine(tmp_path)
     fs = engine.get_file_service()
     atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, PARITY_FLOW)
 
+    def _stub_compute_plan(session_id: str) -> dict[str, object]:
+        del session_id
+        return {
+            "selected_books": [],
+            "summary": {
+                "selected_books": 0,
+                "files": 0,
+                "dirs": 0,
+                "bundles": 0,
+            },
+        }
+
+    monkeypatch.setattr(engine, "compute_plan", _stub_compute_plan)
+
     state = engine.create_session("inbox", "")
-    step = engine.get_step_definition(state["session_id"], "ask_name")
+    session_id = str(state["session_id"])
+    step = engine.get_step_definition(session_id, "ask_name")
     model = _run_v3_renderer("buildPromptModel", step)
 
     printed: list[str] = []
-    responses = iter(["1", ""])
+    responses = iter(["2", ""])
+
+    def _input_fn(_prompt: str) -> str:
+        return next(responses)
+
     rc = run_launcher(
         engine=engine,
         resolver=resolver,
         cli_overrides={},
-        input_fn=lambda _prompt: next(responses),
+        input_fn=_input_fn,
         print_fn=printed.append,
     )
 
     assert rc == 0
     joined = "\n".join(printed)
-    assert model["label"] in joined
-    assert model["prompt"] in joined
-    assert model["help"] in joined
+    assert str(model["label"]) in joined
+    assert str(model["prompt"]) in joined
+    assert str(model["help"]) in joined
     assert f"Note: {model['hint']}" in joined
     assert f"Suggested: {model['prefill']}" in joined
 
 
-def test_autofill_path_is_backend_driven_for_cli_and_web(tmp_path: Path) -> None:
+def test_autofill_path_is_backend_driven_for_cli_and_web(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     engine, resolver = _make_engine(tmp_path)
     fs = engine.get_file_service()
     atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, AUTOFILL_FLOW)
+
+    def _stub_compute_plan(session_id: str) -> dict[str, object]:
+        del session_id
+        return {
+            "selected_books": [],
+            "summary": {
+                "selected_books": 0,
+                "files": 0,
+                "dirs": 0,
+                "bundles": 0,
+            },
+        }
+
+    monkeypatch.setattr(engine, "compute_plan", _stub_compute_plan)
 
     state = engine.create_session("inbox", "")
     assert state["status"] == "completed"
@@ -498,11 +557,14 @@ def test_autofill_path_is_backend_driven_for_cli_and_web(tmp_path: Path) -> None
 
     responses = iter(["1"])
 
+    def _input_fn(_prompt: str) -> str:
+        return next(responses)
+
     rc = run_launcher(
         engine=engine,
         resolver=resolver,
         cli_overrides={},
-        input_fn=lambda _prompt: next(responses),
+        input_fn=_input_fn,
         print_fn=printed.append,
     )
 
@@ -525,29 +587,36 @@ def test_cli_and_web_share_same_prompt_select_display_items(tmp_path: Path) -> N
     _write_selection_tree(tmp_path)
 
     state = engine.create_session("inbox", "")
-    step = engine.get_step_definition(state["session_id"], "select_authors")
+    session_id = str(state["session_id"])
+    step = engine.get_step_definition(session_id, "select_authors")
+    step_ui = cast(dict[str, object], step["ui"])
+    step_items = cast(list[dict[str, object]], step_ui["items"])
     metadata = cli_renderer._v3_prompt_metadata(step)
     assert isinstance(metadata, dict)
 
     model = _run_v3_renderer("buildPromptModel", step)
     assert model["items"] == [
         {
-            "item_id": step["ui"]["items"][0]["item_id"],
+            "item_id": str(step_items[0]["item_id"]),
             "label": "A",
         },
         {
-            "item_id": step["ui"]["items"][1]["item_id"],
+            "item_id": str(step_items[1]["item_id"]),
             "label": "B",
         },
     ]
 
     printed: list[str] = []
+
+    def _input_fn(_prompt: str) -> str:
+        return ""
+
     payload, rc = cli_renderer._collect_v3_prompt_payload(
         engine=engine,
         session_id=str(state["session_id"]),
         step=step,
         metadata=metadata,
-        input_fn=lambda _prompt: "",
+        input_fn=_input_fn,
         print_fn=printed.append,
         confirm_defaults=True,
         allow_inline=False,
@@ -572,29 +641,36 @@ def test_cli_and_web_share_scoped_author_prompt_select_display_items(
 
     state = engine.create_session("inbox", "A")
     assert state["current_step_id"] == "select_books"
-    step = engine.get_step_definition(state["session_id"], "select_books")
+    session_id = str(state["session_id"])
+    step = engine.get_step_definition(session_id, "select_books")
+    step_ui = cast(dict[str, object], step["ui"])
+    step_items = cast(list[dict[str, object]], step_ui["items"])
     metadata = cli_renderer._v3_prompt_metadata(step)
     assert isinstance(metadata, dict)
 
     model = _run_v3_renderer("buildPromptModel", step)
     assert model["items"] == [
         {
-            "item_id": step["ui"]["items"][0]["item_id"],
+            "item_id": str(step_items[0]["item_id"]),
             "label": "A / Book1",
         },
         {
-            "item_id": step["ui"]["items"][1]["item_id"],
+            "item_id": str(step_items[1]["item_id"]),
             "label": "A / Book2",
         },
     ]
 
     printed: list[str] = []
+
+    def _input_fn(_prompt: str) -> str:
+        return ""
+
     payload, rc = cli_renderer._collect_v3_prompt_payload(
         engine=engine,
         session_id=str(state["session_id"]),
         step=step,
         metadata=metadata,
-        input_fn=lambda _prompt: "",
+        input_fn=_input_fn,
         print_fn=printed.append,
         confirm_defaults=True,
         allow_inline=False,
@@ -616,24 +692,24 @@ def test_web_start_processing_posts_canonical_confirm_payload() -> None:
 
 def test_web_submit_auto_starts_processing_on_phase_boundary() -> None:
     result = _run_import_wizard_runtime_harness()
-    calls = result["calls"]
+    calls = cast(list[dict[str, object]], result["calls"])
     step_call = next(
         index
         for index, call in enumerate(calls)
-        if call["url"].endswith("/step/final_summary_confirm")
+        if str(call["url"]).endswith("/step/final_summary_confirm")
     )
     start_processing_call = next(
-        index for index, call in enumerate(calls) if call["url"].endswith("/start_processing")
+        index for index, call in enumerate(calls) if str(call["url"]).endswith("/start_processing")
     )
     final_state_call = next(
         index
         for index, call in enumerate(calls)
-        if index > start_processing_call and call["url"].endswith("/state")
+        if index > start_processing_call and str(call["url"]).endswith("/state")
     )
 
-    assert calls[start_processing_call]["body"] == '{"confirm":true}'
+    assert str(calls[start_processing_call]["body"]) == '{"confirm":true}'
     assert step_call < start_processing_call < final_state_call
-    assert "Start processing" not in result["statusText"]
+    assert "Start processing" not in str(result["statusText"])
 
 
 def test_web_import_ui_has_no_start_processing_cta() -> None:

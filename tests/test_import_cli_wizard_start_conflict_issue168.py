@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from importlib import import_module
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -13,13 +14,15 @@ ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
 import_cli_main = import_module("plugins.import.cli").import_cli_main
 
 
-def _make_engine(tmp_path: Path):
-    roots = {
+def _make_engine(
+    tmp_path: Path,
+) -> tuple[Any, ConfigResolver, dict[str, Path]]:
+    roots: dict[str, Path] = {
         name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
     }
     for root in roots.values():
         root.mkdir(parents=True, exist_ok=True)
-    defaults = {
+    defaults: dict[str, object] = {
         "file_io": {
             "roots": {
                 "inbox_dir": str(roots["inbox"]),
@@ -48,11 +51,18 @@ def _write_source(roots: dict[str, Path], rel_dir: str) -> None:
     (d / "file.txt").write_text("x", encoding="utf-8")
 
 
-def _read_last_json(raw: str) -> dict:
-    marker = raw.rfind("\n{")
-    if marker == -1:
-        marker = raw.find("{")
-    return json.loads(raw[marker + 1 :])
+def _read_last_json(raw: str) -> dict[str, object]:
+    lines: list[str] = raw.splitlines()
+    for index, line in enumerate(lines):
+        if not line.startswith("{"):
+            continue
+        candidate = "\n".join(lines[index:])
+        try:
+            payload, _ = json.JSONDecoder().raw_decode(candidate)
+        except json.JSONDecodeError:
+            continue
+        return cast(dict[str, object], payload)
+    raise AssertionError("no JSON object found in wizard output")
 
 
 def test_wizard_start_conflict_requires_explicit_intent(
@@ -77,7 +87,8 @@ def test_wizard_start_conflict_requires_explicit_intent(
     assert exc.value.code == 1
     out = _read_last_json(capsys.readouterr().out)
     assert out["code"] == "session_start_conflict"
-    assert out["details"]["session_id"] == created["session_id"]
+    details = cast(dict[str, object], out["details"])
+    assert details["session_id"] == created["session_id"]
 
 
 def test_wizard_start_intent_new_recreates_same_session_id(
@@ -110,4 +121,5 @@ def test_wizard_start_intent_new_recreates_same_session_id(
     assert rc == 0
     out = _read_last_json(capsys.readouterr().out)
     assert out["session_id"] == created["session_id"]
-    assert out["state"]["status"] == "in_progress"
+    state = cast(dict[str, object], out["state"])
+    assert state["status"] == "in_progress"

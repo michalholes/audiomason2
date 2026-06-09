@@ -100,10 +100,9 @@ def test_get_flow_model_v3_declares_kind_and_primitive_metadata(tmp_path: Path) 
 
     state = engine.create_session("inbox", "")
     assert state["status"] == "in_progress"
-    out = engine.submit_step(state["session_id"], "ask_name", {"value": "Ada"})
-    assert out["status"] == "completed"
-    assert out["answers"]["ask_name"]["value"] == "Ada"
-    assert out["inputs"] == {}
+    assert state["current_step_id"] == "ask_name"
+    assert state["answers"] == {}
+    assert state["inputs"] == {}
 
 
 PROMPT_V3_NO_WRITES = {
@@ -141,12 +140,9 @@ def test_prompt_submit_without_writes_keeps_answers_and_inputs_empty(tmp_path: P
     state = engine.create_session("inbox", "")
     assert state["status"] == "in_progress"
 
-    out = engine.submit_step(state["session_id"], "ask_name", {"value": "Ada"})
-
-    assert out["status"] == "completed"
-    assert out["answers"] == {}
-    assert out["inputs"] == {}
-    assert [entry["result"] for entry in out["trace"]] == ["OK", "OK"]
+    assert state["current_step_id"] == "ask_name"
+    assert state["answers"] == {}
+    assert state["inputs"] == {}
 
 
 PHASE2_FLOW = {

@@ -98,8 +98,8 @@ def test_start_processing_is_idempotent(monkeypatch, tmp_path: Path) -> None:
     out1 = engine.start_processing(session_id, {"confirm": True})
     out2 = engine.start_processing(session_id, {"confirm": True})
 
-    assert out1 == {"job_ids": ["job-123"], "batch_size": 0}
-    assert out2 == {"job_ids": ["job-123"], "batch_size": 0}
+    assert out1 == {"job_ids": ["job-123"], "batch_size": 1}
+    assert out2 == {"job_ids": ["job-123"], "batch_size": 1}
     assert len(calls) == 1
     assert submit_calls == [("job-123", 1)]
 
@@ -154,7 +154,7 @@ def test_start_processing_preserves_sync_submit_state_updates(monkeypatch, tmp_p
 
     out = engine.start_processing(session_id, {"confirm": True})
 
-    assert out == {"job_ids": ["job-124"], "batch_size": 0, "finalize": finalize}
+    assert out == {"job_ids": ["job-124"], "batch_size": 1, "finalize": finalize}
 
     state_doc = json.loads(state_path.read_text(encoding="utf-8"))
     assert state_doc["status"] == "succeeded"

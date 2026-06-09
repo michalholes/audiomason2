@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from importlib import import_module
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -32,7 +33,7 @@ def _make_engine(
     launcher_mode: str | None = "interactive",
     noninteractive: bool = False,
     nav_ui: str = "prompt",
-) -> tuple[ImportWizardEngine, dict[str, Path]]:
+) -> tuple[Any, dict[str, Path]]:
     roots = {
         name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
     }
@@ -46,7 +47,7 @@ def _make_engine(
     }
     if launcher_mode is not None:
         cli_defaults["launcher_mode"] = launcher_mode
-    defaults = {
+    defaults: dict[str, object] = {
         "file_io": {
             "roots": {
                 "inbox_dir": str(roots["inbox"]),
@@ -89,7 +90,7 @@ def test_load_or_bootstrap_can_create_shipped_v3_default(tmp_path: Path) -> None
     phase1_node = next(
         node for node in out["nodes"] if node["step_id"] == "phase1_runtime_defaults"
     )
-    assert phase1_node["op"]["primitive_id"] == "data.set"
+    assert phase1_node["op"]["primitive_id"] == "flow.invoke"
     assert any(node["step_id"] == "effective_author_item" for node in out["nodes"])
     assert any(node["step_id"] == "cover_discover_initial" for node in out["nodes"])
     assert any(node["step_id"] == "covers_policy_mode" for node in out["nodes"])
@@ -104,7 +105,12 @@ def test_load_or_bootstrap_rejects_invalid_authored_artifact_without_overwrite(
 ) -> None:
     engine, _ = _make_engine(tmp_path)
     fs = engine.get_file_service()
-    authored = {"version": 3, "entry_step_id": "Bad.Step", "nodes": [], "edges": []}
+    authored: dict[str, object] = {
+        "version": 3,
+        "entry_step_id": "Bad.Step",
+        "nodes": [],
+        "edges": [],
+    }
     atomic_write_json(
         fs,
         RootName.WIZARDS,
@@ -145,5 +151,6 @@ def test_create_session_bootstraps_v3_for_all_import_entry_modes(tmp_path: Path)
         state = engine.create_session("inbox", "src")
 
         assert state["session_id"], label
-        loaded = engine.get_state(str(state["session_id"]))
-        assert loaded["effective_model"]["flowmodel_kind"] == "dsl_step_graph_v3", label
+        loaded = cast(dict[str, object], engine.get_state(str(state["session_id"])))
+        effective_model = cast(dict[str, object], loaded["effective_model"])
+        assert effective_model["flowmodel_kind"] == "dsl_step_graph_v3", label

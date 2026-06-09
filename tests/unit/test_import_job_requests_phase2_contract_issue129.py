@@ -31,13 +31,15 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
             "id3_policy": {"values": {"title": "Path Derived"}},
         },
         session_authority={
-            "authority_book_meta": {
-                "book:1": {
+            "books": [
+                {
+                    "book_id": "book:1",
                     "author_label": "Canonical Author",
                     "book_label": "Canonical Book",
                     "display_label": "Canonical Author / Canonical Book",
                 }
-            },
+            ],
+            "rename_by_book": {"book:1": {"outputs": ["01.mp3"]}},
             "phase2_inputs": {
                 "covers_policy": {
                     "mode": "file",
@@ -69,6 +71,7 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
                 "id3_policy": {
                     "field_map": {"title": "album", "artist": "album_artist"},
                     "track_start": 7,
+                    "values": {"title": "Canonical Book", "artist": "Canonical Author"},
                 },
             },
             "runtime": {
@@ -113,6 +116,7 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
     assert capabilities[3]["overwrite"] is True
     assert action["authority"] == {
         "book": {
+            "book_id": "book:1",
             "author_label": "Canonical Author",
             "book_label": "Canonical Book",
             "display_label": "Canonical Author / Canonical Book",

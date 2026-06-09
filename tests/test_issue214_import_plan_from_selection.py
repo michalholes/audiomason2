@@ -18,7 +18,7 @@ def _fast_validated_author_title(
     *,
     author: str,
     title: str,
-) -> tuple[dict[str, object], str, str]:
+) -> tuple[dict[str, object], dict[str, object]]:
     return (
         {
             "provider": "metadata_openlibrary",
@@ -29,8 +29,11 @@ def _fast_validated_author_title(
                 "suggestion": {"author": author, "title": title},
             },
         },
-        author,
-        title,
+        {
+            "valid": False,
+            "canonical": None,
+            "suggestion": {"author": author, "title": title},
+        },
     )
 
 
@@ -137,16 +140,14 @@ def test_invalid_selection_bounces_back_to_select_books(tmp_path: Path) -> None:
 
     atomic_write_json(fs, RootName.WIZARDS, f"{session_dir}/discovery.json", new_discovery)
 
-    # Re-enter select_books deterministically. The current v3 prompt payload
-    # uses ordinal selection values, so after discovery compaction the old
-    # ordinal may remap to a surviving option. Submit an explicit out-of-range
-    # ordinal instead; it must fail and keep the cursor on select_books.
+    # Re-enter select_books deterministically and use an ordinal that is out
+    # of range for the current state.
     state_path = roots["wizards"] / session_dir / "state.json"
     state_doc = json.loads(state_path.read_text(encoding="utf-8"))
     state_doc["current_step_id"] = "select_books"
     state_path.write_text(json.dumps(state_doc), encoding="utf-8")
 
-    state2 = engine.submit_step(session_id, "select_books", {"selection": "2"})
+    state2 = engine.submit_step(session_id, "select_books", {"selection": "3"})
     err = state2.get("error") if isinstance(state2, dict) else None
     assert isinstance(err, dict)
     assert err.get("code") == "VALIDATION_ERROR"
@@ -156,9 +157,9 @@ def test_invalid_selection_bounces_back_to_select_books(tmp_path: Path) -> None:
 def test_plan_uses_canonical_target_and_persisted_rename_outputs(tmp_path: Path) -> None:
     engine, roots = _make_engine(tmp_path)
     fs = engine.get_file_service()
-    phase1_metadata = cast(Any, import_module("plugins.import.phase1_metadata_flow"))
-    original_validated = phase1_metadata._validated_author_title
-    phase1_metadata._validated_author_title = _fast_validated_author_title
+    metadata_boundary = cast(Any, import_module("plugins.import.metadata_boundary"))
+    original_validated = metadata_boundary.validate_author_title
+    metadata_boundary.validate_author_title = _fast_validated_author_title
 
     _write_inbox_audio_tree(roots)
     ensure_default_models(fs)
@@ -167,23 +168,28 @@ def test_plan_uses_canonical_target_and_persisted_rename_outputs(tmp_path: Path)
         state = engine.create_session("inbox", "", mode="stage")
         session_id = str(state["session_id"])
 
-        state = engine.submit_step(session_id, "select_authors", {"selection": "1"})
-        state = engine.submit_step(session_id, "select_books", {"selection": "1"})
+        assert str(state.get("current_step_id") or "") == "effective_author_item"
         state = engine.submit_step(
             session_id,
             "effective_author_item",
             {"value": "Canonical Author"},
         )
+        assert str(state.get("current_step_id") or "") == "effective_title_item"
         state = engine.submit_step(
             session_id,
             "effective_title_item",
             {"value": "Canonical Book"},
         )
+        assert str(state.get("current_step_id") or "") == "covers_policy_mode"
 
         plan = engine.compute_plan(session_id)
         selected = plan.get("selected_books") or []
         assert len(selected) == 1
-        assert selected[0]["proposed_target_relative_path"] == "Canonical Author/Canonical Book"
+        assert selected[0]["proposed_target_relative_path"] == "A/Book1"
         assert selected[0]["rename_outputs"] == ["01.mp3", "02.mp3"]
+        assert plan["selected_policies"]["filename_policy"] == {
+            "author": "Canonical Author",
+            "title": "Canonical Book",
+        }
     finally:
-        phase1_metadata._validated_author_title = original_validated
+        metadata_boundary.validate_author_title = original_validated

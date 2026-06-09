@@ -6,10 +6,13 @@ import json
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 from audiomason.core.config import ConfigResolver
 
-ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
+ImportWizardEngine: Any = import_module("plugins.import.engine").ImportWizardEngine
 
 
 @dataclass(frozen=True)
@@ -17,7 +20,7 @@ class _Job:
     job_id: str
 
 
-def _make_engine(tmp_path: Path) -> tuple[object, dict[str, Path]]:
+def _make_engine(tmp_path: Path) -> tuple[Any, dict[str, Path]]:
     roots = {
         "inbox": tmp_path / "inbox",
         "stage": tmp_path / "stage",
@@ -26,7 +29,7 @@ def _make_engine(tmp_path: Path) -> tuple[object, dict[str, Path]]:
         "config": tmp_path / "config",
         "wizards": tmp_path / "wizards",
     }
-    defaults = {
+    defaults: dict[str, object] = {
         "file_io": {
             "roots": {
                 "inbox_dir": str(roots["inbox"]),
@@ -40,9 +43,8 @@ def _make_engine(tmp_path: Path) -> tuple[object, dict[str, Path]]:
         "output_dir": str(roots["outbox"]),
         "diagnostics": {"enabled": False},
     }
-    cli_args = defaults
     resolver = ConfigResolver(
-        cli_args=cli_args,
+        cli_args=defaults,
         defaults=defaults,
         user_config_path=tmp_path / "no_user_config.yaml",
         system_config_path=tmp_path / "no_system_config.yaml",
@@ -59,13 +61,16 @@ def _write_inbox_source_dir(roots: dict[str, Path], rel_dir: str) -> None:
 def _mutate_state_for_finalize(roots: dict[str, Path], session_id: str) -> None:
     state_path = roots["wizards"] / "import" / "sessions" / session_id / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
-    state.setdefault("inputs", {})["final_summary_confirm"] = {"confirm_start": True}
+    state.setdefault("answers", {})["final_summary_confirm"] = {"confirm_start": True}
     state.setdefault("conflicts", {})["policy"] = "ask"
     state["status"] = "in_progress"
     state_path.write_text(json.dumps(state), encoding="utf-8")
 
 
-def test_job_requests_json_is_byte_stable(monkeypatch, tmp_path: Path) -> None:
+def test_job_requests_json_is_byte_stable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     engine, roots = _make_engine(tmp_path)
     rel = "book6"
     _write_inbox_source_dir(roots, rel)
@@ -77,12 +82,16 @@ def test_job_requests_json_is_byte_stable(monkeypatch, tmp_path: Path) -> None:
 
     from audiomason.core.jobs import api as jobs_api
 
-    def _create_job(self, job_type, *, meta):
+    def _create_job(self: object, job_type: object, *, meta: object) -> _Job:
         return _Job(job_id="job-456")
 
     monkeypatch.setattr(jobs_api.JobService, "create_job", _create_job)
     diag_mod = import_module("plugins.import.engine_diagnostics_required")
-    monkeypatch.setattr(diag_mod, "submit_process_job", lambda **_kw: None)
+
+    def _submit_process_job(**_kw: object) -> None:
+        return None
+
+    monkeypatch.setattr(diag_mod, "submit_process_job", _submit_process_job)
 
     session_dir = roots["wizards"] / "import" / "sessions" / session_id
     job_path = session_dir / "job_requests.json"
