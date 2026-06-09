@@ -569,3 +569,9 @@
 - affected workflow step or files: v3 import UI e2e smoke tests that submit prompt steps and verify the next persisted step.
 - safety class: instruction-only
 - scope: inside current issue scope
+
+### Optimization 69: Retain only failed pytest tmp dirs
+- impact: Prevents tmp_path retention from accumulating thousands of successful pytest run directories under `/tmp/pytest-of-*`.
+- affected workflow step or files: repository-wide pytest configuration in `pytest.ini`.
+- safety class: instruction-only
+- scope: inside current issue scope
