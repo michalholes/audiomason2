@@ -101,16 +101,16 @@ def _resolve_ref(
 
     if _is_str_object_dict(ref_any):
         ref = _as_str_object_dict(ref_any)
-        root = _root_from_text(ref.get("root"))
+        ref_root = _root_from_text(ref.get("root"))
         rel = _normalize_rel(ref.get("rel", ""))
-        return root, rel
+        return ref_root, rel
 
     if isinstance(ref_any, str) and ref_any:
         head, sep, tail = ref_any.partition(":")
         if sep:
-            root = _root_from_text(head)
+            ref_root = _root_from_text(head)
             rel = _normalize_rel(tail)
-            return root, rel
+            return ref_root, rel
         if state_root is None:
             raise ValueError("resolver-friendly ref root is required")
         rel = _normalize_rel(ref_any)
@@ -118,11 +118,13 @@ def _resolve_ref(
 
     root_any = inputs.get("root")
     rel_any = inputs.get("rel", inputs.get("relative_path", state_rel))
-    root = _root_from_text(root_any) if root_any is not None else state_root
-    if root is None:
+    resolved_root: RootName | None = (
+        _root_from_text(root_any) if root_any is not None else state_root
+    )
+    if resolved_root is None:
         raise ValueError("resolver-friendly root is required")
     rel = _normalize_rel(rel_any if rel_any is not None else "")
-    return root, rel
+    return resolved_root, rel
 
 
 def _runtime_file_service(state: dict[str, object] | None) -> _RuntimeFileService:
@@ -153,6 +155,10 @@ def _list_item(
     }
 
 
+def _entry_sort_key(entry: _ListEntry) -> str:
+    return entry.rel_path
+
+
 def _list_operation(
     *,
     root: RootName,
@@ -162,10 +168,9 @@ def _list_operation(
 ) -> dict[str, object]:
     fs = _runtime_file_service(state)
     base_rel = rel or "."
-    entries_any = fs.list_dir(root, base_rel, recursive=recursive)
-    entries = list(entries_any)
+    entries: list[_ListEntry] = fs.list_dir(root, base_rel, recursive=recursive)
     items: list[dict[str, object]] = []
-    for entry in sorted(entries, key=lambda item: str(item.rel_path)):
+    for entry in sorted(entries, key=_entry_sort_key):
         entry_rel = normalize_relative_path(str(entry.rel_path))
         items.append(
             _list_item(

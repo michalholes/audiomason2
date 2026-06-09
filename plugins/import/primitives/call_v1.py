@@ -12,7 +12,7 @@ from collections.abc import Awaitable
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import Protocol, TypeGuard, cast
+from typing import Protocol, TypeGuard, cast, runtime_checkable
 
 from audiomason.core.config_service import ConfigService
 from audiomason.core.errors import PluginNotFoundError
@@ -64,6 +64,7 @@ class _KeywordCallable(Protocol):
     def __call__(self, **kwargs: object) -> object: ...
 
 
+@runtime_checkable
 class _ConfigurablePlugin(Protocol):
     def configure(self, config: dict[str, object]) -> None: ...
 
@@ -146,11 +147,8 @@ def _resolve_published_callable_binding(
         plugin_obj = loader.load_plugin(published.manifest_path.parent, validate=False)
 
     plugin_config = _as_str_object_dict(registry.get_plugin_config(published.plugin_id))
-    if plugin_config:
-        configure_any = getattr(plugin_obj, "configure", None)
-        if callable(configure_any):
-            configurable = cast(_ConfigurablePlugin, plugin_obj)
-            configurable.configure(dict(plugin_config))
+    if plugin_config and isinstance(plugin_obj, _ConfigurablePlugin):
+        plugin_obj.configure(dict(plugin_config))
 
     callable_def = RegisteredWizardCallable(
         plugin_id=published.plugin_id,
