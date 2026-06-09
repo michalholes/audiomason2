@@ -74,7 +74,7 @@ def test_interactive_launcher_prompts_for_new_when_session_exists(
 
     monkeypatch.setattr(cli_renderer, "_render_loop", _fake_render_loop)
 
-    inputs = iter(["", "", "2"])
+    inputs = iter(["2"])
     printed: list[str] = []
 
     rc = run_launcher(

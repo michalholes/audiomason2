@@ -11,9 +11,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol, TypeGuard
 
+from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
+from .dsl.default_wizard_v3 import build_default_wizard_definition_v3
 from .engine_session_guards import validate_root_and_path
+from .fingerprints import fingerprint_json
+from .storage import read_json
+from .wizard_definition_model import (
+    WIZARD_DEFINITION_REL_PATH,
+    canonicalize_wizard_definition,
+)
 
 
 class _LauncherConfig(Protocol):
@@ -40,8 +48,60 @@ class _SupportsStartProcessing(Protocol):
     def start_processing(self, session_id: str, body: dict[str, object]) -> dict[str, object]: ...
 
 
+class _SupportsWizardDefinitionRuntime(Protocol):
+    def get_file_service(self) -> FileService: ...
+
+    def delete_path(self, root: RootName, relative_path: str, *, missing_ok: bool) -> None: ...
+
+
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
     return isinstance(value, list)
+
+
+def _wizard_definition_fingerprint(wizard_definition: object) -> str:
+    canonical = canonicalize_wizard_definition(wizard_definition)
+    return fingerprint_json(canonical)
+
+
+def runtime_wizard_definition_matches_default(
+    engine: _SupportsWizardDefinitionRuntime,
+) -> bool:
+    fs = engine.get_file_service()
+    if not fs.exists(RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH):
+        return True
+
+    default_fp = _wizard_definition_fingerprint(build_default_wizard_definition_v3())
+    try:
+        runtime_any = read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH)
+        runtime_fp = _wizard_definition_fingerprint(runtime_any)
+    except Exception:
+        return False
+    return runtime_fp == default_fp
+
+
+def prompt_delete_runtime_wizard_definition(
+    *,
+    engine: _SupportsWizardDefinitionRuntime,
+    input_fn: Callable[[str], str],
+    print_fn: Callable[[str], None],
+) -> bool:
+    if runtime_wizard_definition_matches_default(engine):
+        return True
+
+    raw = (
+        input_fn(
+            "Runtime wizard_definition.json differs from shipped default. "
+            "Delete runtime and regenerate the shipped default? (y/n): "
+        )
+        .strip()
+        .lower()
+    )
+    if raw not in {"y", "yes", "1", "true", "t"}:
+        return True
+
+    engine.delete_path(RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, missing_ok=True)
+    print_fn("Runtime wizard_definition.json deleted.")
+    return True
 
 
 def resolve_launcher_inputs(
@@ -84,6 +144,12 @@ def resolve_launcher_inputs(
         return True, root_n, rel_n, ""
 
     # interactive
+    if bool(cfg.confirm_defaults):
+        v = validate_root_and_path(default_root, default_path)
+        if not isinstance(v, dict):
+            root_n, rel_n = v
+            return True, root_n, rel_n, ""
+
     picked_root = _pick_root(cfg, input_fn=input_fn, print_fn=print_fn)
     if picked_root is None:
         return False, "", "", "ERROR: canceled"

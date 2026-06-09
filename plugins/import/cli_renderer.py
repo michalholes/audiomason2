@@ -15,6 +15,7 @@ from typing import Protocol, TypeGuard, cast, runtime_checkable
 
 from .cli_launcher_facade import (
     begin_phase2,
+    prompt_delete_runtime_wizard_definition,
     prompt_session_start_intent,
     resolve_launcher_inputs,
 )
@@ -147,6 +148,17 @@ def run_launcher(
     )
     if not ok:
         print_fn(err or "ERROR: unable to resolve launcher inputs")
+        return 1
+
+    if (
+        cfg.launcher_mode == "interactive"
+        and not cfg.noninteractive
+        and not prompt_delete_runtime_wizard_definition(
+            engine=engine,
+            input_fn=input_fn,
+            print_fn=print_fn,
+        )
+    ):
         return 1
 
     state = start_user_facing_session(

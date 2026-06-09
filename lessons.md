@@ -556,6 +556,31 @@
 - safety class: instruction-only
 - scope: inside current issue scope
 
+### Optimization 67: Strip normalized author prefixes from title authority in JSON pipelines
+- impact: Restores old-flow parity where title prompts show title-only suggestions instead of
+  `<author> - <title>` labels after source normalization.
+- affected workflow step or files: PHASE 1 refresh/default metadata nodes in
+  `plugins/import/dsl/default_wizard_v3_source.json`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 68: Auto-accept stable launcher defaults to skip redundant startup prompts
+- impact: Removes the repeated inbox and empty path confirmation at import startup while keeping
+  explicit CLI overrides and fixed/noninteractive flows intact.
+- affected workflow step or files: launcher input resolution in
+  `plugins/import/cli_launcher_facade.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 69: Prompt before deleting runtime wizard JSON when it drifts from shipped default
+- impact: Lets the user explicitly choose whether to discard a stale or edited runtime wizard
+  artifact instead of silently replacing it.
+- affected workflow step or files: interactive launcher startup in
+  `plugins/import/cli_renderer.py` and runtime comparison helpers in
+  `plugins/import/cli_launcher_facade.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
 ### Optimization 67: Stub plan computation in isolated prompt smoke tests
 - impact: Keeps prompt-metadata and phase2 acceptance tests focused on rendering by bypassing
   unrelated session-authority validation during submit.
